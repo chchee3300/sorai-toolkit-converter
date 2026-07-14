@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Header from './components/Header.jsx'
 import StatusBar from './components/StatusBar.jsx'
 import DropZone from './components/DropZone.jsx'
@@ -58,6 +58,19 @@ function App() {
   } = useExecute({ files, setFiles, fileType, settings, outputPath, setOutputPath, setStatus })
 
   const hasFiles = files.length > 0
+
+  // A converted file's estimate is hidden in favor of the real result
+  // (estimateDisplay.js's computeEstimate short-circuits on
+  // fileObj.converted) — but that result only reflects the settings used
+  // for that run. Without this, tweaking settings after a conversion to
+  // set up a different reconvert left the size preview frozen on the old
+  // actual result with no live feedback for the new settings. Any settings
+  // change clears `converted` on files that have it, so FileList falls
+  // back to a live estimate for whatever's now selected.
+  useEffect(() => {
+    setFiles((prev) => (prev.some((f) => f.converted) ? prev.map((f) => (f.converted ? { ...f, converted: false, convertedSizeMB: undefined } : f)) : prev))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.video, settings.image, settings.audio, settings.pdf])
 
   // Ported from main.js's currentTrimIndex + openTrimModal/btn-save-trim
   // (main.js:539,595-598,854-867 pre-extraction).
