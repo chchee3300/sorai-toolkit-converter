@@ -106,6 +106,7 @@ async function main() {
         'test_fixture_converted.pdf',
         'test_fixture_video_cancel_a.mp4', 'test_fixture_video_cancel_b.mp4', 'test_fixture_video_cancel_c.mp4',
         'test_fixture_video_cancel_a_converted.mp4',
+        'test_fixture_video_fps.mp4', 'test_fixture_video_fps_converted.mp4',
     ];
     cleanupNames.forEach(n => rmIfExists(path.join(ROOT, n)));
 
@@ -168,6 +169,7 @@ async function main() {
         check('V4: command used libx264 codec', vLog.includes('-c:v libx264'));
         check('V5: command used bitrate targeting (duration known)', /-b:v \d+k -bufsize \d+k/.test(vLog), vLog.slice(-400));
         check('V6: speed 1.5x produced setpts + atempo filters', vLog.includes('setpts=') && vLog.includes('atempo=1.5'), vLog.slice(-400));
+        check('V6a: default (untouched) FPS adds no explicit fps filter', !/-vf "[^"]*fps=/.test(vLog), vLog.slice(-400));
         const vSizeSpan = await page.$eval('#file-size-0', el => el.innerHTML);
         check('V7: real converted size shown after execute', vSizeSpan.includes('→'), vSizeSpan);
         const vEstAfter = await page.$eval('#file-est-0', el => el.innerHTML);
@@ -179,6 +181,27 @@ async function main() {
         const vOut2 = path.join(ROOT, 'test_fixture_video_converted_converted.mp4');
         check('V10: filename-collision suffix applied (_converted_converted)', fs.existsSync(vOut2), vOut2);
 
+        await clearFileList(page);
+
+        // Custom FPS via the draggable slider (fps redesign — was a preset
+        // dropdown gated by a "Custom" checkbox, now a range slider whose
+        // max defaults to the source's own fps). Uses its own fixture copy
+        // to avoid colliding with the _converted/_converted_converted
+        // filenames the collision-suffix test above already created.
+        const fpsFixture = path.join(ROOT, 'test_fixture_video_fps.mp4');
+        fs.copyFileSync(fixtures.video, fpsFixture);
+        await dropFile(page, fpsFixture);
+        const fpsSliderMax = await page.$eval('#video-fps', el => el.max);
+        check('V6b: FPS slider max defaults to the source file\'s own fps', Number(fpsSliderMax) > 0, fpsSliderMax);
+        await setRangeValue(page, '#video-fps', '15');
+        const progressTextFps = await runExecuteAndWait(page);
+        check('V6c: custom-FPS batch completes', progressTextFps.includes('Completed 1 of 1'), progressTextFps);
+        const vFpsLog = await page.$eval('#terminal-log', el => el.innerText);
+        check('V6d: dragged FPS slider produced an explicit filter for the target rate', /-vf "[^"]*fps=15(,|")/.test(vFpsLog), vFpsLog.slice(-400));
+        const fpsOut = path.join(ROOT, 'test_fixture_video_fps_converted.mp4');
+        check('V6e: custom-FPS output file created', fs.existsSync(fpsOut), fpsOut);
+        rmIfExists(fpsFixture);
+        rmIfExists(fpsOut);
         await clearFileList(page);
 
         // GIF path: encoder group auto-hide + palettegen

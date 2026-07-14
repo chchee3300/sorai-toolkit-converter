@@ -145,8 +145,8 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
         let outPath = ''
 
         if (fileType === 'video') {
-          const { format, codec, quality: qualityPercent, speed, fpsCustom, fps } = settings.video
-          const targetFpsStr = fpsCustom ? fps : 'original'
+          const { format, codec, quality: qualityPercent, speed, fps } = settings.video
+          const targetFpsStr = fps != null ? String(fps) : 'original'
           outPath = await window.EstellaLib.filenameCollision.getUniqueOutPath(resolvedOutputPath, nameWithoutExt, format)
           command = window.EstellaLib.ffmpegCommands.buildVideoCommand({
             binPath,

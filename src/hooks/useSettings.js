@@ -10,8 +10,8 @@ const DEFAULT_VIDEO = {
   codec: 'libx264',
   quality: 100,
   upscale: false,
-  fpsCustom: false,
-  fps: '30',
+  fps: null, // null = use the source's original fps (no explicit -vf fps= filter)
+  fpsUpscale: false, // extends the FPS slider's max to 4x the source's original fps
   speed: 1.0,
 }
 const DEFAULT_IMAGE = { format: '.jpg', quality: 85, scale: 100 }

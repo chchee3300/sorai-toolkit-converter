@@ -361,11 +361,11 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
                   </span>
                 </div>
                 <div className="trim-actions">
-                  <button className="btn-icon" id="btn-trim-play-pause" title="Play/Pause" aria-label="Play/Pause" style={{ marginRight: 8 }} onClick={togglePlayPause}>
+                  <button className="btn-icon" id="btn-trim-play-pause" title="Play/Pause" aria-label="Play/Pause" onClick={togglePlayPause}>
                     <svg className={isPlaying ? 'icon-play hidden' : 'icon-play'} viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                     <svg className={isPlaying ? 'icon-pause' : 'icon-pause hidden'} viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
                   </button>
-                  <div className="trim-volume-control" style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 8 }}>
+                  <div className="trim-volume-control" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <button className="btn-icon" id="btn-trim-mute" title="Mute" aria-label={showVolOff ? 'Unmute' : 'Mute'} onClick={handleToggleMute}>
                       <svg className={showVolOff ? 'icon-vol-on hidden' : 'icon-vol-on'} viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
                       <svg className={showVolOff ? 'icon-vol-off' : 'icon-vol-off hidden'} viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="1" x2="1" y2="23"></line></svg>
@@ -382,6 +382,7 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
                       onChange={handleVolumeChange}
                     />
                   </div>
+                  <div className="trim-actions-divider" aria-hidden="true"></div>
                   <button className="btn btn-outline btn-xs" id="btn-set-start" onClick={handleSetStart}>In</button>
                   <button className="btn btn-outline btn-xs" id="btn-set-end" onClick={handleSetEnd}>Out</button>
                   <button

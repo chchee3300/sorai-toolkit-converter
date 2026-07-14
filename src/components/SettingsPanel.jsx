@@ -32,9 +32,21 @@ function OutputPathRow({ outputPath, onBrowse }) {
   )
 }
 
-function VideoSettings({ visible, video, setVideo }) {
+function VideoSettings({ visible, video, setVideo, lastFile }) {
   const set = (patch) => setVideo((v) => ({ ...v, ...patch }))
   const qualityMax = video.upscale ? 200 : 100
+
+  // Same "last file in the batch" reference convention ImageSettings uses
+  // for its resolution preview — the fps slider's bounds are derived from
+  // whichever file is currently last in the list. 30 is a sane fallback
+  // before a file's probed fps is known.
+  const referenceFps = (lastFile && lastFile.fps) || 30
+  const fpsMax = video.fpsUpscale ? referenceFps * 4 : referenceFps
+  // video.fps stays null until the user actually drags the slider — that's
+  // what lets the command builder skip the -vf fps= filter entirely for
+  // "untouched" (see ffmpeg-commands.js's 'original' sentinel), rather than
+  // emitting a same-value filter that would force CFR on a VFR source.
+  const fpsValue = video.fps != null ? Math.min(video.fps, fpsMax) : referenceFps
 
   return (
     <div id="video-settings" className={visible ? 'settings-block' : 'settings-block hidden'}>
@@ -90,26 +102,31 @@ function VideoSettings({ visible, video, setVideo }) {
         <div className="field">
           <div className="field-label-row">
             <label className="field-label" htmlFor="video-fps">
-              FPS — <span className="val-chip tabular-nums" id="video-fps-val">{video.fpsCustom ? video.fps : 'Original'}</span>
+              FPS — <span className="val-chip tabular-nums" id="video-fps-val">{Math.round(fpsValue)}</span>
             </label>
             <label className="toggle-check">
               <input
                 type="checkbox"
-                id="video-fps-custom"
-                checked={video.fpsCustom}
-                onChange={(e) => set({ fpsCustom: e.target.checked })}
+                id="video-fps-upscale"
+                checked={video.fpsUpscale}
+                onChange={(e) => {
+                  const fpsUpscale = e.target.checked
+                  set({ fpsUpscale, fps: !fpsUpscale && video.fps > referenceFps ? referenceFps : video.fps })
+                }}
               />
-              Custom
+              Upscale
             </label>
           </div>
-          <GlassSelect id="video-fps" value={video.fps} disabled={!video.fpsCustom} onChange={(e) => set({ fps: e.target.value })}>
-            <option value="24">24</option>
-            <option value="30">30</option>
-            <option value="60">60</option>
-            <option value="120">120</option>
-            <option value="144">144</option>
-            <option value="240">240</option>
-          </GlassSelect>
+          <input
+            type="range"
+            className="range-input"
+            id="video-fps"
+            value={fpsValue}
+            min="1"
+            max={fpsMax}
+            step="1"
+            onChange={(e) => set({ fps: parseFloat(e.target.value) })}
+          />
         </div>
         <div className="field">
           <label className="field-label" htmlFor="video-speed">
@@ -294,7 +311,7 @@ export default function SettingsPanel({
       <OutputPathRow outputPath={outputPath} onBrowse={onBrowseOutput} />
       <div className="panel-divider"></div>
 
-      <VideoSettings visible={fileType === 'video'} video={video} setVideo={setVideo} />
+      <VideoSettings visible={fileType === 'video'} video={video} setVideo={setVideo} lastFile={files[files.length - 1]} />
       <ImageSettings visible={fileType === 'image'} image={image} setImage={setImage} lastFile={files[files.length - 1]} />
       <AudioSettings visible={fileType === 'audio'} audio={audio} setAudio={setAudio} />
       <PdfSettings visible={fileType === 'pdf'} pdf={pdf} setPdf={setPdf} />

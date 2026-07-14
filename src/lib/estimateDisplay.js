@@ -18,8 +18,8 @@ export function computeEstimate(fileObj, fileType, settings) {
   let targetFpsLabel = null
 
   if (fileType === 'video') {
-    const { quality: qualityPercent, speed, fpsCustom, fps, format, codec } = settings.video
-    const targetFpsStr = fpsCustom ? fps : 'original'
+    const { quality: qualityPercent, speed, fps, format, codec } = settings.video
+    const targetFpsStr = fps != null ? String(fps) : 'original'
     const targetFps = targetFpsStr === 'original' ? fileObj.fps : parseFloat(targetFpsStr)
     if (targetFpsStr !== 'original') targetFpsLabel = targetFpsStr
     estMB = window.EstellaLib.sizeEstimate.estimateVideoMB({

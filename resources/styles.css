@@ -971,11 +971,11 @@ select.input { display: none; }
 .glass-lens--flat .glass-lens__frost {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  background: rgba(13, 16, 22, 0.96);
+  background: rgba(13, 16, 22, 0.82);
 }
 
 [data-theme="light"] .glass-lens--flat .glass-lens__frost {
-  background: rgba(245, 246, 250, 0.97);
+  background: rgba(245, 246, 250, 0.85);
 }
 
 /* Specular rim — bright edge sells the dome shape */
@@ -1292,16 +1292,23 @@ select.input { display: none; }
 
 .trim-actions .btn-icon {
   color: #fff;
-  background: rgba(255,255,255,0.14);
-  border: 1px solid rgba(255,255,255,0.3);
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.4);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
 }
 
 .trim-actions .btn-icon:hover:not(:disabled) {
   color: #fff;
-  background: rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.2);
+}
+
+.trim-actions-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255,255,255,0.25);
+  margin: 0 2px;
 }
 
 .trim-slider-wrapper {
