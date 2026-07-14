@@ -81,7 +81,10 @@ async function main() {
         await page.addInitScript(t => { try { sessionStorage.setItem('NL_TOKEN', t); } catch (e) {} }, auth.nlToken);
         await page.goto(url);
         await page.waitForSelector('#drop-zone');
-        await page.waitForFunction(() => typeof window.NL_MODE !== 'undefined' && typeof window.importDroppedFiles === 'function');
+        // React build has no window.importDroppedFiles global (it's an
+        // internal hook callback now) — wait on NL_MODE + Neutralino
+        // instead, both still genuine Neutralino-injected globals.
+        await page.waitForFunction(() => typeof window.NL_MODE !== 'undefined' && typeof window.Neutralino !== 'undefined');
 
         // ---------- Test B: browser-mode fallback (must run first: outputPath
         // is a closure `let`; Test A would set it to the fixture's dir and mask

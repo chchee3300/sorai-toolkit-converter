@@ -60,11 +60,17 @@ async function setSelectValue(page, selector, value) {
 // Playwright's page.fill() is unreliable on type="range" inputs (works once,
 // then throws "Malformed value" on a later call in practice). Set the value
 // directly and fire input+change, same events the browser's own slider drag
-// would dispatch.
+// would dispatch. Must go through the native property setter, not a plain
+// `el.value = x` assignment — React overrides the value setter on
+// controlled inputs to track "real" user-driven changes, so a plain
+// assignment silently no-ops against the React build (confirmed in
+// design-system/MASTER.md's Phase 2.2+2.3+2.4 decisions). The native
+// setter bypass works against both the vanilla and the React app.
 async function setRangeValue(page, selector, value) {
     await page.evaluate(({ selector, value }) => {
         const el = document.querySelector(selector);
-        el.value = value;
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(el, value);
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
     }, { selector, value });
@@ -127,7 +133,10 @@ async function main() {
         await page.addInitScript(t => { try { sessionStorage.setItem('NL_TOKEN', t); } catch (e) {} }, auth.nlToken);
         await page.goto(url);
         await page.waitForSelector('#drop-zone');
-        await page.waitForFunction(() => typeof window.NL_MODE !== 'undefined' && typeof window.importDroppedFiles === 'function');
+        // React build has no window.importDroppedFiles global (it's an
+        // internal hook callback now) — wait on NL_MODE + Neutralino
+        // instead, both still genuine Neutralino-injected globals.
+        await page.waitForFunction(() => typeof window.NL_MODE !== 'undefined' && typeof window.Neutralino !== 'undefined');
 
         // ============================================================
         // VIDEO — format switch, encoder auto-hide (GIF), FPS calc,
