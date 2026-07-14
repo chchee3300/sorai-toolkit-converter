@@ -1,0 +1,25 @@
+# Developer tools' files
+.lite_workspace.lua
+
+# Node dependencies
+/node_modules
+
+# Neutralino runtime auth/session info (contains tokens)
+/.tmp
+
+# Claude Code local (machine-specific) settings
+.claude/settings.local.json
+
+# Neutralinojs binaries and builds
+/bin
+/dist
+
+# Third-party executables fetched by setup.ps1 (ffmpeg, qpdf, etc.) — too large for GitHub
+/binaries
+
+# Neutralinojs client (minified)
+neutralino.js
+
+# Neutralinojs related files
+.storage
+*.log

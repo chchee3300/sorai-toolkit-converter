@@ -1,0 +1,180 @@
+// Automated test for file drag-and-drop (both modes), run with: node test_drop.js
+// - Test B: browser-mode fallback (DOM drop + DataTransfer -> chunked temp copy)
+// - Test A: window-mode path (simulated native filesDropped event payloads)
+// - Test C: negative cases (empty drop, bad payloads)
+// Exits 0 on success, 1 on any failure.
+const fs = require('fs');
+const path = require('path');
+const cp = require('child_process');
+const os = require('os');
+const { chromium } = require('playwright');
+
+const ROOT = __dirname;
+const FIXTURE = path.join(ROOT, 'test_in.png');
+const DROP_TEMP = path.join(os.tmpdir(), 'FileConverterApp', 'dropped');
+
+const results = [];
+function check(name, cond, extra) {
+    results.push({ name, ok: !!cond });
+    console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${!cond && extra !== undefined ? '  -> ' + extra : ''}`);
+}
+
+function waitForAuthInfo(sinceMs, timeoutMs = 30000) {
+    return new Promise((resolve, reject) => {
+        const t0 = Date.now();
+        (function poll() {
+            try {
+                const st = fs.statSync(path.join(ROOT, '.tmp', 'auth_info.json'));
+                if (st.mtimeMs > sinceMs) return resolve();
+            } catch (e) { /* not written yet */ }
+            if (Date.now() - t0 > timeoutMs) return reject(new Error('auth_info.json not refreshed within ' + timeoutMs + 'ms'));
+            setTimeout(poll, 500);
+        })();
+    });
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function clearFileList(page) {
+    if (await page.$('#file-list .file-item')) {
+        await page.click('#btn-clear-files');
+        await page.waitForFunction(() => document.querySelectorAll('#file-list .file-item').length === 0);
+    }
+}
+
+async function main() {
+    // Watchdog: never hang CI
+    setTimeout(() => { console.error('WATCHDOG: test exceeded 120s, aborting'); process.exit(1); }, 120000);
+
+    if (!fs.existsSync(FIXTURE)) {
+        console.error('Fixture missing: ' + FIXTURE);
+        process.exit(1);
+    }
+    const fixtureBytes = fs.readFileSync(FIXTURE);
+
+    // Make the neu CLI resolvable even when the global npm bin dir is not in PATH
+    const env = { ...process.env, PATH: process.env.PATH + ';' + path.join(process.env.APPDATA || '', 'npm') };
+
+    const launchTime = Date.now();
+    const neu = cp.spawn('cmd.exe', ['/c', 'neu run -- --export-auth-info'], { stdio: 'pipe', cwd: ROOT, env });
+    neu.stdout.on('data', d => process.stdout.write('[neu] ' + d));
+    neu.stderr.on('data', d => process.stderr.write('[neu:err] ' + d));
+    let browser = null;
+    let dialogCount = 0;
+    const pageErrors = [];
+
+    try {
+        await waitForAuthInfo(launchTime);
+        const auth = JSON.parse(fs.readFileSync(path.join(ROOT, '.tmp', 'auth_info.json'), 'utf8'));
+        const url = 'http://localhost:' + auth.nlPort + '/?nlToken=' + auth.nlToken;
+        console.log('Connecting to', url);
+
+        browser = await chromium.launch({ headless: true });
+        const page = await browser.newPage();
+        page.on('console', msg => console.log('PAGE LOG:', msg.text()));
+        page.on('pageerror', err => { pageErrors.push(err.message); console.log('PAGE ERROR:', err.message); });
+        page.on('dialog', d => { dialogCount++; console.log('PAGE DIALOG:', d.message()); d.dismiss().catch(() => {}); });
+
+        // The one-time token is consumed by the system browser that `neu run`
+        // auto-opens; the client library falls back to sessionStorage.NL_TOKEN,
+        // so seed it there before any page script runs.
+        await page.addInitScript(t => { try { sessionStorage.setItem('NL_TOKEN', t); } catch (e) {} }, auth.nlToken);
+        await page.goto(url);
+        await page.waitForSelector('#drop-zone');
+        await page.waitForFunction(() => typeof window.NL_MODE !== 'undefined' && typeof window.importDroppedFiles === 'function');
+
+        // ---------- Test B: browser-mode fallback (must run first: outputPath
+        // is a closure `let`; Test A would set it to the fixture's dir and mask
+        // the Downloads-default assertion) ----------
+        console.log('\n--- Test B: browser-mode DOM drop fallback ---');
+        const fixtureName = `drop_fixture_${Date.now()}.png`;
+        await page.evaluate(async ({ b64, name }) => {
+            window.__DROP_CHUNK_SIZE = 16384; // force multi-chunk write for the fixture
+            const bin = atob(b64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            const dt = new DataTransfer();
+            dt.items.add(new File([bytes], name, { type: 'image/png' }));
+            document.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        }, { b64: fixtureBytes.toString('base64'), name: fixtureName });
+
+        await page.waitForSelector('#file-list .file-item', { timeout: 20000 });
+        const itemTextB = await page.$eval('#file-list .file-item', el => el.innerText);
+        check('B1: dropped file appears in list', itemTextB.includes(fixtureName), itemTextB);
+        const expectedMB = (fixtureBytes.length / (1024 * 1024)).toFixed(1);
+        check('B2: listed size matches', itemTextB.includes(`${expectedMB} MB`), itemTextB);
+        const containerVisible = await page.$eval('#file-list-container', el => !el.classList.contains('hidden'));
+        check('B3: file list container visible', containerVisible);
+
+        // temp copy exists on disk and is byte-identical (proves chunked append)
+        let tempCopy = null;
+        if (fs.existsSync(DROP_TEMP)) {
+            for (const sub of fs.readdirSync(DROP_TEMP)) {
+                const cand = path.join(DROP_TEMP, sub, fixtureName);
+                if (fs.existsSync(cand)) { tempCopy = cand; break; }
+            }
+        }
+        check('B4: temp copy created', tempCopy !== null, DROP_TEMP);
+        if (tempCopy) {
+            check('B5: temp copy byte-identical to source', fs.readFileSync(tempCopy).equals(fixtureBytes));
+        }
+
+        const outPathVal = await page.$eval('#output-path', el => el.value);
+        check('B6: output path defaulted (non-empty)', outPathVal.length > 0, outPathVal);
+        check('B7: output path is not the temp dir', !outPathVal.toLowerCase().startsWith(os.tmpdir().toLowerCase()), outPathVal);
+
+        await clearFileList(page);
+
+        // ---------- Test A: window-mode path via simulated filesDropped ----------
+        console.log('\n--- Test A: filesDropped event payload shapes ---');
+        const absPath = FIXTURE;
+        const statSize = (fs.statSync(FIXTURE).size / (1024 * 1024)).toFixed(1);
+        const shapes = [
+            { label: 'array of strings (canonical 6.8.0)', payload: [absPath] },
+            { label: 'plain string', payload: absPath },
+            { label: 'array of {path} objects', payload: [{ path: absPath }] },
+        ];
+        for (const shape of shapes) {
+            await page.evaluate(p => Neutralino.events.dispatch('filesDropped', p), shape.payload);
+            await page.waitForSelector('#file-list .file-item', { timeout: 20000 });
+            const title = await page.$eval('#file-list .file-item span[title]', el => el.getAttribute('title'));
+            const text = await page.$eval('#file-list .file-item', el => el.innerText);
+            check(`A: ${shape.label} — real path kept`, title === absPath, title);
+            check(`A: ${shape.label} — name & size rendered`, text.includes('test_in.png') && text.includes(`${statSize} MB`), text);
+            await clearFileList(page);
+        }
+
+        // ---------- Test C: negative cases ----------
+        console.log('\n--- Test C: negative cases ---');
+        await page.evaluate(() => {
+            const dt = new DataTransfer();
+            document.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        });
+        await page.evaluate(() => Neutralino.events.dispatch('filesDropped', []));
+        await page.evaluate(() => Neutralino.events.dispatch('filesDropped', { foo: 1 }));
+        await sleep(1500);
+        const itemCount = await page.$$eval('#file-list .file-item', els => els.length);
+        check('C1: no items added by empty/bad drops', itemCount === 0, itemCount);
+        const overlayHidden = await page.$eval('#file-loading-overlay', el => el.classList.contains('hidden'));
+        check('C2: loading overlay not stuck', overlayHidden);
+        check('C3: page still responsive', (await page.evaluate(() => 1)) === 1);
+
+        // ---------- Global invariants ----------
+        check('G1: no alert/confirm dialogs during drop flows', dialogCount === 0, dialogCount);
+        check('G2: no page errors', pageErrors.length === 0, pageErrors.join(' | '));
+    } catch (e) {
+        console.error('TEST HARNESS ERROR:', e);
+        results.push({ name: 'harness completed', ok: false });
+    } finally {
+        if (browser) await browser.close().catch(() => {});
+        try { cp.execSync(`taskkill /pid ${neu.pid} /T /F`, { stdio: 'ignore' }); } catch (e) { /* already gone */ }
+        try { fs.rmSync(DROP_TEMP, { recursive: true, force: true }); } catch (e) { /* best effort */ }
+    }
+
+    const failed = results.filter(r => !r.ok);
+    console.log(`\n==== ${results.length - failed.length}/${results.length} checks passed ====`);
+    if (failed.length) failed.forEach(f => console.log('FAILED:', f.name));
+    process.exit(failed.length ? 1 : 0);
+}
+
+main();

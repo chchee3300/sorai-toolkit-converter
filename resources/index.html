@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estella Converter</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Prevent flash of wrong theme -->
+  <script>
+    (function() {
+      var t = localStorage.getItem('estella-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ── Header / Titlebar ───────────────────────────── -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">
+        <span class="logo-text">Converter</span>
+        <span class="logo-sep hidden" id="logo-sep">&nbsp;/&nbsp;</span>
+        <span class="logo-type" id="type-badge"></span>
+      </div>
+    </div>
+    <div class="header-right">
+      <button id="theme-toggle" title="Toggle theme" aria-label="Toggle theme">
+        <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="4.22" y1="4.22" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.78" y2="19.78"/><line x1="4.22" y1="19.78" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.78" y2="4.22"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Main Content ────────────────────────────────── -->
+  <main class="main" id="main-content">
+
+    <!-- Loading overlay (positioned relative to main) -->
+    <div id="file-loading-overlay" class="loading-overlay hidden">
+      <div class="spinner"></div>
+      <p>Reading files…</p>
+    </div>
+
+    <!-- ── Panel 1: Drop Zone / File List ── -->
+    <section class="panel panel--ghost" id="input-panel">
+
+      <!-- Drop Zone -->
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-zone-icon">
+          <!-- Upload arrow SVG -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 16V4"/>
+            <path d="M8 8l4-4 4 4"/>
+            <path d="M20 21H4"/>
+            <path d="M20 16v5H4v-5"/>
+          </svg>
+        </div>
+        <div class="drop-zone-body">
+          <p class="drop-zone-title">Drop files here</p>
+          <p class="drop-zone-hint">Video · Image · Audio · PDF &mdash; same type per batch</p>
+        </div>
+        <span class="drop-zone-cta">Click to browse</span>
+      </div>
+
+      <!-- File List (replaces drop zone when files are added) -->
+      <div id="file-list-container" class="hidden">
+        <div class="filelist-header">
+          <span class="mono-label" id="file-count-label">0 files</span>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-ghost-success btn-xs" id="btn-add-files">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+              Add files
+            </button>
+            <button class="btn btn-ghost btn-xs" id="btn-clear-files">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>
+              Clear all
+            </button>
+          </div>
+        </div>
+        <div class="file-list" id="file-list"></div>
+      </div>
+    </section>
+
+    <!-- ── Panel 2: Conversion Settings ── -->
+    <section class="panel hidden" id="settings-section">
+
+      <!-- Output path row -->
+      <div class="settings-block">
+        <label class="field-label" for="output-path">Output folder</label>
+        <div class="path-row">
+          <input type="text" class="input" id="output-path" readonly placeholder="Same as source directory">
+          <button class="btn btn-outline btn-sm" id="btn-select-output">Browse</button>
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <!-- ── Video Settings ── -->
+      <div id="video-settings" class="settings-block hidden">
+        <p class="settings-subtitle" id="settings-subtitle">Video conversion</p>
+        <div class="settings-grid">
+          <div class="field">
+            <label class="field-label" for="video-format">Format</label>
+            <select class="input" id="video-format">
+              <option value=".mp4">MP4</option>
+              <option value=".mkv">MKV</option>
+              <option value=".webm">WEBM</option>
+              <option value=".avi">AVI</option>
+              <option value=".gif">GIF (Animated)</option>
+            </select>
+          </div>
+          <div class="field" id="video-codec-group">
+            <label class="field-label" for="video-codec">Codec</label>
+            <select class="input" id="video-codec">
+              <option value="libx264">H.264 (avc1)</option>
+              <option value="libx265">H.265 (hevc)</option>
+              <option value="libvpx-vp9">VP9 (vp09)</option>
+              <option value="libsvtav1">AV1 (av01)</option>
+            </select>
+          </div>
+          <div class="field span-2">
+            <div class="field-label-row">
+              <label class="field-label" for="video-quality">Quality — <span class="val-chip" id="video-quality-val">100</span>%</label>
+              <label class="toggle-check"><input type="checkbox" id="video-upscale"> Upscale</label>
+            </div>
+            <input type="range" class="range-input" id="video-quality" value="100" min="1" max="100">
+          </div>
+          <div class="field">
+            <div class="field-label-row">
+              <label class="field-label" for="video-fps">FPS — <span class="val-chip" id="video-fps-val">Original</span></label>
+              <label class="toggle-check"><input type="checkbox" id="video-fps-custom"> Custom</label>
+            </div>
+            <select class="input" id="video-fps" disabled>
+              <option value="24">24</option>
+              <option value="30" selected>30</option>
+              <option value="60">60</option>
+              <option value="120">120</option>
+              <option value="144">144</option>
+              <option value="240">240</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="video-speed">Speed — <span class="val-chip" id="video-speed-val">1.00</span>×</label>
+            <input type="range" class="range-input" id="video-speed" value="1.0" min="0.1" max="4.0" step="0.1">
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Image Settings ── -->
+      <div id="image-settings" class="settings-block hidden">
+        <p class="settings-subtitle" id="settings-subtitle">Image conversion</p>
+        <div class="settings-grid">
+          <div class="field">
+            <label class="field-label" for="image-format">Format</label>
+            <select class="input" id="image-format">
+              <option value=".jpg">JPG</option>
+              <option value=".png">PNG</option>
+              <option value=".webp">WebP</option>
+              <option value=".avif">AVIF</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="image-quality">Quality — <span class="val-chip" id="image-quality-val">85</span>%</label>
+            <input type="range" class="range-input" id="image-quality" value="85" min="1" max="100">
+          </div>
+          <div class="field span-2">
+            <div class="field-label-row">
+              <label class="field-label" for="image-scale">Scale — <span class="val-chip" id="image-scale-val">100</span>%</label>
+              <span class="val-chip secondary" id="image-resolution-preview"></span>
+            </div>
+            <input type="range" class="range-input" id="image-scale" value="100" min="10" max="100" step="1">
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Audio Settings ── -->
+      <div id="audio-settings" class="settings-block hidden">
+        <p class="settings-subtitle">Audio conversion</p>
+        <div class="settings-grid">
+          <div class="field">
+            <label class="field-label" for="audio-format">Format</label>
+            <select class="input" id="audio-format">
+              <option value=".mp3">MP3</option>
+              <option value=".wav">WAV</option>
+              <option value=".aac">AAC</option>
+              <option value=".flac">FLAC</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="audio-bitrate">Bitrate</label>
+            <select class="input" id="audio-bitrate">
+              <option value="320k">320 kbps — Studio Quality</option>
+              <option value="256k">256 kbps — High Quality</option>
+              <option value="192k">192 kbps — Standard</option>
+              <option value="128k">128 kbps — Compact</option>
+              <option value="64k">64 kbps — Voice / Podcast</option>
+            </select>
+          </div>
+          <div class="field span-2">
+            <label class="field-label" for="audio-speed">Speed — <span class="val-chip" id="audio-speed-val">1.00</span>×</label>
+            <input type="range" class="range-input" id="audio-speed" value="1.0" min="0.1" max="4.0" step="0.1">
+          </div>
+        </div>
+      </div>
+
+      <!-- ── PDF Settings ── -->
+      <div id="pdf-settings" class="settings-block hidden">
+        <p class="settings-subtitle">PDF optimization</p>
+        <div class="settings-grid">
+          <div class="field span-2">
+            <label class="field-label" for="pdf-optimize">Optimization mode</label>
+            <select class="input" id="pdf-optimize">
+              <option value="linearize">Linearize — Fast Web View</option>
+              <option value="compress">Maximum Compression</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <!-- ── Execute Button ── -->
+      <div class="execute-row">
+        <button class="btn btn-primary btn-execute" id="btn-execute">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5l10 5.5-10 5.5V2.5z"/></svg>
+          Start Processing
+        </button>
+      </div>
+
+      <!-- ── Progress ── -->
+      <div id="progress-wrapper" class="progress-block hidden">
+        <div class="progress-track">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <p class="progress-label" id="progress-text">Processing…</p>
+        <div id="terminal-log" class="terminal"></div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- ── Status Bar ─────────────────────────────────── -->
+  <footer class="statusbar">
+    <span class="statusbar-indicator" id="statusbar-dot"></span>
+    <span class="statusbar-text" id="status-text">Ready</span>
+    <span class="statusbar-sep"></span>
+    <span class="statusbar-version">v1.0</span>
+  </footer>
+  <!-- ── Trim Modal ─────────────────────────────────── -->
+  <div class="modal-overlay hidden" id="trim-modal">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h3 class="modal-title" id="trim-modal-title">Trim Media</h3>
+      </div>
+      <div class="modal-body trim-vidcord-body">
+        <div class="player-container" id="trim-player-container">
+          <video id="trim-video-player" class="trim-player hidden"></video>
+          <audio id="trim-audio-player" class="trim-player hidden"></audio>
+
+          <div class="player-overlay">
+            <div class="trim-top-bar">
+              <div class="trim-title">
+                <span class="trim-title-info" id="trim-duration-info">0.00s selected (0%)</span>
+              </div>
+              <div class="trim-actions">
+                <button class="btn-icon" id="btn-trim-play-pause" title="Play/Pause" style="margin-right: 8px;">
+                  <svg class="icon-play" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                  <svg class="icon-pause hidden" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                </button>
+                <div class="trim-volume-control" style="display: flex; align-items: center; gap: 4px; margin-right: 8px;">
+                  <button class="btn-icon" id="btn-trim-mute" title="Mute">
+                    <svg class="icon-vol-on" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                    <svg class="icon-vol-off hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="1" x2="1" y2="23"></line></svg>
+                  </button>
+                  <input type="range" class="range-input" id="trim-volume-slider" min="0" max="1" step="0.05" value="1" style="width: 60px;">
+                </div>
+                <button class="btn btn-outline btn-xs" id="btn-set-start">In</button>
+                <button class="btn btn-outline btn-xs" id="btn-set-end">Out</button>
+                <button class="btn btn-outline btn-xs" id="btn-trim-loop" style="margin-left: 4px; position: relative; overflow: hidden;" title="Toggle Loop">Loop</button>
+              </div>
+            </div>
+
+            <div class="trim-slider-wrapper">
+               <div class="trim-time-label left" id="trim-label-start">0.0s</div>
+               <div class="trim-slider-container" id="trim-slider-container">
+                   <div class="trim-slider-track" id="trim-slider-track">
+                       <div class="trim-dim-overlay left" id="trim-dim-left"></div>
+                       <div class="trim-slider-range" id="trim-slider-range"></div>
+                       <div class="trim-dim-overlay right" id="trim-dim-right"></div>
+                       <div class="trim-slider-thumb left" id="trim-thumb-left"><div class="thumb-grip"></div></div>
+                       <div class="trim-slider-thumb right" id="trim-thumb-right"><div class="thumb-grip"></div></div>
+                       <div class="trim-playhead" id="trim-playhead"></div>
+                   </div>
+               </div>
+               <div class="trim-time-label right" id="trim-label-end">0.0s</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btn-clear-trim">Clear Trim</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-outline" id="btn-cancel-trim">Cancel</button>
+          <button class="btn btn-primary" id="btn-save-trim">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<!-- Neutralino.js client -->
+<script src="/js/neutralino.js"></script>
+<script src="/js/liquid-glass.js"></script>
+<script src="/js/main.js"></script>
+</body>
+</html>
