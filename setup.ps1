@@ -31,18 +31,4 @@ Write-Host "Downloading img2pdf..."
 $img2pdfVersion = "0.5.1"
 Invoke-WebRequest -Uri "https://gitlab.mister-muffin.de/josch/img2pdf/releases/download/$img2pdfVersion/img2pdf.exe" -OutFile "$binDir\img2pdf.exe"
 
-Write-Host "Downloading LibreOffice Portable (this is large: ~280MB download, ~900MB-1.4GB extracted)..."
-# Pinned release (verify for a newer version at
-# https://portableapps.com/apps/office/libreoffice_portable before assuming
-# this URL still resolves). SourceForge's /download suffix auto-redirects
-# to a mirror, unlike PortableApps.com's own page which requires their
-# platform app rather than serving a direct file link.
-$libreOfficeVersion = "26.2.4"
-$libreOfficeInstaller = "$binDir\LibreOfficePortable.paf.exe"
-Invoke-WebRequest -Uri "https://sourceforge.net/projects/portableapps/files/LibreOffice%20Portable/LibreOfficePortable_${libreOfficeVersion}_Multilingual.paf.exe/download" -OutFile $libreOfficeInstaller
-$libreOfficeDir = (Resolve-Path $binDir).Path + "\LibreOfficePortable"
-Start-Process -FilePath $libreOfficeInstaller -ArgumentList "/S", "/D=$libreOfficeDir" -Wait
-Remove-Item $libreOfficeInstaller -Force
-Write-Host "LibreOffice Portable installed to: $libreOfficeDir"
-
 Write-Host "All binaries downloaded successfully!"

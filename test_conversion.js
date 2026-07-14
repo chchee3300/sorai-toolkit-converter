@@ -95,7 +95,7 @@ async function runExecuteAndWait(page, timeoutMs = 60000) {
 }
 
 async function main() {
-    setTimeout(() => { console.error('WATCHDOG: test exceeded 420s, aborting'); process.exit(1); }, 420000);
+    setTimeout(() => { console.error('WATCHDOG: test exceeded 300s, aborting'); process.exit(1); }, 300000);
 
     // Clean up any leftover output files from previous runs so collision-suffix
     // assertions below are deterministic.
@@ -110,7 +110,6 @@ async function main() {
         'test_fixture_audio_converted.ogg',
         'test_ico_fixture.ico', 'test_in_converted.ico', 'test_ico_fixture_converted.png',
         'test_in_converted.pdf',
-        'test_fixture_converted.docx', 'test_fixture_converted.odt',
     ];
     cleanupNames.forEach(n => rmIfExists(path.join(ROOT, n)));
 
@@ -373,59 +372,6 @@ async function main() {
         } else {
             check('P4: qpdf --check validates compressed output', false, 'no output file');
         }
-        rmIfExists(pOut); // keep the collision-suffix namespace clean for P5-P14 below
-
-        await clearFileList(page);
-
-        // ============================================================
-        // PDF -> DOCX / ODT via LibreOffice headless (soffice.exe) — the
-        // staged-copy workaround for soffice's basename-preserving
-        // --outdir-only output, and the original qpdf path still working
-        // unmodified alongside the new format fork.
-        // ============================================================
-        console.log('\n--- PDF: DOCX/ODT conversion ---');
-        await dropFile(page, fixtures.pdf);
-        await setSelectValue(page, '#pdf-format', '.docx');
-        const optimizeGroupDisplay = await page.$eval('#pdf-optimize-group', el => el.style.display);
-        check('P5: optimize-mode group hidden when format is docx', optimizeGroupDisplay === 'none', optimizeGroupDisplay);
-
-        // LibreOffice's first invocation on a machine initializes a user
-        // profile dir and is markedly slower than ffmpeg/qpdf calls —
-        // give docx/odt conversions extra time over the 60s default.
-        const pDocxProgress = await runExecuteAndWait(page, 90000);
-        check('P6: docx batch completes', pDocxProgress.includes('Completed 1 of 1'), pDocxProgress);
-        const pOutDocx = path.join(ROOT, 'test_fixture_converted.docx');
-        check('P7: docx output file created', fs.existsSync(pOutDocx), pOutDocx);
-        const pDocxLog = await page.$eval('#terminal-log', el => el.innerText);
-        check('P8: docx command used soffice.exe --convert-to docx', pDocxLog.includes('soffice.exe') && pDocxLog.includes('--convert-to docx'), pDocxLog.slice(-400));
-        const stagedLeftover = path.join(ROOT, 'test_fixture_converted.pdf');
-        check('P9: staged temp pdf copy cleaned up after docx conversion', !fs.existsSync(stagedLeftover), stagedLeftover);
-        rmIfExists(pOutDocx);
-
-        await clearFileList(page);
-
-        await dropFile(page, fixtures.pdf);
-        await setSelectValue(page, '#pdf-format', '.odt');
-        const pOdtProgress = await runExecuteAndWait(page, 90000);
-        check('P10: odt batch completes', pOdtProgress.includes('Completed 1 of 1'), pOdtProgress);
-        const pOutOdt = path.join(ROOT, 'test_fixture_converted.odt');
-        check('P11: odt output file created', fs.existsSync(pOutOdt), pOutOdt);
-        const pOdtLog = await page.$eval('#terminal-log', el => el.innerText);
-        check('P12: odt command used soffice.exe --convert-to odt', pOdtLog.includes('soffice.exe') && pOdtLog.includes('--convert-to odt'), pOdtLog.slice(-400));
-        rmIfExists(pOutOdt);
-
-        await clearFileList(page);
-
-        // Reverting format back to .pdf must still exercise the original
-        // qpdf optimize path, unmodified, alongside the new format fork.
-        await dropFile(page, fixtures.pdf);
-        await setSelectValue(page, '#pdf-format', '.pdf');
-        await setSelectValue(page, '#pdf-optimize', 'linearize');
-        const pBackProgress = await runExecuteAndWait(page);
-        check('P13: reverting to pdf format still runs qpdf optimize path', pBackProgress.includes('Completed 1 of 1'), pBackProgress);
-        const pBackLog = await page.$eval('#terminal-log', el => el.innerText);
-        check('P14: reverted-to-pdf command used --linearize', pBackLog.includes('--linearize'), pBackLog.slice(-300));
-        rmIfExists(path.join(ROOT, 'test_fixture_converted.pdf'));
 
         await clearFileList(page);
 

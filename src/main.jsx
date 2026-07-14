@@ -15,7 +15,6 @@ import '../resources/js/lib/filename-collision.js'
 import '../resources/js/lib/ffmpeg-commands.js'
 import '../resources/js/lib/qpdf-commands.js'
 import '../resources/js/lib/img2pdf-commands.js'
-import '../resources/js/lib/libreoffice-commands.js'
 import '../resources/js/lib/progress-parser.js'
 import '../resources/js/lib/size-estimate.js'
 

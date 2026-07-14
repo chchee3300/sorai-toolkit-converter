@@ -63,13 +63,7 @@
     return baseSize * (quality / 100) * (scale / 100) * (scale / 100);
   }
 
-  function estimatePdfMB({ currentSizeMB, optimize, format }) {
-    // Rough flat multiplier — text-heavy PDFs shrink a lot on reflow,
-    // image-heavy/scanned PDFs vary far more; not content-aware. The "~"
-    // prefix in the UI already signals "estimate, not guarantee".
-    if (format === '.docx' || format === '.odt') {
-      return currentSizeMB * 0.6;
-    }
+  function estimatePdfMB({ currentSizeMB, optimize }) {
     return optimize === 'compress' ? currentSizeMB * 0.7 : currentSizeMB * 1.02;
   }
 

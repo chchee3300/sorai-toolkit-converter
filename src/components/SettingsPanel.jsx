@@ -275,26 +275,16 @@ function AudioSettings({ visible, audio, setAudio }) {
 
 function PdfSettings({ visible, pdf, setPdf }) {
   // Was setPdf({ optimize: e.target.value }) — a raw replacement object,
-  // not a merge patch. Harmless while optimize was pdf's only field, but
-  // would silently wipe `format` the instant a second field existed.
-  // Switch to the same set()-merge helper every other settings component
-  // already uses.
+  // not a merge patch. Harmless with a single field, but switched to the
+  // same set()-merge helper every other settings component already uses,
+  // so a future second field can't be silently dropped by this.
   const set = (patch) => setPdf((v) => ({ ...v, ...patch }))
-  const isConvert = pdf.format !== '.pdf'
 
   return (
     <div id="pdf-settings" className={visible ? 'settings-block' : 'settings-block hidden'}>
-      <p className="settings-subtitle">PDF conversion</p>
+      <p className="settings-subtitle">PDF optimization</p>
       <div className="settings-grid">
         <div className="field span-2">
-          <label className="field-label" htmlFor="pdf-format">Format</label>
-          <GlassSelect id="pdf-format" value={pdf.format} onChange={(e) => set({ format: e.target.value })}>
-            <option value=".pdf">PDF (optimize existing)</option>
-            <option value=".docx">DOCX — Word document</option>
-            <option value=".odt">ODT — OpenDocument Text</option>
-          </GlassSelect>
-        </div>
-        <div className="field span-2" id="pdf-optimize-group" style={{ display: isConvert ? 'none' : 'block' }}>
           <label className="field-label" htmlFor="pdf-optimize">Optimization mode</label>
           <GlassSelect id="pdf-optimize" value={pdf.optimize} onChange={(e) => set({ optimize: e.target.value })}>
             <option value="linearize">Linearize — Fast Web View</option>
