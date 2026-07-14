@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import Header from './components/Header.jsx'
 import StatusBar from './components/StatusBar.jsx'
 import DropZone from './components/DropZone.jsx'
 import FileList from './components/FileList.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
+import TrimModal from './components/TrimModal.jsx'
 import { useTheme } from './hooks/useTheme.js'
 import { useFileManager } from './hooks/useFileManager.js'
 import { useSettings } from './hooks/useSettings.js'
@@ -49,6 +51,16 @@ function App() {
 
   const hasFiles = files.length > 0
 
+  // Ported from main.js's currentTrimIndex + openTrimModal/btn-save-trim
+  // (main.js:539,595-598,854-867 pre-extraction).
+  const [trimIndex, setTrimIndex] = useState(-1)
+  const trimFile = trimIndex >= 0 ? files[trimIndex] : null
+
+  const handleSaveTrim = (start, end) => {
+    if (trimIndex < 0) return
+    setFiles((prev) => prev.map((f, i) => (i === trimIndex ? { ...f, trimStart: start, trimEnd: end } : f)))
+  }
+
   return (
     <div className="app-shell">
       <Header fileType={fileType} onToggleTheme={toggleTheme} />
@@ -79,7 +91,7 @@ function App() {
                 </button>
               </div>
             </div>
-            <FileList files={files} fileType={fileType} settings={settings} onRemove={removeFile} />
+            <FileList files={files} fileType={fileType} settings={settings} onRemove={removeFile} onOpenTrim={setTrimIndex} />
           </div>
         </section>
 
@@ -98,6 +110,13 @@ function App() {
         />
       </main>
       <StatusBar text={status.text} state={status.state} />
+      <TrimModal
+        open={trimIndex >= 0}
+        file={trimFile}
+        fileType={fileType}
+        onClose={() => setTrimIndex(-1)}
+        onSave={handleSaveTrim}
+      />
     </div>
   )
 }
