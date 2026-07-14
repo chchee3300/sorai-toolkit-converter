@@ -421,14 +421,24 @@ const LiquidSelect = {
     document.addEventListener('click', onDocClick)
 
     // Close on scroll instead of tracking the trigger's moving position —
-    // .main is the page's scroll container, and the dropdown (now
-    // position:fixed) would otherwise be left floating in a stale spot.
+    // the dropdown (now position:fixed) would otherwise be left floating in
+    // a stale spot. #main-content is always the outermost scroll container,
+    // but #settings-section/#tool-intro can also scroll independently on
+    // short windows (see styles.css), so walk up and listen on every
+    // scrollable ancestor, not just the outermost one.
     // (Deliberately NOT closing on window `resize`: that also fires when
     // DevTools opens/docks and shrinks the viewport, which was closing the
     // dropdown out from under any attempt to inspect it.)
     const onMainScroll = () => closeDropdown()
-    const mainScrollEl = document.getElementById('main-content')
-    if (mainScrollEl) mainScrollEl.addEventListener('scroll', onMainScroll, { passive: true })
+    const scrollParents = []
+    for (let node = wrapper.parentElement; node; node = node.parentElement) {
+      if (getComputedStyle(node).overflowY === 'auto' || getComputedStyle(node).overflowY === 'scroll') {
+        scrollParents.push(node)
+      }
+    }
+    const mainContentEl = document.getElementById('main-content')
+    if (mainContentEl && !scrollParents.includes(mainContentEl)) scrollParents.push(mainContentEl)
+    scrollParents.forEach((el) => el.addEventListener('scroll', onMainScroll, { passive: true }))
 
     // Keyboard nav
     trigger.addEventListener('keydown', (e) => {
@@ -455,7 +465,7 @@ const LiquidSelect = {
 
     this._instances.set(selectEl, {
       destroy, onDocClick, onSelectChange, disabledObserver, wrapper,
-      dropPanel, mainScrollEl, onMainScroll
+      dropPanel, scrollParents, onMainScroll
     })
   },
 
@@ -477,7 +487,7 @@ const LiquidSelect = {
     inst.destroy()
     document.removeEventListener('click', inst.onDocClick)
     selectEl.removeEventListener('change', inst.onSelectChange)
-    if (inst.mainScrollEl) inst.mainScrollEl.removeEventListener('scroll', inst.onMainScroll)
+    inst.scrollParents.forEach((el) => el.removeEventListener('scroll', inst.onMainScroll))
     inst.disabledObserver.disconnect()
     inst.dropPanel.remove() // portaled to <body>, not a child of wrapper
     inst.wrapper.replaceWith(selectEl)

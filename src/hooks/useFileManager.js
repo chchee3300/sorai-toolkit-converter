@@ -63,6 +63,11 @@ export function useFileManager({ onFirstFileType }) {
   const [outputPath, setOutputPathState] = useState('')
   const [loading, setLoading] = useState(false)
   const [status, setStatusState] = useState({ text: 'Ready', state: 'ready' })
+  // { paths, incomingType, existingType, existingCount } | null — set when
+  // an incoming batch's type differs from what's already loaded, so the UI
+  // can ask before silently rejecting (see handleFiles/confirmClearAndLoad
+  // below).
+  const [pendingMismatch, setPendingMismatch] = useState(null)
 
   // Refs mirror state for reads inside async handlers, where a stale
   // closure or a not-yet-committed setState would otherwise reintroduce
@@ -87,12 +92,17 @@ export function useFileManager({ onFirstFileType }) {
     setStatusState({ text, state })
   }, [])
 
-  const handleFiles = useCallback(
-    async (paths) => {
+  // Ported unchanged from the original handleFiles body — now parameterized
+  // on startingType instead of reading the fileType state var directly, so
+  // it can be called with `null` right after a confirmed clear-and-switch
+  // without waiting for that state update to commit (see
+  // confirmClearAndLoad below).
+  const loadFiles = useCallback(
+    async (paths, startingType) => {
       setLoading(true)
       try {
         const additions = []
-        let localType = fileType
+        let localType = startingType
 
         for (const path of paths) {
           try {
@@ -158,6 +168,24 @@ export function useFileManager({ onFirstFileType }) {
       }
     },
     [fileType, onFirstFileType, setOutputPathBoth],
+  )
+
+  // Public entry point every caller (native filesDropped, browser-mode
+  // drop, and the Browse dialog) already funnels through. If files are
+  // already loaded and this batch resolves to a *different* category, park
+  // it in pendingMismatch and ask instead of silently rejecting (matches
+  // getFileType/localType's own per-file mismatch check further up the
+  // list for intra-batch mixing on a *fresh* load, which is unaffected).
+  const handleFiles = useCallback(
+    async (paths) => {
+      const incomingType = paths.map(getFileType).find(Boolean) ?? null
+      if (fileType !== null && incomingType !== null && incomingType !== fileType) {
+        setPendingMismatch({ paths, incomingType, existingType: fileType, existingCount: filesRef.current.length })
+        return
+      }
+      await loadFiles(paths, fileType)
+    },
+    [fileType, loadFiles],
   )
 
   const dropSeqRef = useRef(0)
@@ -268,9 +296,23 @@ export function useFileManager({ onFirstFileType }) {
     setStatus('Ready', 'ready')
   }, [setStatus])
 
-  // Native drag/drop visual effects — ported unchanged from main.js's
-  // document-level dragenter/dragleave/dragover/drop listeners plus the
-  // Neutralino 'filesDropped' event (window mode's real native drop path).
+  const confirmClearAndLoad = useCallback(async () => {
+    if (!pendingMismatch) return
+    const { paths } = pendingMismatch
+    clearFiles()
+    filesRef.current = [] // read-your-own-write: clearFiles' setFiles([]) hasn't committed yet
+    setPendingMismatch(null)
+    await loadFiles(paths, null)
+  }, [pendingMismatch, clearFiles, loadFiles])
+
+  const cancelPendingMismatch = useCallback(() => setPendingMismatch(null), [])
+
+  // Native drag/drop handling — document-level dragenter/dragleave/
+  // dragover/drop listeners plus the Neutralino 'filesDropped' event
+  // (window mode's real native drop path). body.drag-active only drives
+  // the whole-window overlay (styles.css) — files are droppable anywhere
+  // on the page, so no single panel gets its own highlight; the file list
+  // updating is the feedback a drop needs.
   const dragCounterRef = useRef(0)
 
   useEffect(() => {
@@ -278,18 +320,12 @@ export function useFileManager({ onFirstFileType }) {
       e.preventDefault()
       dragCounterRef.current++
       document.body.classList.add('drag-active')
-      const dropZone = document.getElementById('drop-zone')
-      if (dropZone && !dropZone.classList.contains('hidden')) {
-        dropZone.classList.add('dragover')
-      }
     }
     const onDragLeave = (e) => {
       e.preventDefault()
       dragCounterRef.current--
       if (dragCounterRef.current === 0) {
         document.body.classList.remove('drag-active')
-        const dropZone = document.getElementById('drop-zone')
-        if (dropZone) dropZone.classList.remove('dragover')
       }
     }
     const onDragOver = (e) => e.preventDefault()
@@ -297,8 +333,6 @@ export function useFileManager({ onFirstFileType }) {
       e.preventDefault()
       dragCounterRef.current = 0
       document.body.classList.remove('drag-active')
-      const dropZone = document.getElementById('drop-zone')
-      if (dropZone) dropZone.classList.remove('dragover')
 
       // Window mode gets real paths via the native filesDropped event;
       // reading dataTransfer here as well would double-add the files.
@@ -324,8 +358,6 @@ export function useFileManager({ onFirstFileType }) {
     const handler = (event) => {
       dragCounterRef.current = 0
       document.body.classList.remove('drag-active')
-      const dropZone = document.getElementById('drop-zone')
-      if (dropZone) dropZone.classList.remove('dragover')
 
       const detail = event.detail
       let paths = []
@@ -372,5 +404,8 @@ export function useFileManager({ onFirstFileType }) {
     clearFiles,
     browseForFiles,
     browseForOutputFolder,
+    pendingMismatch,
+    confirmClearAndLoad,
+    cancelPendingMismatch,
   }
 }

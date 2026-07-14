@@ -4,6 +4,9 @@ import StatusBar from './components/StatusBar.jsx'
 import DropZone from './components/DropZone.jsx'
 import FileList from './components/FileList.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
+import ToolIntro from './components/ToolIntro.jsx'
+import ProgressLog from './components/ProgressLog.jsx'
+import MixedTypeModal from './components/MixedTypeModal.jsx'
 import TrimModal from './components/TrimModal.jsx'
 import { useTheme } from './hooks/useTheme.js'
 import { useFileManager } from './hooks/useFileManager.js'
@@ -38,6 +41,9 @@ function App() {
     clearFiles,
     browseForFiles,
     browseForOutputFolder,
+    pendingMismatch,
+    confirmClearAndLoad,
+    cancelPendingMismatch,
   } = useFileManager({ onFirstFileType: settings.setFormatForType })
 
   const {
@@ -69,49 +75,52 @@ function App() {
       <main className="main" id="main-content">
         <LoadingOverlay visible={loading} />
 
-        <section className="panel panel--ghost" id="input-panel">
-          {!hasFiles && <DropZone onClick={browseForFiles} />}
-          <div id="file-list-container" className={hasFiles ? '' : 'hidden'}>
-            <div className="filelist-header">
-              <span className="mono-label tabular-nums" id="file-count-label">
-                {files.length} file{files.length !== 1 ? 's' : ''} · {fileType ? fileType.toUpperCase() : ''}
-              </span>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-ghost-success btn-xs" id="btn-add-files" onClick={browseForFiles}>
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-                    <line x1="8" y1="3" x2="8" y2="13" />
-                    <line x1="3" y1="8" x2="13" y2="8" />
-                  </svg>
-                  Add files
-                </button>
-                <button className="btn btn-ghost btn-xs" id="btn-clear-files" onClick={clearFiles}>
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
-                    <line x1="3" y1="3" x2="13" y2="13" />
-                    <line x1="13" y1="3" x2="3" y2="13" />
-                  </svg>
-                  Clear all
-                </button>
+        <div className="main-columns">
+          <section className="panel panel--ghost" id="input-panel">
+            {!hasFiles && <DropZone onClick={browseForFiles} />}
+            <div id="file-list-container" className={hasFiles ? '' : 'hidden'}>
+              <div className="filelist-header">
+                <span className="mono-label tabular-nums" id="file-count-label">
+                  {files.length} file{files.length !== 1 ? 's' : ''} · {fileType ? fileType.toUpperCase() : ''}
+                </span>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-ghost-success btn-xs" id="btn-add-files" onClick={browseForFiles}>
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+                      <line x1="8" y1="3" x2="8" y2="13" />
+                      <line x1="3" y1="8" x2="13" y2="8" />
+                    </svg>
+                    Add files
+                  </button>
+                  <button className="btn btn-ghost btn-xs" id="btn-clear-files" onClick={clearFiles}>
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+                      <line x1="3" y1="3" x2="13" y2="13" />
+                      <line x1="13" y1="3" x2="3" y2="13" />
+                    </svg>
+                    Clear all
+                  </button>
+                </div>
               </div>
+              <FileList files={files} fileType={fileType} settings={settings} onRemove={removeFile} onOpenTrim={setTrimIndex} />
             </div>
-            <FileList files={files} fileType={fileType} settings={settings} onRemove={removeFile} onOpenTrim={setTrimIndex} />
-          </div>
-        </section>
+            <ProgressLog visible={progressVisible} percent={progressPercent} text={progressText} log={terminalLog} />
+          </section>
 
-        <SettingsPanel
-          files={files}
-          fileType={fileType}
-          settings={settings}
-          outputPath={outputPath}
-          onBrowseOutput={browseForOutputFolder}
-          executing={executing}
-          cancelling={cancelling}
-          progressVisible={progressVisible}
-          progressPercent={progressPercent}
-          progressText={progressText}
-          terminalLog={terminalLog}
-          onExecute={execute}
-          onCancel={cancel}
-        />
+          {hasFiles ? (
+            <SettingsPanel
+              files={files}
+              fileType={fileType}
+              settings={settings}
+              outputPath={outputPath}
+              onBrowseOutput={browseForOutputFolder}
+              executing={executing}
+              cancelling={cancelling}
+              onExecute={execute}
+              onCancel={cancel}
+            />
+          ) : (
+            <ToolIntro />
+          )}
+        </div>
       </main>
       <StatusBar text={status.text} state={status.state} />
       <TrimModal
@@ -120,6 +129,15 @@ function App() {
         fileType={fileType}
         onClose={() => setTrimIndex(-1)}
         onSave={handleSaveTrim}
+      />
+      <MixedTypeModal
+        open={!!pendingMismatch}
+        existingType={pendingMismatch?.existingType}
+        incomingType={pendingMismatch?.incomingType}
+        existingCount={pendingMismatch?.existingCount ?? 0}
+        incomingCount={pendingMismatch?.paths.length ?? 0}
+        onConfirm={confirmClearAndLoad}
+        onCancel={cancelPendingMismatch}
       />
     </div>
   )

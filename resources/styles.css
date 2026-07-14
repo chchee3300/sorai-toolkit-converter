@@ -27,6 +27,7 @@
   --accent-glow:   rgba(91, 127, 255, 0.22);
 
   --danger:        #f04f4f;
+  --danger-glow:   rgba(240, 79, 79, 0.22);
   --success:       #3ecf8e;
 
   --sb-track:      rgba(255, 255, 255, 0.03);
@@ -61,6 +62,7 @@
   --accent-glow:   rgba(64, 96, 232, 0.18);
 
   --danger:        #d93535;
+  --danger-glow:   rgba(217, 53, 53, 0.18);
   --success:       #1f9e6a;
 
   --sb-track:      rgba(0, 0, 0, 0.04);
@@ -98,7 +100,7 @@ body {
 /* Smooth theme transition on key elements */
 .panel, .header, .statusbar,
 .input, .btn, .file-item,
-.drop-zone, #terminal-log {
+.drop-zone-message, #terminal-log {
   transition:
     background-color 0.22s ease,
     border-color 0.22s ease,
@@ -214,9 +216,34 @@ body {
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
   padding: 0.875rem;
   position: relative;
+}
+
+/* Wraps #input-panel + #settings-section. Column (today's stacked layout,
+   unchanged) below the breakpoint; side-by-side two-column grid at/above
+   it — see the responsive layout section near the bottom of this file. */
+.main-columns {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+/* One-page two-column layout on wide viewports — file info left, settings
+   right. Below this width the app falls back to today's stacked layout
+   unchanged (this is the app's first real responsive breakpoint). Right
+   column gets a larger minimum/share since it holds more/wider content
+   (the settings grid's own 2-up fields, output-path row, execute button). */
+@media (min-width: 860px) {
+  .main-columns {
+    display: grid;
+    /* Left absorbs all extra width on wide windows (more filenames worth
+       showing); right stays clamped so it never grows into dead empty
+       space once its fields have enough room. */
+    grid-template-columns: 1fr minmax(420px, 520px);
+  }
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -244,8 +271,15 @@ body {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   flex: 1;                   /* stretch to fill remaining height */
+  /* Floor so a tall sibling (ToolIntro/SettingsPanel, sized to its content
+     via flex-basis:auto) can't win 100% of a shrink-to-fit deficit and
+     squeeze this flex-basis:0 panel to zero height in the stacked (<860px)
+     layout — that hid the drop icon and the Browse button entirely on
+     short windows. Sized to comfortably fit .drop-zone-message's content. */
+  min-height: 240px;
   display: flex;
   flex-direction: column;
+  gap: 0.625rem;              /* spacing between the file list and ProgressLog when visible */
 }
 
 .panel--ghost:hover { border-color: transparent; }
@@ -289,9 +323,12 @@ body {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ════════════════════════════════════════════════════════════
-   DROP ZONE
+   DROP ZONE MESSAGE (empty-state content — files are droppable
+   everywhere on the page, not just here, so this deliberately carries
+   no panel-level border/glow of its own; only the icon/CTA sub-elements
+   get a small hover shift, same as any other clickable control)
    ════════════════════════════════════════════════════════════ */
-.drop-zone {
+.drop-zone-message {
   flex: 1;                        /* fill the ghost panel */
   display: flex;
   flex-direction: column;
@@ -300,25 +337,7 @@ body {
   gap: 1rem;
   padding: 2.5rem 2rem;
   cursor: pointer;
-  border-radius: var(--glass-radius);
-  /* No visible border at rest */
-  border: 1px solid transparent;
-  background: transparent;
-  /* Subtle ring on hover via box-shadow, not border */
-  transition: box-shadow 0.2s ease, background 0.2s ease;
   text-align: center;
-}
-
-.drop-zone:hover {
-  background: var(--accent-dim);
-  box-shadow: 0 0 0 1px rgba(91,127,255,0.18) inset,
-              0 0 40px -10px rgba(91,127,255,0.06);
-}
-
-.drop-zone.dragover {
-  background: var(--accent-dim);
-  box-shadow: 0 0 0 1px var(--accent) inset,
-              0 0 60px -10px rgba(91,127,255,0.12);
 }
 
 /* Icon — large rounded-square shape */
@@ -336,8 +355,7 @@ body {
   transition: background 0.2s, border-color 0.2s, transform 0.2s;
 }
 
-.drop-zone:hover .drop-zone-icon,
-.drop-zone.dragover .drop-zone-icon {
+.drop-zone-message:hover .drop-zone-icon {
   background: var(--accent-dim);
   border-color: rgba(91,127,255,0.35);
   transform: translateY(-2px);
@@ -384,7 +402,7 @@ body {
   transition: border-color 0.15s, color 0.15s;
 }
 
-.drop-zone:hover .drop-zone-cta {
+.drop-zone-message:hover .drop-zone-cta {
   border-color: rgba(91,127,255,0.35);
   color: var(--accent);
 }
@@ -458,6 +476,19 @@ body.drag-active::after {
 /* ════════════════════════════════════════════════════════════
    SETTINGS PANEL
    ════════════════════════════════════════════════════════════ */
+#settings-section {
+  /* Same fix as #tool-intro: content-sized (flex-basis:auto) sibling of
+     the flex-basis:0 #input-panel (now floored at min-height:240px) in the
+     stacked (<860px) layout. Without this, a short window would clip the
+     bottom of the settings form — including the Start Processing button —
+     behind .panel's overflow:hidden with no way to reach it. GlassSelect's
+     dropdown is portaled to <body> as position:fixed (liquid-glass.js), so
+     it isn't clipped by this scrolling and closes itself if this panel is
+     scrolled while open (see liquid-glass.js's scrollParents). */
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .settings-block {
   padding: 0.875rem 1.125rem;
 }
@@ -529,6 +560,69 @@ body.drag-active::after {
   font-size: 0.67rem;
 }
 
+/* ════════════════════════════════════════════════════════════
+   TOOL INTRO  (right column, shown in place of #settings-section
+   before any file is loaded — see App.jsx's hasFiles swap)
+   ════════════════════════════════════════════════════════════ */
+#tool-intro {
+  /* Content-sized (flex-basis:auto) sibling of the flex-basis:0
+     #input-panel in the stacked (<860px) layout — on short windows this is
+     the one that should give way (scrolling internally) instead of
+     silently clipping (.panel's overflow:hidden) or muscling #input-panel
+     down to its min-height and beyond. */
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.intro-lede {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.intro-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.intro-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1.125rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.intro-item:last-child { border-bottom: none; }
+
+.intro-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.intro-icon svg { width: 17px; height: 17px; }
+
+.intro-item-title {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 0.2rem;
+}
+
+.intro-item-desc {
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 /* Inline toggle (checkbox + label) */
 .toggle-check {
   display: inline-flex;
@@ -544,16 +638,17 @@ body.drag-active::after {
 .toggle-check input[type="checkbox"] {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   margin: 0;
   flex-shrink: 0;
   border-radius: 4px;
   border: 1px solid var(--glass-border-hi);
   background: var(--surface-1);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.25);
   cursor: pointer;
   position: relative;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .toggle-check input[type="checkbox"]:hover {
@@ -563,6 +658,7 @@ body.drag-active::after {
 .toggle-check input[type="checkbox"]:checked {
   background: var(--accent);
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 .toggle-check input[type="checkbox"]:checked::after {
@@ -590,6 +686,7 @@ body.drag-active::after {
   font-family: 'Inter', sans-serif;
   font-size: 0.8rem;
   outline: none;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.03);
 }
 
 .input:focus {
@@ -606,19 +703,24 @@ select.input { display: none; }
   appearance: none;
   width: 100%;
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  /* --range-fill (set inline per-instance, e.g. style={{'--range-fill': '42%'}})
+     paints the "filled" portion of the track up to the thumb in the accent
+     color, same convention every native OS/media-player slider uses to show
+     the current value at rest, not just on interaction. Falls back to an
+     unfilled track if a caller forgets to set it. */
+  background: linear-gradient(to right, var(--accent) var(--range-fill, 0%), rgba(255, 255, 255, 0.2) var(--range-fill, 0%));
   border-radius: 2px;
   outline: none;
   cursor: pointer;
   padding: 0;
   margin: 10px 0;
   box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);
-  transition: background 0.2s;
+  transition: filter 0.2s;
   overflow: visible;
 }
 
 .range-input:hover {
-  background: rgba(255, 255, 255, 0.35);
+  filter: brightness(1.15);
 }
 
 /* WebKit / Blink (Chrome, Neutralino) */
@@ -683,7 +785,7 @@ select.input { display: none; }
 
 .range-input::-moz-range-track {
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(to right, var(--accent) var(--range-fill, 0%), rgba(255, 255, 255, 0.2) var(--range-fill, 0%));
   border-radius: 2px;
   border: none;
 }
@@ -723,11 +825,23 @@ select.input { display: none; }
   background: var(--accent);
   color: #fff;
   border-color: rgba(91,127,255,0.5);
+  box-shadow: 0 4px 14px -4px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.15);
+  transition: background 0.13s, border-color 0.13s, color 0.13s, box-shadow 0.13s, transform 0.13s;
 }
 
 .btn-primary svg { width: 10px; height: 10px; fill: currentColor; }
 
-.btn-primary:hover:not(:disabled) { background: #4a6bf5; border-color: #4a6bf5; }
+.btn-primary:hover:not(:disabled) {
+  background: #4a6bf5;
+  border-color: #4a6bf5;
+  box-shadow: 0 6px 18px -4px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.18);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active:not(:disabled) {
+  box-shadow: 0 2px 8px -3px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.1);
+  transform: translateY(0);
+}
 
 /* Outline */
 .btn-outline {
@@ -749,6 +863,8 @@ select.input { display: none; }
   background: transparent;
   color: var(--danger);
   border-color: var(--danger);
+  box-shadow: 0 4px 14px -6px var(--danger-glow);
+  transition: background 0.13s, border-color 0.13s, color 0.13s, box-shadow 0.13s, transform 0.13s;
 }
 
 .btn-outline-danger svg { width: 10px; height: 10px; fill: currentColor; }
@@ -756,6 +872,13 @@ select.input { display: none; }
 .btn-outline-danger:hover:not(:disabled) {
   background: var(--danger);
   color: #fff;
+  box-shadow: 0 6px 18px -6px var(--danger-glow);
+  transform: translateY(-1px);
+}
+
+.btn-outline-danger:active:not(:disabled) {
+  box-shadow: 0 2px 8px -5px var(--danger-glow);
+  transform: translateY(0);
 }
 
 /* Ghost */
@@ -1060,9 +1183,10 @@ select.input { display: none; }
   font-size: 0.8rem;
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
   outline: none;
   user-select: none;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.03);
 }
 
 .lg-trigger:hover {

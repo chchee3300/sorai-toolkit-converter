@@ -11,6 +11,7 @@ const { chromium } = require('playwright');
 
 const ROOT = __dirname;
 const FIXTURE = path.join(ROOT, 'test_in.png');
+const VIDEO_FIXTURE = path.join(ROOT, 'test_fixture_video.mp4');
 const DROP_TEMP = path.join(os.tmpdir(), 'FileConverterApp', 'dropped');
 
 const results = [];
@@ -50,6 +51,10 @@ async function main() {
         console.error('Fixture missing: ' + FIXTURE);
         process.exit(1);
     }
+    if (!fs.existsSync(VIDEO_FIXTURE)) {
+        console.error('Fixture missing: ' + VIDEO_FIXTURE);
+        process.exit(1);
+    }
     const fixtureBytes = fs.readFileSync(FIXTURE);
 
     // Make the neu CLI resolvable even when the global npm bin dir is not in PATH
@@ -80,7 +85,7 @@ async function main() {
         // so seed it there before any page script runs.
         await page.addInitScript(t => { try { sessionStorage.setItem('NL_TOKEN', t); } catch (e) {} }, auth.nlToken);
         await page.goto(url);
-        await page.waitForSelector('#drop-zone');
+        await page.waitForSelector('#input-panel');
         // React build has no window.importDroppedFiles global (it's an
         // internal hook callback now) — wait on NL_MODE + Neutralino
         // instead, both still genuine Neutralino-injected globals.
@@ -161,6 +166,39 @@ async function main() {
         const overlayHidden = await page.$eval('#file-loading-overlay', el => el.classList.contains('hidden'));
         check('C2: loading overlay not stuck', overlayHidden);
         check('C3: page still responsive', (await page.evaluate(() => 1)) === 1);
+
+        // ---------- Test D: mixed-file-type confirm modal ----------
+        console.log('\n--- Test D: mixed-file-type confirm modal ---');
+        await page.evaluate(p => Neutralino.events.dispatch('filesDropped', [p]), FIXTURE);
+        await page.waitForSelector('#file-list .file-item', { timeout: 20000 });
+
+        // Dropping a different-type file while one is loaded must NOT add it
+        // directly — it should park behind a confirm modal instead.
+        await page.evaluate(p => Neutralino.events.dispatch('filesDropped', [p]), VIDEO_FIXTURE);
+        await page.waitForSelector('#mixed-type-modal:not(.hidden)', { timeout: 5000 });
+        const itemCountD1 = await page.$$eval('#file-list .file-item', els => els.length);
+        check('D1: mismatched drop does not add the file directly', itemCountD1 === 1, itemCountD1);
+        const modalText = await page.$eval('#mixed-type-modal .modal-body', el => el.innerText);
+        check('D2: modal wording mentions both file types', modalText.includes('video') && modalText.includes('image'), modalText);
+
+        // "Keep current files" leaves the existing batch untouched.
+        await page.click('#btn-mixed-type-cancel');
+        await page.waitForFunction(() => document.getElementById('mixed-type-modal').classList.contains('hidden'), { timeout: 5000 });
+        const typeBadgeD1 = await page.$eval('#type-badge', el => el.textContent);
+        const itemCountD2 = await page.$$eval('#file-list .file-item', els => els.length);
+        check('D3: declining keeps the original file/type untouched', typeBadgeD1 === 'Image' && itemCountD2 === 1, typeBadgeD1 + ' / ' + itemCountD2);
+
+        // "Clear & load" swaps the batch to the new type.
+        await page.evaluate(p => Neutralino.events.dispatch('filesDropped', [p]), VIDEO_FIXTURE);
+        await page.waitForSelector('#mixed-type-modal:not(.hidden)', { timeout: 5000 });
+        await page.click('#btn-mixed-type-confirm');
+        await page.waitForFunction(() => document.getElementById('mixed-type-modal').classList.contains('hidden'), { timeout: 5000 });
+        // loadFiles' getMediaInfo probe is a real ffmpeg.exe subprocess call.
+        await page.waitForFunction(() => document.getElementById('type-badge').textContent === 'Video', { timeout: 15000 });
+        const itemsD3 = await page.$$eval('#file-list .file-item', els => els.map(el => el.innerText));
+        check('D4: confirming clears the old batch and loads the new type', itemsD3.length === 1 && itemsD3[0].includes('test_fixture_video.mp4'), itemsD3);
+
+        await clearFileList(page);
 
         // ---------- Global invariants ----------
         check('G1: no alert/confirm dialogs during drop flows', dialogCount === 0, dialogCount);

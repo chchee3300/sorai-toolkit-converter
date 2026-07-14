@@ -1,12 +1,14 @@
-// Ported unchanged from resources/index.html:52-67. Visual dragover/
-// drag-active states are handled globally by useFileManager's document-
-// level listeners (toggling classes directly on #drop-zone/document.body,
-// same as vanilla) — this component only needs the click-to-browse handler.
+// The empty-state "drop/click to browse" message, shown inside #input-panel
+// before any file is loaded. Deliberately carries no panel-level border or
+// drag-active glow of its own — files are droppable everywhere on the page
+// (see useFileManager.js's document-level drag listeners), not just here,
+// so no single area is visually marked as "the" drop target; the file list
+// updating is the only feedback a drop needs. Only the icon/CTA get a small
+// hover shift, the same treatment any other clickable control gets.
 export default function DropZone({ onClick }) {
   return (
     <div
-      className="drop-zone"
-      id="drop-zone"
+      className="drop-zone-message"
       role="button"
       tabIndex={0}
       aria-label="Drop files here, or click to browse"

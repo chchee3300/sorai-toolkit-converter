@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
 import GlassSelect from './GlassSelect.jsx'
+import { rangeFillStyle } from '../lib/rangeFill.js'
 
 // Ported unchanged from resources/index.html:88-241 + main.js's settings
 // event-listener wiring (main.js:896-1019 pre-extraction: value-chip
@@ -96,6 +96,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
             value={video.quality}
             min="1"
             max={qualityMax}
+            style={rangeFillStyle(video.quality, 1, qualityMax)}
             onChange={(e) => set({ quality: parseFloat(e.target.value) })}
           />
         </div>
@@ -125,6 +126,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
             min="1"
             max={fpsMax}
             step="1"
+            style={rangeFillStyle(fpsValue, 1, fpsMax)}
             onChange={(e) => set({ fps: parseFloat(e.target.value) })}
           />
         </div>
@@ -140,6 +142,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
             min="0.1"
             max="4.0"
             step="0.1"
+            style={rangeFillStyle(video.speed, 0.1, 4.0)}
             onChange={(e) => set({ speed: parseFloat(e.target.value) })}
           />
         </div>
@@ -186,6 +189,7 @@ function ImageSettings({ visible, image, setImage, lastFile }) {
             value={image.quality}
             min="1"
             max="100"
+            style={rangeFillStyle(image.quality, 1, 100)}
             onChange={(e) => set({ quality: parseFloat(e.target.value) })}
           />
         </div>
@@ -204,6 +208,7 @@ function ImageSettings({ visible, image, setImage, lastFile }) {
             min="10"
             max="100"
             step="1"
+            style={rangeFillStyle(image.scale, 10, 100)}
             onChange={(e) => set({ scale: parseFloat(e.target.value) })}
           />
         </div>
@@ -251,6 +256,7 @@ function AudioSettings({ visible, audio, setAudio }) {
             min="0.1"
             max="4.0"
             step="0.1"
+            style={rangeFillStyle(audio.speed, 0.1, 4.0)}
             onChange={(e) => set({ speed: parseFloat(e.target.value) })}
           />
         </div>
@@ -276,18 +282,6 @@ function PdfSettings({ visible, pdf, setPdf }) {
   )
 }
 
-function TerminalLog({ text }) {
-  const ref = useRef(null)
-  useEffect(() => {
-    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight
-  }, [text])
-  return (
-    <div id="terminal-log" className="terminal" ref={ref}>
-      {text}
-    </div>
-  )
-}
-
 export default function SettingsPanel({
   files,
   fileType,
@@ -296,18 +290,13 @@ export default function SettingsPanel({
   onBrowseOutput,
   executing,
   cancelling,
-  progressVisible,
-  progressPercent,
-  progressText,
-  terminalLog,
   onExecute,
   onCancel,
 }) {
-  const visible = files.length > 0
   const { video, setVideo, image, setImage, audio, setAudio, pdf, setPdf } = settings
 
   return (
-    <section className={visible ? 'panel' : 'panel hidden'} id="settings-section">
+    <section className="panel" id="settings-section">
       <OutputPathRow outputPath={outputPath} onBrowse={onBrowseOutput} />
       <div className="panel-divider"></div>
 
@@ -336,14 +325,6 @@ export default function SettingsPanel({
             Start Processing
           </button>
         )}
-      </div>
-
-      <div id="progress-wrapper" className={progressVisible ? 'progress-block' : 'progress-block hidden'}>
-        <div className="progress-track" role="progressbar" aria-valuenow={Math.round(progressPercent)} aria-valuemin={0} aria-valuemax={100}>
-          <div className="progress-bar" id="progress-bar" style={{ width: `${progressPercent}%` }}></div>
-        </div>
-        <p className="progress-label tabular-nums" id="progress-text" role="status" aria-live="polite">{progressText}</p>
-        <TerminalLog text={terminalLog} />
       </div>
     </section>
   )

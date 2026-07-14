@@ -140,7 +140,7 @@ async function main() {
         page.on('dialog', d => { console.log('PAGE DIALOG:', d.message()); d.dismiss().catch(() => {}); });
         await page.addInitScript(t => { try { sessionStorage.setItem('NL_TOKEN', t); } catch (e) {} }, auth.nlToken);
         await page.goto(url);
-        await page.waitForSelector('#drop-zone');
+        await page.waitForSelector('#input-panel');
         // React build has no window.importDroppedFiles global (it's an
         // internal hook callback now) — wait on NL_MODE + Neutralino
         // instead, both still genuine Neutralino-injected globals.

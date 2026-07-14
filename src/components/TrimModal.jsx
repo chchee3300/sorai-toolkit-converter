@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { rangeFillStyle } from '../lib/rangeFill.js'
 
 // Ported unchanged from resources/index.html:253-312 (markup) and main.js's
 // Trim Modal Logic (main.js:538-867 pre-extraction) — the most complex
@@ -378,7 +379,7 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
                       max="1"
                       step="0.05"
                       value={volume}
-                      style={{ width: 60 }}
+                      style={{ width: 60, ...rangeFillStyle(volume, 0, 1) }}
                       onChange={handleVolumeChange}
                     />
                   </div>
