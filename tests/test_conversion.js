@@ -2,14 +2,18 @@
 // Reuses test_drop.js's neu-launch/auth/teardown pattern (see [[neu-playwright-test-pattern]]).
 // Drives the REAL app UI end-to-end (real ffmpeg/qpdf subprocess execution), per
 // CLAUDE.md's mandatory Video/Image/Audio/PDF + shared-feature regression policy.
-// Run with: node test_conversion.js
+// Run with: node tests/test_conversion.js (from the project root)
 // Exits 0 on success, 1 on any failure.
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
 const { chromium } = require('playwright');
 
-const ROOT = __dirname;
+// neu run must launch from the project root (neutralino.config.json,
+// binaries/, .tmp/ all live there); fixtures + this run's converted
+// outputs live alongside this script instead.
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+const FIXTURES_DIR = path.join(__dirname, 'fixtures');
 const { execFileSync } = cp;
 
 const results = [];
@@ -23,7 +27,7 @@ function waitForAuthInfo(sinceMs, timeoutMs = 30000) {
         const t0 = Date.now();
         (function poll() {
             try {
-                const st = fs.statSync(path.join(ROOT, '.tmp', 'auth_info.json'));
+                const st = fs.statSync(path.join(PROJECT_ROOT, '.tmp', 'auth_info.json'));
                 if (st.mtimeMs > sinceMs) return resolve();
             } catch (e) { /* not written yet */ }
             if (Date.now() - t0 > timeoutMs) return reject(new Error('auth_info.json not refreshed within ' + timeoutMs + 'ms'));
@@ -111,13 +115,13 @@ async function main() {
         'test_ico_fixture.ico', 'test_in_converted.ico', 'test_ico_fixture_converted.png',
         'test_in_converted.pdf',
     ];
-    cleanupNames.forEach(n => rmIfExists(path.join(ROOT, n)));
+    cleanupNames.forEach(n => rmIfExists(path.join(FIXTURES_DIR, n)));
 
     const fixtures = {
-        video: path.join(ROOT, 'test_fixture_video.mp4'),
-        image: path.join(ROOT, 'test_in.png'),
-        audio: path.join(ROOT, 'test_fixture_audio.mp3'),
-        pdf: path.join(ROOT, 'test_fixture.pdf'),
+        video: path.join(FIXTURES_DIR, 'test_fixture_video.mp4'),
+        image: path.join(FIXTURES_DIR, 'test_in.png'),
+        audio: path.join(FIXTURES_DIR, 'test_fixture_audio.mp3'),
+        pdf: path.join(FIXTURES_DIR, 'test_fixture.pdf'),
     };
     for (const [k, p] of Object.entries(fixtures)) {
         if (!fs.existsSync(p)) { console.error(`Fixture missing (${k}): ${p}`); process.exit(1); }
@@ -131,8 +135,8 @@ async function main() {
     // this must scale down the same way buildImageCommand's own .ico
     // branch does (ffmpeg-commands.js) -- otherwise this generation step
     // itself fails with "Unsupported dimensions".
-    const icoFixture = path.join(ROOT, 'test_ico_fixture.ico');
-    execFileSync(path.join(ROOT, 'binaries', 'ffmpeg.exe'), [
+    const icoFixture = path.join(FIXTURES_DIR, 'test_ico_fixture.ico');
+    execFileSync(path.join(PROJECT_ROOT, 'binaries', 'ffmpeg.exe'), [
         '-y', '-i', fixtures.image,
         '-vf', "scale='min(256,iw)':'min(256,ih)':force_original_aspect_ratio=decrease",
         icoFixture,
@@ -140,7 +144,7 @@ async function main() {
 
     const env = { ...process.env, PATH: process.env.PATH + ';' + path.join(process.env.APPDATA || '', 'npm') };
     const launchTime = Date.now();
-    const neu = cp.spawn('cmd.exe', ['/c', 'neu run -- --export-auth-info'], { stdio: 'pipe', cwd: ROOT, env });
+    const neu = cp.spawn('cmd.exe', ['/c', 'neu run -- --export-auth-info'], { stdio: 'pipe', cwd: PROJECT_ROOT, env });
     neu.stdout.on('data', d => process.stdout.write('[neu] ' + d));
     neu.stderr.on('data', d => process.stderr.write('[neu:err] ' + d));
     let browser = null;
@@ -148,7 +152,7 @@ async function main() {
 
     try {
         await waitForAuthInfo(launchTime);
-        const auth = JSON.parse(fs.readFileSync(path.join(ROOT, '.tmp', 'auth_info.json'), 'utf8'));
+        const auth = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, '.tmp', 'auth_info.json'), 'utf8'));
         const url = 'http://localhost:' + auth.nlPort + '/?nlToken=' + auth.nlToken;
         console.log('Connecting to', url);
 
@@ -181,7 +185,7 @@ async function main() {
 
         const progressText1 = await runExecuteAndWait(page);
         check('V2: batch completion message', progressText1.includes('Completed 1 of 1'), progressText1);
-        const vOut = path.join(ROOT, 'test_fixture_video_converted.mp4');
+        const vOut = path.join(FIXTURES_DIR, 'test_fixture_video_converted.mp4');
         check('V3: output file created', fs.existsSync(vOut), vOut);
         const vLog = await page.$eval('#terminal-log', el => el.innerText);
         check('V4: command used libx264 codec', vLog.includes('-c:v libx264'));
@@ -196,7 +200,7 @@ async function main() {
         // Filename-collision: run again on the same (still-loaded) file
         const progressText2 = await runExecuteAndWait(page);
         check('V9: second run also completes', progressText2.includes('Completed 1 of 1'), progressText2);
-        const vOut2 = path.join(ROOT, 'test_fixture_video_converted_converted.mp4');
+        const vOut2 = path.join(FIXTURES_DIR, 'test_fixture_video_converted_converted.mp4');
         check('V10: filename-collision suffix applied (_converted_converted)', fs.existsSync(vOut2), vOut2);
 
         await clearFileList(page);
@@ -206,7 +210,7 @@ async function main() {
         // max defaults to the source's own fps). Uses its own fixture copy
         // to avoid colliding with the _converted/_converted_converted
         // filenames the collision-suffix test above already created.
-        const fpsFixture = path.join(ROOT, 'test_fixture_video_fps.mp4');
+        const fpsFixture = path.join(FIXTURES_DIR, 'test_fixture_video_fps.mp4');
         fs.copyFileSync(fixtures.video, fpsFixture);
         await dropFile(page, fpsFixture);
         const fpsSliderMax = await page.$eval('#video-fps', el => el.max);
@@ -216,7 +220,7 @@ async function main() {
         check('V6c: custom-FPS batch completes', progressTextFps.includes('Completed 1 of 1'), progressTextFps);
         const vFpsLog = await page.$eval('#terminal-log', el => el.innerText);
         check('V6d: dragged FPS slider produced an explicit filter for the target rate', /-vf "[^"]*fps=15(,|")/.test(vFpsLog), vFpsLog.slice(-400));
-        const fpsOut = path.join(ROOT, 'test_fixture_video_fps_converted.mp4');
+        const fpsOut = path.join(FIXTURES_DIR, 'test_fixture_video_fps_converted.mp4');
         check('V6e: custom-FPS output file created', fs.existsSync(fpsOut), fpsOut);
         rmIfExists(fpsFixture);
         rmIfExists(fpsOut);
@@ -230,7 +234,7 @@ async function main() {
         await setRangeValue(page, '#video-speed', '1.0'); // reset speed from previous case
         const progressText3 = await runExecuteAndWait(page);
         check('V12: GIF batch completes', progressText3.includes('Completed 1 of 1'), progressText3);
-        const vGifOut = path.join(ROOT, 'test_fixture_video_converted.gif');
+        const vGifOut = path.join(FIXTURES_DIR, 'test_fixture_video_converted.gif');
         check('V13: GIF output file created', fs.existsSync(vGifOut), vGifOut);
         const vGifLog = await page.$eval('#terminal-log', el => el.innerText);
         check('V14: GIF command used palettegen/paletteuse', vGifLog.includes('palettegen') && vGifLog.includes('paletteuse'), vGifLog.slice(-400));
@@ -252,7 +256,7 @@ async function main() {
 
         const iProgress1 = await runExecuteAndWait(page);
         check('I2: webp batch completes', iProgress1.includes('Completed 1 of 1'), iProgress1);
-        const iOutWebp = path.join(ROOT, 'test_in_converted.webp');
+        const iOutWebp = path.join(FIXTURES_DIR, 'test_in_converted.webp');
         check('I3: webp output file created', fs.existsSync(iOutWebp), iOutWebp);
         const iLog1 = await page.$eval('#terminal-log', el => el.innerText);
         check('I4: webp command used -q:v and scale filter', iLog1.includes('-q:v 60') && iLog1.includes('scale='), iLog1.slice(-400));
@@ -262,7 +266,7 @@ async function main() {
         await setRangeValue(page, '#image-quality', '40');
         const iProgress2 = await runExecuteAndWait(page);
         check('I5: png batch completes', iProgress2.includes('Completed 1 of 1'), iProgress2);
-        const iOutPng = path.join(ROOT, 'test_in_converted.png');
+        const iOutPng = path.join(FIXTURES_DIR, 'test_in_converted.png');
         check('I6: png output file created', fs.existsSync(iOutPng), iOutPng);
         const iLog2 = await page.$eval('#terminal-log', el => el.innerText);
         check('I7: PNG quality<100 triggers palettegen path', iLog2.includes('palettegen=max_colors=') && iLog2.includes('paletteuse'), iLog2.slice(-400));
@@ -275,7 +279,7 @@ async function main() {
         await setRangeValue(page, '#image-quality', '40');
         const iIcoProgress = await runExecuteAndWait(page);
         check('I8: ico batch completes', iIcoProgress.includes('Completed 1 of 1'), iIcoProgress);
-        const iOutIco = path.join(ROOT, 'test_in_converted.ico');
+        const iOutIco = path.join(FIXTURES_DIR, 'test_in_converted.ico');
         check('I9: ico output file created', fs.existsSync(iOutIco), iOutIco);
         // #terminal-log accumulates every command run this whole session --
         // "palettegen" genuinely appears earlier (I7's PNG case), so a
@@ -293,7 +297,7 @@ async function main() {
         await setSelectValue(page, '#image-format', '.png');
         const iIcoInProgress = await runExecuteAndWait(page);
         check('I12: ico-as-input batch completes', iIcoInProgress.includes('Completed 1 of 1'), iIcoInProgress);
-        const iIcoInOut = path.join(ROOT, 'test_ico_fixture_converted.png');
+        const iIcoInOut = path.join(FIXTURES_DIR, 'test_ico_fixture_converted.png');
         check('I13: ico-as-input output file created', fs.existsSync(iIcoInOut), iIcoInOut);
 
         await clearFileList(page);
@@ -307,7 +311,7 @@ async function main() {
         check('I14: quality/scale hidden for PDF output', qualityGroupDisplay === 'none' && scaleGroupDisplay === 'none', `${qualityGroupDisplay} / ${scaleGroupDisplay}`);
         const iPdfProgress = await runExecuteAndWait(page);
         check('I15: image-to-pdf batch completes', iPdfProgress.includes('Completed 1 of 1'), iPdfProgress);
-        const iOutPdf = path.join(ROOT, 'test_in_converted.pdf');
+        const iOutPdf = path.join(FIXTURES_DIR, 'test_in_converted.pdf');
         check('I16: image-to-pdf output file created', fs.existsSync(iOutPdf), iOutPdf);
         const iPdfLog = await page.$eval('#terminal-log', el => el.innerText);
         check('I17: image-to-pdf used img2pdf.exe (not ffmpeg.exe)', iPdfLog.includes('img2pdf.exe') && !iPdfLog.includes('ffmpeg.exe -y -i'), iPdfLog.slice(-400));
@@ -327,7 +331,7 @@ async function main() {
 
         const aProgress = await runExecuteAndWait(page);
         check('A1: audio batch completes', aProgress.includes('Completed 1 of 1'), aProgress);
-        const aOut = path.join(ROOT, 'test_fixture_audio_converted.aac');
+        const aOut = path.join(FIXTURES_DIR, 'test_fixture_audio_converted.aac');
         check('A2: output file created', fs.existsSync(aOut), aOut);
         const aLog = await page.$eval('#terminal-log', el => el.innerText);
         check('A3: command used target bitrate', aLog.includes('-b:a 128k'), aLog.slice(-400));
@@ -340,7 +344,7 @@ async function main() {
         await setRangeValue(page, '#audio-speed', '1.0'); // reset speed from the AAC case above
         const aOggProgress = await runExecuteAndWait(page);
         check('A5: ogg batch completes', aOggProgress.includes('Completed 1 of 1'), aOggProgress);
-        const aOggOut = path.join(ROOT, 'test_fixture_audio_converted.ogg');
+        const aOggOut = path.join(FIXTURES_DIR, 'test_fixture_audio_converted.ogg');
         check('A6: ogg output file created', fs.existsSync(aOggOut), aOggOut);
         const aOggLog = await page.$eval('#terminal-log', el => el.innerText);
         check('A7: ogg command used explicit libvorbis encoder', aOggLog.includes('-c:a libvorbis'), aOggLog.slice(-400));
@@ -358,13 +362,13 @@ async function main() {
         await setSelectValue(page, '#pdf-optimize', 'compress');
         const pProgress = await runExecuteAndWait(page);
         check('P1: pdf batch completes', pProgress.includes('Completed 1 of 1'), pProgress);
-        const pOut = path.join(ROOT, 'test_fixture_converted.pdf');
+        const pOut = path.join(FIXTURES_DIR, 'test_fixture_converted.pdf');
         check('P2: output file created', fs.existsSync(pOut), pOut);
         const pLog = await page.$eval('#terminal-log', el => el.innerText);
         check('P3: compress mode used --stream-data=compress', pLog.includes('--stream-data=compress'), pLog.slice(-300));
         if (fs.existsSync(pOut)) {
             try {
-                execFileSync(path.join(ROOT, 'binaries', 'qpdf.exe'), ['--check', pOut], { stdio: 'pipe' });
+                execFileSync(path.join(PROJECT_ROOT, 'binaries', 'qpdf.exe'), ['--check', pOut], { stdio: 'pipe' });
                 check('P4: qpdf --check validates compressed output', true);
             } catch (e) {
                 check('P4: qpdf --check validates compressed output', false, e.message);
@@ -381,7 +385,7 @@ async function main() {
         // up the partial output, leaves no orphaned process behind)
         // ============================================================
         console.log('\n--- CANCEL ---');
-        const cancelFixtures = ['a', 'b', 'c'].map(letter => path.join(ROOT, `test_fixture_video_cancel_${letter}.mp4`));
+        const cancelFixtures = ['a', 'b', 'c'].map(letter => path.join(FIXTURES_DIR, `test_fixture_video_cancel_${letter}.mp4`));
         cancelFixtures.forEach(p => fs.copyFileSync(fixtures.video, p));
 
         await page.evaluate(paths => Neutralino.events.dispatch('filesDropped', paths), cancelFixtures);
@@ -417,7 +421,7 @@ async function main() {
         ).then(() => true).catch(() => false);
         check('X4: button reverts to enabled Start Processing', startReverted);
 
-        const cancelledOut = path.join(ROOT, 'test_fixture_video_cancel_a_converted.mp4');
+        const cancelledOut = path.join(FIXTURES_DIR, 'test_fixture_video_cancel_a_converted.mp4');
         check('X5: partial output cleaned up (no truncated file left behind)', !fs.existsSync(cancelledOut), cancelledOut);
 
         const cancelledSizeSpan = await page.$eval('#file-size-0', el => el.innerHTML);
@@ -442,7 +446,7 @@ async function main() {
     } finally {
         if (browser) await browser.close().catch(() => {});
         try { cp.execSync(`taskkill /pid ${neu.pid} /T /F`, { stdio: 'ignore' }); } catch (e) { /* already gone */ }
-        cleanupNames.forEach(n => rmIfExists(path.join(ROOT, n)));
+        cleanupNames.forEach(n => rmIfExists(path.join(FIXTURES_DIR, n)));
     }
 
     const failed = results.filter(r => !r.ok);

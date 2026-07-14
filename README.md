@@ -53,9 +53,19 @@ src/                 React UI (components, hooks, settings state)
 resources/           Static assets served by Neutralino (icons, styles, neutralino.js client)
 binaries/            Bundled ffmpeg / qpdf / img2pdf executables (fetched by setup.ps1)
 bin/                 Neutralino runtime binaries (per-platform)
+tests/               Regression/E2E test scripts and their fixture files (tests/fixtures/)
 neutralino.config.json   Neutralino app configuration (window size, allowed native APIs, etc.)
 setup.ps1            Downloads the third-party conversion binaries
 ```
+
+## Testing
+
+```powershell
+node tests/test_conversion.js   # golden-master regression suite (all 4 conversion categories)
+node tests/test_drop.js         # file drag-and-drop behavior
+```
+
+Both drive the real app end-to-end via Playwright and a `neu run` instance, so they must be run from the project root (they resolve `binaries/`, `.tmp/`, and `neutralino.config.json` relative to it). Fixtures live in `tests/fixtures/`.
 
 ## License
 

@@ -2,7 +2,7 @@ const fs = require('fs');
 const cp = require('child_process');
 
 const binPath = 'e:\\\\資料\\\\tools\\\\FileConverterApp\\\\binaries\\\\ffmpeg.exe';
-const inFile = 'e:\\\\資料\\\\tools\\\\FileConverterApp\\\\test.mp4';
+const inFile = 'e:\\\\資料\\\\tools\\\\FileConverterApp\\\\tests\\\\fixtures\\\\test.mp4';
 const desktopPath = require('os').homedir() + '\\\\Desktop';
 const outPath = desktopPath + '\\\\test_converted.mp4';
 

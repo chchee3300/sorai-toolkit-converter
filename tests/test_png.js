@@ -1,9 +1,9 @@
 const cp = require('child_process');
 
 const binPath = 'e:\\\\資料\\\\tools\\\\FileConverterApp\\\\binaries\\\\ffmpeg.exe';
-const inFile = 'e:\\\\資料\\\\tools\\\\FileConverterApp\\\\test.mp4';
-const testPng = 'e:\\\\資料\\\\tools\\\\FileConverterApp\\\\test_in.png';
-const outPng = 'e:\\\\資料\\\\tools\\\\FileConverterApp\\\\test_out.png';
+const inFile = 'e:\\\\資料\\\\tools\\\\FileConverterApp\\\\tests\\\\fixtures\\\\test.mp4';
+const testPng = 'e:\\\\資料\\\\tools\\\\FileConverterApp\\\\tests\\\\fixtures\\\\test_in.png';
+const outPng = 'e:\\\\資料\\\\tools\\\\FileConverterApp\\\\tests\\\\fixtures\\\\test_out.png';
 
 // Create a test PNG first
 cp.execSync(`\"${binPath}\" -y -i \"${inFile}\" -vframes 1 \"${testPng}\"`);

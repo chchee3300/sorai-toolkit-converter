@@ -25,7 +25,7 @@ setTimeout(async () => {
         const canPlay = await page.evaluate(async () => {
             return new Promise((resolve) => {
                 let v = document.createElement('video');
-                v.src = 'file:///e:/資料/tools/FileConverterApp/test.mp4';
+                v.src = 'file:///e:/資料/tools/FileConverterApp/tests/fixtures/test.mp4';
                 v.onloadedmetadata = () => resolve(true);
                 v.onerror = (e) => resolve(v.error ? v.error.message : 'error');
                 document.body.appendChild(v);

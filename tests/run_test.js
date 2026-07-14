@@ -23,7 +23,7 @@ setTimeout(async () => {
         
         // Pass a string instead of an object!
         await page.evaluate(() => {
-            window.handleFiles(['e:\\\\資料\\\\tools\\\\FileConverterApp\\\\test.mp4']);
+            window.handleFiles(['e:\\\\資料\\\\tools\\\\FileConverterApp\\\\tests\\\\fixtures\\\\test.mp4']);
         });
         
         await page.waitForTimeout(1000);

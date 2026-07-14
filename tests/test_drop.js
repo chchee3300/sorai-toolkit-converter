@@ -1,4 +1,4 @@
-// Automated test for file drag-and-drop (both modes), run with: node test_drop.js
+// Automated test for file drag-and-drop (both modes), run with: node tests/test_drop.js (from the project root)
 // - Test B: browser-mode fallback (DOM drop + DataTransfer -> chunked temp copy)
 // - Test A: window-mode path (simulated native filesDropped event payloads)
 // - Test C: negative cases (empty drop, bad payloads)
@@ -9,9 +9,12 @@ const cp = require('child_process');
 const os = require('os');
 const { chromium } = require('playwright');
 
-const ROOT = __dirname;
-const FIXTURE = path.join(ROOT, 'test_in.png');
-const VIDEO_FIXTURE = path.join(ROOT, 'test_fixture_video.mp4');
+// neu run must launch from the project root (neutralino.config.json,
+// binaries/, .tmp/ all live there); fixtures live alongside this script.
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+const FIXTURES_DIR = path.join(__dirname, 'fixtures');
+const FIXTURE = path.join(FIXTURES_DIR, 'test_in.png');
+const VIDEO_FIXTURE = path.join(FIXTURES_DIR, 'test_fixture_video.mp4');
 const DROP_TEMP = path.join(os.tmpdir(), 'FileConverterApp', 'dropped');
 
 const results = [];
@@ -25,7 +28,7 @@ function waitForAuthInfo(sinceMs, timeoutMs = 30000) {
         const t0 = Date.now();
         (function poll() {
             try {
-                const st = fs.statSync(path.join(ROOT, '.tmp', 'auth_info.json'));
+                const st = fs.statSync(path.join(PROJECT_ROOT, '.tmp', 'auth_info.json'));
                 if (st.mtimeMs > sinceMs) return resolve();
             } catch (e) { /* not written yet */ }
             if (Date.now() - t0 > timeoutMs) return reject(new Error('auth_info.json not refreshed within ' + timeoutMs + 'ms'));
@@ -61,7 +64,7 @@ async function main() {
     const env = { ...process.env, PATH: process.env.PATH + ';' + path.join(process.env.APPDATA || '', 'npm') };
 
     const launchTime = Date.now();
-    const neu = cp.spawn('cmd.exe', ['/c', 'neu run -- --export-auth-info'], { stdio: 'pipe', cwd: ROOT, env });
+    const neu = cp.spawn('cmd.exe', ['/c', 'neu run -- --export-auth-info'], { stdio: 'pipe', cwd: PROJECT_ROOT, env });
     neu.stdout.on('data', d => process.stdout.write('[neu] ' + d));
     neu.stderr.on('data', d => process.stderr.write('[neu:err] ' + d));
     let browser = null;
@@ -70,7 +73,7 @@ async function main() {
 
     try {
         await waitForAuthInfo(launchTime);
-        const auth = JSON.parse(fs.readFileSync(path.join(ROOT, '.tmp', 'auth_info.json'), 'utf8'));
+        const auth = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, '.tmp', 'auth_info.json'), 'utf8'));
         const url = 'http://localhost:' + auth.nlPort + '/?nlToken=' + auth.nlToken;
         console.log('Connecting to', url);
 
