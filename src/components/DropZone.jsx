@@ -4,9 +4,22 @@
 // same as vanilla) — this component only needs the click-to-browse handler.
 export default function DropZone({ onClick }) {
   return (
-    <div className="drop-zone" id="drop-zone" onClick={onClick}>
+    <div
+      className="drop-zone"
+      id="drop-zone"
+      role="button"
+      tabIndex={0}
+      aria-label="Drop files here, or click to browse"
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick(e)
+        }
+      }}
+    >
       <div className="drop-zone-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M12 16V4" />
           <path d="M8 8l4-4 4 4" />
           <path d="M20 21H4" />

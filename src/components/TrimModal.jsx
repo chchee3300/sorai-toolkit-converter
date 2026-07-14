@@ -32,6 +32,7 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
   const thumbLeftRef = useRef(null)
   const thumbRightRef = useRef(null)
   const playheadRef = useRef(null)
+  const modalContentRef = useRef(null)
 
   const [duration, setDuration] = useState(0)
   const [trimStart, setTrimStart] = useState(0)
@@ -57,6 +58,8 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
   isLoopingRef.current = isLooping
   const draggingThumbRef = useRef(draggingThumb)
   draggingThumbRef.current = draggingThumb
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   // Open (or switch to a different file while open): reset players, reset
   // trim range from the file's own saved trimStart/trimEnd (or full range),
@@ -113,6 +116,51 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, file?.path, fileType])
+
+  // Accessibility (Phase 3 fixing-accessibility pass, additive — vanilla
+  // never had this): Escape closes the modal, Tab/Shift+Tab is trapped
+  // inside it, and focus moves into the modal on open and back to the
+  // trigger on close, matching standard dialog behavior.
+  useEffect(() => {
+    if (!open) return undefined
+    const previouslyFocused = document.activeElement
+
+    const getFocusable = () =>
+      Array.from(
+        modalContentRef.current?.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        ) || []
+      )
+
+    const focusable = getFocusable()
+    ;(focusable[0] || modalContentRef.current)?.focus()
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onCloseRef.current()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const items = getFocusable()
+      if (items.length === 0) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus()
+    }
+  }, [open])
 
   // Player event wiring (timeupdate loop/playhead, play/pause icon sync) —
   // registered once; vid/aud elements persist in the DOM for the component's
@@ -279,7 +327,14 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
 
   return (
     <div className={open ? 'modal-overlay' : 'modal-overlay hidden'} id="trim-modal">
-      <div className="modal-content modal-lg">
+      <div
+        className="modal-content modal-lg"
+        ref={modalContentRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="trim-modal-title"
+        tabIndex={-1}
+      >
         <div className="modal-header">
           <h3 className="modal-title" id="trim-modal-title">Trim Media</h3>
         </div>
@@ -301,19 +356,19 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
             <div className="player-overlay">
               <div className="trim-top-bar">
                 <div className="trim-title">
-                  <span className="trim-title-info" id="trim-duration-info">
+                  <span className="trim-title-info tabular-nums" id="trim-duration-info">
                     {selDuration.toFixed(2)}s selected ({selPct.toFixed(1)}%)
                   </span>
                 </div>
                 <div className="trim-actions">
-                  <button className="btn-icon" id="btn-trim-play-pause" title="Play/Pause" style={{ marginRight: 8 }} onClick={togglePlayPause}>
-                    <svg className={isPlaying ? 'icon-play hidden' : 'icon-play'} viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                    <svg className={isPlaying ? 'icon-pause' : 'icon-pause hidden'} viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                  <button className="btn-icon" id="btn-trim-play-pause" title="Play/Pause" aria-label="Play/Pause" style={{ marginRight: 8 }} onClick={togglePlayPause}>
+                    <svg className={isPlaying ? 'icon-play hidden' : 'icon-play'} viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <svg className={isPlaying ? 'icon-pause' : 'icon-pause hidden'} viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
                   </button>
                   <div className="trim-volume-control" style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 8 }}>
-                    <button className="btn-icon" id="btn-trim-mute" title="Mute" onClick={handleToggleMute}>
-                      <svg className={showVolOff ? 'icon-vol-on hidden' : 'icon-vol-on'} viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-                      <svg className={showVolOff ? 'icon-vol-off' : 'icon-vol-off hidden'} viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="1" x2="1" y2="23"></line></svg>
+                    <button className="btn-icon" id="btn-trim-mute" title="Mute" aria-label={showVolOff ? 'Unmute' : 'Mute'} onClick={handleToggleMute}>
+                      <svg className={showVolOff ? 'icon-vol-on hidden' : 'icon-vol-on'} viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                      <svg className={showVolOff ? 'icon-vol-off' : 'icon-vol-off hidden'} viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="1" x2="1" y2="23"></line></svg>
                     </button>
                     <input
                       type="range"
@@ -342,7 +397,7 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
               </div>
 
               <div className="trim-slider-wrapper">
-                <div className="trim-time-label left" id="trim-label-start">{formatTrimLabel(trimStart)}</div>
+                <div className="trim-time-label left tabular-nums" id="trim-label-start">{formatTrimLabel(trimStart)}</div>
                 <div className="trim-slider-container" id="trim-slider-container" ref={sliderContainerRef} onMouseDown={handleSliderMouseDown}>
                   <div className="trim-slider-track" id="trim-slider-track">
                     <div className="trim-dim-overlay left" id="trim-dim-left" style={{ width: `${pctStart}%` }}></div>
@@ -369,7 +424,7 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
                     <div className="trim-playhead" id="trim-playhead" ref={playheadRef}></div>
                   </div>
                 </div>
-                <div className="trim-time-label right" id="trim-label-end">{formatTrimLabel(trimEnd)}</div>
+                <div className="trim-time-label right tabular-nums" id="trim-label-end">{formatTrimLabel(trimEnd)}</div>
               </div>
             </div>
           </div>

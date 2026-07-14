@@ -12,7 +12,7 @@ export default function StatusBar({ text = 'Ready', state = 'ready' }) {
   return (
     <footer className="statusbar">
       <span className={dotClass} id="statusbar-dot"></span>
-      <span className="statusbar-text" id="status-text">{text}</span>
+      <span className="statusbar-text" id="status-text" role="status" aria-live="polite">{text}</span>
       <span className="statusbar-sep"></span>
       <span className="statusbar-version">v1.0</span>
     </footer>

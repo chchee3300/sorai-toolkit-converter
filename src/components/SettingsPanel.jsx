@@ -59,7 +59,7 @@ function VideoSettings({ visible, video, setVideo }) {
         <div className="field span-2">
           <div className="field-label-row">
             <label className="field-label" htmlFor="video-quality">
-              Quality — <span className="val-chip" id="video-quality-val">{video.quality}</span>%
+              Quality — <span className="val-chip tabular-nums" id="video-quality-val">{video.quality}</span>%
             </label>
             <label className="toggle-check">
               <input
@@ -87,7 +87,7 @@ function VideoSettings({ visible, video, setVideo }) {
         <div className="field">
           <div className="field-label-row">
             <label className="field-label" htmlFor="video-fps">
-              FPS — <span className="val-chip" id="video-fps-val">{video.fpsCustom ? video.fps : 'Original'}</span>
+              FPS — <span className="val-chip tabular-nums" id="video-fps-val">{video.fpsCustom ? video.fps : 'Original'}</span>
             </label>
             <label className="toggle-check">
               <input
@@ -110,7 +110,7 @@ function VideoSettings({ visible, video, setVideo }) {
         </div>
         <div className="field">
           <label className="field-label" htmlFor="video-speed">
-            Speed — <span className="val-chip" id="video-speed-val">{Number(video.speed).toFixed(2)}</span>×
+            Speed — <span className="val-chip tabular-nums" id="video-speed-val">{Number(video.speed).toFixed(2)}</span>×
           </label>
           <input
             type="range"
@@ -157,7 +157,7 @@ function ImageSettings({ visible, image, setImage, lastFile }) {
         </div>
         <div className="field">
           <label className="field-label" htmlFor="image-quality">
-            Quality — <span className="val-chip" id="image-quality-val">{image.quality}</span>%
+            Quality — <span className="val-chip tabular-nums" id="image-quality-val">{image.quality}</span>%
           </label>
           <input
             type="range"
@@ -172,9 +172,9 @@ function ImageSettings({ visible, image, setImage, lastFile }) {
         <div className="field span-2">
           <div className="field-label-row">
             <label className="field-label" htmlFor="image-scale">
-              Scale — <span className="val-chip" id="image-scale-val">{image.scale}</span>%
+              Scale — <span className="val-chip tabular-nums" id="image-scale-val">{image.scale}</span>%
             </label>
-            <span className="val-chip secondary" id="image-resolution-preview">{resolutionPreview}</span>
+            <span className="val-chip secondary tabular-nums" id="image-resolution-preview">{resolutionPreview}</span>
           </div>
           <input
             type="range"
@@ -221,7 +221,7 @@ function AudioSettings({ visible, audio, setAudio }) {
         </div>
         <div className="field span-2">
           <label className="field-label" htmlFor="audio-speed">
-            Speed — <span className="val-chip" id="audio-speed-val">{Number(audio.speed).toFixed(2)}</span>×
+            Speed — <span className="val-chip tabular-nums" id="audio-speed-val">{Number(audio.speed).toFixed(2)}</span>×
           </label>
           <input
             type="range"
@@ -298,16 +298,16 @@ export default function SettingsPanel({
 
       <div className="execute-row">
         <button className="btn btn-primary btn-execute" id="btn-execute" disabled={executing} onClick={onExecute}>
-          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5l10 5.5-10 5.5V2.5z" /></svg>
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 2.5l10 5.5-10 5.5V2.5z" /></svg>
           Start Processing
         </button>
       </div>
 
       <div id="progress-wrapper" className={progressVisible ? 'progress-block' : 'progress-block hidden'}>
-        <div className="progress-track">
+        <div className="progress-track" role="progressbar" aria-valuenow={Math.round(progressPercent)} aria-valuemin={0} aria-valuemax={100}>
           <div className="progress-bar" id="progress-bar" style={{ width: `${progressPercent}%` }}></div>
         </div>
-        <p className="progress-label" id="progress-text">{progressText}</p>
+        <p className="progress-label tabular-nums" id="progress-text" role="status" aria-live="polite">{progressText}</p>
         <TerminalLog text={terminalLog} />
       </div>
     </section>

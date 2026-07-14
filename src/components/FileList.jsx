@@ -36,7 +36,7 @@ export default function FileList({ files, fileType, settings, onRemove, onOpenTr
           <div className="file-item" id={`file-item-${index}`} key={fileObj.path}>
             <div>
               <span title={fileObj.path}>{filename}</span>
-              <span id={`file-size-${index}`} style={{ color: 'var(--muted)', marginLeft: 10, fontSize: '0.8em' }}>
+              <span id={`file-size-${index}`} className="tabular-nums" style={{ color: 'var(--muted)', marginLeft: 10, fontSize: '0.8em' }}>
                 {fileObj.converted ? (
                   <>
                     ({(fileObj.size / (1024 * 1024)).toFixed(2)} MB){' '}
@@ -47,12 +47,12 @@ export default function FileList({ files, fileType, settings, onRemove, onOpenTr
                 )}
               </span>
               {trimText && (
-                <span style={{ color: 'var(--accent)', marginLeft: 5, fontSize: '0.8em' }}>{trimText}</span>
+                <span className="tabular-nums" style={{ color: 'var(--accent)', marginLeft: 5, fontSize: '0.8em' }}>{trimText}</span>
               )}
               {fpsText && (
-                <span style={{ color: 'var(--muted)', marginLeft: 5, fontSize: '0.8em' }}>{fpsText}</span>
+                <span className="tabular-nums" style={{ color: 'var(--muted)', marginLeft: 5, fontSize: '0.8em' }}>{fpsText}</span>
               )}
-              <span id={`file-est-${index}`} style={{ fontSize: '0.8em', marginLeft: 5 }}>
+              <span id={`file-est-${index}`} className="tabular-nums" style={{ fontSize: '0.8em', marginLeft: 5 }}>
                 {estimate && (
                   <>
                     {' '}
@@ -70,8 +70,8 @@ export default function FileList({ files, fileType, settings, onRemove, onOpenTr
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               {showTrimBtn && (
-                <button className="btn-trim" title="Trim Media" onClick={() => onOpenTrim && onOpenTrim(index)}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <button className="btn-trim" title="Trim Media" aria-label="Trim Media" onClick={() => onOpenTrim && onOpenTrim(index)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <circle cx="6" cy="6" r="3"></circle>
                     <circle cx="6" cy="18" r="3"></circle>
                     <line x1="20" y1="4" x2="8.12" y2="15.88"></line>
@@ -80,7 +80,15 @@ export default function FileList({ files, fileType, settings, onRemove, onOpenTr
                   </svg>
                 </button>
               )}
-              <span className="remove" onClick={() => onRemove(index)}>X</span>
+              <button
+                type="button"
+                className="remove"
+                aria-label="Remove file"
+                onClick={() => onRemove(index)}
+                style={{ background: 'none', border: 'none', font: 'inherit', cursor: 'pointer' }}
+              >
+                X
+              </button>
             </div>
           </div>
         )

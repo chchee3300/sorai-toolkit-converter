@@ -13,8 +13,8 @@ import { useExecute } from './hooks/useExecute.js'
 // Ported from resources/index.html:42-46 (loading overlay markup).
 function LoadingOverlay({ visible }) {
   return (
-    <div id="file-loading-overlay" className={visible ? 'loading-overlay' : 'loading-overlay hidden'}>
-      <div className="spinner"></div>
+    <div id="file-loading-overlay" className={visible ? 'loading-overlay' : 'loading-overlay hidden'} role="status" aria-live="polite">
+      <div className="spinner" aria-hidden="true"></div>
       <p>Reading files…</p>
     </div>
   )
@@ -71,19 +71,19 @@ function App() {
           {!hasFiles && <DropZone onClick={browseForFiles} />}
           <div id="file-list-container" className={hasFiles ? '' : 'hidden'}>
             <div className="filelist-header">
-              <span className="mono-label" id="file-count-label">
+              <span className="mono-label tabular-nums" id="file-count-label">
                 {files.length} file{files.length !== 1 ? 's' : ''} · {fileType ? fileType.toUpperCase() : ''}
               </span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-ghost-success btn-xs" id="btn-add-files" onClick={browseForFiles}>
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
                     <line x1="8" y1="3" x2="8" y2="13" />
                     <line x1="3" y1="8" x2="13" y2="8" />
                   </svg>
                   Add files
                 </button>
                 <button className="btn btn-ghost btn-xs" id="btn-clear-files" onClick={clearFiles}>
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
                     <line x1="3" y1="3" x2="13" y2="13" />
                     <line x1="13" y1="3" x2="3" y2="13" />
                   </svg>
