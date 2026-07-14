@@ -83,8 +83,13 @@ async function dropFile(page, absPath) {
 
 async function runExecuteAndWait(page, timeoutMs = 60000) {
     await page.click('#btn-execute');
-    // btn-execute is re-enabled once the whole batch loop finishes
-    await page.waitForFunction(() => document.getElementById('btn-execute').disabled === false, { timeout: timeoutMs });
+    // #btn-execute is a Start-Processing button while idle and swaps in place
+    // to a (non-disabled, clickable) Cancel button while executing — so
+    // "disabled === false" is no longer a valid completion signal on its own
+    // (it flips to false the instant the Cancel button mounts, not when the
+    // batch actually finishes). Wait on the terminal progress-text state
+    // instead, which is only ever set once the whole batch loop is done.
+    await page.waitForFunction(() => /^(Completed|Cancelled)/.test(document.getElementById('progress-text').innerText), { timeout: timeoutMs });
     const progressText = await page.$eval('#progress-text', el => el.innerText);
     return progressText;
 }
@@ -99,6 +104,8 @@ async function main() {
         'test_in_converted.webp', 'test_in_converted.png',
         'test_fixture_audio_converted.aac',
         'test_fixture_converted.pdf',
+        'test_fixture_video_cancel_a.mp4', 'test_fixture_video_cancel_b.mp4', 'test_fixture_video_cancel_c.mp4',
+        'test_fixture_video_cancel_a_converted.mp4',
     ];
     cleanupNames.forEach(n => rmIfExists(path.join(ROOT, n)));
 
@@ -268,6 +275,65 @@ async function main() {
         }
 
         await clearFileList(page);
+
+        // ============================================================
+        // CANCEL — mid-batch cancel/stop (kills the spawned process,
+        // stops before the next file starts, reverts the button, cleans
+        // up the partial output, leaves no orphaned process behind)
+        // ============================================================
+        console.log('\n--- CANCEL ---');
+        const cancelFixtures = ['a', 'b', 'c'].map(letter => path.join(ROOT, `test_fixture_video_cancel_${letter}.mp4`));
+        cancelFixtures.forEach(p => fs.copyFileSync(fixtures.video, p));
+
+        await page.evaluate(paths => Neutralino.events.dispatch('filesDropped', paths), cancelFixtures);
+        await page.waitForFunction(count => document.querySelectorAll('#file-list .file-item').length === count, cancelFixtures.length);
+        await setSelectValue(page, '#video-format', '.mp4');
+        // AV1 (libsvtav1) is dramatically slower to encode than the default
+        // h264 codec even for a tiny fixture — used here deliberately to
+        // guarantee a multi-second window on file 1 so the click below
+        // reliably lands mid-conversion instead of racing a near-instant
+        // encode.
+        await setSelectValue(page, '#video-codec', 'libsvtav1');
+
+        await page.click('#btn-execute');
+        await page.waitForFunction(() => /\(1\/3\)/.test(document.getElementById('progress-text').innerText), { timeout: 20000 });
+        await page.click('#btn-execute'); // same id, now the Cancel button
+        const cancellingShown = await page.waitForFunction(
+            () => { const el = document.getElementById('btn-execute'); return el.disabled && el.textContent.includes('Cancelling'); },
+            { timeout: 5000 },
+        ).then(() => true).catch(() => false);
+        check('X1: button shows Cancelling… and disables', cancellingShown);
+
+        await page.waitForFunction(() => /^Cancelled/.test(document.getElementById('progress-text').innerText), { timeout: 15000 });
+        const cancelProgressText = await page.$eval('#progress-text', el => el.innerText);
+        const cancelMatch = /Cancelled (\d+) of (\d+)/.exec(cancelProgressText);
+        check('X2: status reports Cancelled N of M', !!cancelMatch, cancelProgressText);
+        if (cancelMatch) {
+            check('X3: batch stopped early (completed < total)', Number(cancelMatch[1]) < Number(cancelMatch[2]), cancelProgressText);
+        }
+
+        const startReverted = await page.waitForFunction(
+            () => { const el = document.getElementById('btn-execute'); return !el.disabled && el.textContent.includes('Start Processing'); },
+            { timeout: 10000 },
+        ).then(() => true).catch(() => false);
+        check('X4: button reverts to enabled Start Processing', startReverted);
+
+        const cancelledOut = path.join(ROOT, 'test_fixture_video_cancel_a_converted.mp4');
+        check('X5: partial output cleaned up (no truncated file left behind)', !fs.existsSync(cancelledOut), cancelledOut);
+
+        const cancelledSizeSpan = await page.$eval('#file-size-0', el => el.innerHTML);
+        check('X6: cancelled file not marked converted', !cancelledSizeSpan.includes('→'), cancelledSizeSpan);
+
+        await sleep(800); // let Windows finish reaping the killed process before checking
+        try {
+            const tasklistOut = cp.execSync('tasklist', { encoding: 'utf8' });
+            check('X7: no orphaned ffmpeg.exe process after cancel', !tasklistOut.includes('ffmpeg.exe'));
+        } catch (e) {
+            check('X7: no orphaned ffmpeg.exe process after cancel', false, e.message);
+        }
+
+        await clearFileList(page);
+        cancelFixtures.forEach(p => rmIfExists(p));
 
         // ---------- Global invariants ----------
         check('G1: no page errors across whole suite', pageErrors.length === 0, pageErrors.join(' | '));

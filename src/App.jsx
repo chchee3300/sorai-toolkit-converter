@@ -43,6 +43,8 @@ function App() {
   const {
     execute,
     executing,
+    cancel,
+    cancelling,
     progressVisible,
     progressPercent,
     progressText,
@@ -102,11 +104,13 @@ function App() {
           outputPath={outputPath}
           onBrowseOutput={browseForOutputFolder}
           executing={executing}
+          cancelling={cancelling}
           progressVisible={progressVisible}
           progressPercent={progressPercent}
           progressText={progressText}
           terminalLog={terminalLog}
           onExecute={execute}
+          onCancel={cancel}
         />
       </main>
       <StatusBar text={status.text} state={status.state} />

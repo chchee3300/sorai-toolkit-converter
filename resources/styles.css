@@ -742,6 +742,22 @@ select.input { display: none; }
   color: var(--text-primary);
 }
 
+.btn-outline svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+
+/* Outline Danger */
+.btn-outline-danger {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.btn-outline-danger svg { width: 10px; height: 10px; fill: currentColor; }
+
+.btn-outline-danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
+
 /* Ghost */
 .btn-ghost {
   background: transparent;

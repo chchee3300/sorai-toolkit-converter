@@ -22,6 +22,9 @@ function OutputPathRow({ outputPath, onBrowse }) {
           value={outputPath}
         />
         <button className="btn btn-outline btn-sm" id="btn-select-output" onClick={onBrowse}>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M2 4.5c0-.55.45-1 1-1h3.2l1 1.3H13c.55 0 1 .45 1 1v6.2c0 .55-.45 1-1 1H3c-.55 0-1-.45-1-1V4.5z" />
+          </svg>
           Browse
         </button>
       </div>
@@ -275,11 +278,13 @@ export default function SettingsPanel({
   outputPath,
   onBrowseOutput,
   executing,
+  cancelling,
   progressVisible,
   progressPercent,
   progressText,
   terminalLog,
   onExecute,
+  onCancel,
 }) {
   const visible = files.length > 0
   const { video, setVideo, image, setImage, audio, setAudio, pdf, setPdf } = settings
@@ -297,10 +302,23 @@ export default function SettingsPanel({
       <div className="panel-divider"></div>
 
       <div className="execute-row">
-        <button className="btn btn-primary btn-execute" id="btn-execute" disabled={executing} onClick={onExecute}>
-          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 2.5l10 5.5-10 5.5V2.5z" /></svg>
-          Start Processing
-        </button>
+        {executing ? (
+          <button
+            type="button"
+            className="btn btn-outline-danger btn-execute"
+            id="btn-execute"
+            disabled={cancelling}
+            onClick={onCancel}
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="4" y="4" width="8" height="8" /></svg>
+            {cancelling ? 'Cancelling…' : 'Cancel'}
+          </button>
+        ) : (
+          <button className="btn btn-primary btn-execute" id="btn-execute" disabled={executing} onClick={onExecute}>
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 2.5l10 5.5-10 5.5V2.5z" /></svg>
+            Start Processing
+          </button>
+        )}
       </div>
 
       <div id="progress-wrapper" className={progressVisible ? 'progress-block' : 'progress-block hidden'}>
