@@ -17,7 +17,6 @@ The UI (React + Vite, in `src/`) runs inside a [Neutralino.js](https://neutralin
 - [`ffmpeg`](https://ffmpeg.org/) — video, image, and audio conversion
 - [`qpdf`](https://qpdf.readthedocs.io/) — PDF optimization
 - [`img2pdf`](https://gitlab.mister-muffin.de/josch/img2pdf) — image-to-PDF conversion
-- Ghostscript (`gswin64c.exe`) — supporting PDF operations
 
 These live in `binaries/` and are fetched by `setup.ps1` (see [Setup](#setup)).
 
@@ -52,7 +51,7 @@ npm run build
 ```
 src/                 React UI (components, hooks, settings state)
 resources/           Static assets served by Neutralino (icons, styles, neutralino.js client)
-binaries/            Bundled ffmpeg / qpdf / img2pdf / Ghostscript executables (fetched by setup.ps1)
+binaries/            Bundled ffmpeg / qpdf / img2pdf executables (fetched by setup.ps1)
 bin/                 Neutralino runtime binaries (per-platform)
 neutralino.config.json   Neutralino app configuration (window size, allowed native APIs, etc.)
 setup.ps1            Downloads the third-party conversion binaries
