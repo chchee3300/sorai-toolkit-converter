@@ -1002,7 +1002,11 @@ select.input { display: none; }
 
 /* Accessibility */
 @media (prefers-reduced-motion: reduce) {
-  .glass-lens * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  /* Was scoped to .glass-lens * only — the spin loader, file-item slideIn,
+     statusbar pulse-dot, and lg-pop-down/up dropdown animations were left
+     unguarded. Widened to the whole document per AUDIT.md's accessibility
+     category ("movement with no prefers-reduced-motion handling"). */
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 @media (prefers-reduced-transparency: reduce) {
   .glass-lens__refracted,
@@ -1111,7 +1115,10 @@ select.input { display: none; }
 }
 
 .lg-dropdown--closing {
-  animation: lg-pop-up-out 0.1s ease-in forwards;
+  /* ease-out (not ease-in) even on exit — review-animations/STANDARDS.md:
+     "Never ease-in on UI. It starts slow, delaying the exact moment the
+     user is watching." Matches the equally-fast strong ease-out below. */
+  animation: lg-pop-up-out 0.1s cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }
 
 @keyframes lg-pop-down {

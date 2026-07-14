@@ -361,6 +361,11 @@ const LiquidSelect = {
         dropPanel.style.bottom = 'auto'
         dropPanel.style.maxHeight = `${Math.max(80, Math.min(preferredMax, spaceBelow))}px`
       }
+      // Origin-aware popover (review-animations/STANDARDS.md "Physicality"):
+      // scale from the trigger edge it opens off of, not the panel's own
+      // center — the panel is left-aligned + width-matched to the trigger,
+      // so top/bottom-center is an accurate anchor.
+      dropPanel.style.transformOrigin = openUpward ? 'bottom center' : 'top center'
 
       if (SUPPORTS_POPOVER) {
         // Top-layer rendering — composited independently of the rest of the

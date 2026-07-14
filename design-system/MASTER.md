@@ -1,0 +1,76 @@
+# MASTER — Estella Converter design-system record
+
+> Read this top-to-bottom in under a few minutes to resume the migration cold. Full narrative plan lives at `usage-skills-implenment-happy-shamir.md` and its addendum `taste-skills-https-github-com-emilkowal-wondrous-shannon.md` in `~/.claude/plans/` — this file is the fast-reference companion, not a replacement.
+
+## Do-not-touch list (check this before editing `resources/js/main.js`)
+
+- **ffmpeg/qpdf command-building lines** (verified 2026-07-14, exact): `resources/js/main.js:23, 1151, 1190, 1227, 1246, 1254`. Byte-identical behavior must survive every phase.
+- **State-class call sites**: `classList.add/remove/toggle` on `hidden|busy|error|dragover|drag-active` — **52 call sites** in `main.js` (verified via grep 2026-07-14; the original plan draft said 46 — that number was stale, this file is now the source of truth).
+- **`getElementById` surface**: **128 call sites** in `main.js` (verified 2026-07-14) — every one of these IDs must exist in whatever markup replaces `index.html` in Phase 2, or be routed through the strangler-fig `lib/*.js` modules' inputs/outputs instead.
+- `resources/js/neutralino.js` — Neutralino client, do not touch, do not port.
+
+## Frozen token snapshot (dated 2026-07-14, from `resources/styles.css:8-71`)
+
+Dark (`:root`, default):
+| token | value |
+|---|---|
+| `--bg` | `#070809` |
+| `--surface-0..3` | `#0c0e12` / `#111418` / `#171b22` / `#1e2330` |
+| `--glass-bg` | `rgba(13,16,22,0.65)` |
+| `--glass-border` / `--glass-border-hi` | `rgba(255,255,255,0.065)` / `rgba(255,255,255,0.12)` |
+| `--glass-radius` | `10px` |
+| `--text-primary/secondary/muted/dim` | `#eef0f4` / `#b8bcc8` / `#525a6e` / `#303544` |
+| `--accent` / `--accent-dim` / `--accent-glow` | `#5b7fff` / `rgba(91,127,255,0.11)` / `rgba(91,127,255,0.22)` |
+| `--danger` / `--success` | `#f04f4f` / `#3ecf8e` |
+| `--sb-track/thumb/thumb-hi` | `rgba(255,255,255,.03/.07/.15)` |
+| `--bg-grad` | radial-gradient, accent-tinted |
+| `--header-h` / `--statusbar-h` | `2.75rem` / `1.625rem` |
+
+Light (`[data-theme="light"]` override, same variable names): `--bg:#f2f3f7`, `--surface-0..3:#fff/#eef0f5/#e5e8ef/#d8dce8`, `--glass-bg:rgba(255,255,255,.75)`, `--text-primary:#0d1017`, `--accent:#4060e8`, `--danger:#d93535`, `--success:#1f9e6a` — full block at `resources/styles.css:43-71`.
+
+Fonts: Inter + JetBrains Mono via Google Fonts `@import` (`styles.css:5`).
+
+## ui-skills.com catalog snapshot (dated 2026-07-14, live-verified via `npx ui-skills`)
+
+CLI: `npx ui-skills categories` / `list --category <cat>` / `get <slug>` (the last one just **prints markdown** — it does not install files; redirect output yourself). Raw category dumps saved at `design-system/ui-skills-recon-2026-07-14.txt`.
+
+Confirmed skill slugs relevant to this project:
+- `baseline-ui` — verified requirement text (`design-system` files aren't the source; live-fetched 2026-07-14): **MUST use Tailwind CSS defaults**, **MUST use accessible primitives (Base UI / React Aria / Radix)** for anything with keyboard/focus behavior, MUST use `motion/react` for JS animation. Confirms the plan's premise — gated to Phase 3 (post-migration).
+- `ibelick/fixing-accessibility`, `ibelick/fixing-motion-performance`, `ibelick/fixing-metadata` — framework-agnostic, confirmed present in the `frontend` category listing.
+- **New finding**: `leonxlnx/taste-skill` and `emilkowalski/emil-design-eng` are *also* directly in the ui-skills.com registry (categories `taste`/`visual`/`craft`), fetchable the same way as `baseline-ui` via `npx ui-skills get <slug>`. This means Phase 0.5 doesn't need a separate CLI (`npx skills add ...`) for these two — one mechanism covers both. The other 4 Emil Kowalski skills (`review-animations`, `improve-animations`, `animation-vocabulary`, `apple-design`) are **not** in ui-skills.com's registry — those still need the dedicated `github.com/emilkowalski/skills` installer.
+- Also present in the `taste` category (not used by this plan, noted for awareness only): `leonxlnx/brutalist-skill`, `leonxlnx/gpt-tasteskill`, `leonxlnx/minimalist-skill`, `leonxlnx/soft-skill`, `leonxlnx/stitch-skill`, `pbakaus/{bolder,critique,delight,overdrive}`.
+
+## Decisions log
+
+- **2026-07-14** — Corrected stale fact: `main.js` has 52 state-class call sites, not 46 as the original plan draft stated. Recount before relying on any call-site number in future sessions; don't trust old counts without a fresh grep.
+- **2026-07-14** — `taste-skill` and `emil-design-eng` installed via `npx ui-skills get <slug>` (ui-skills.com's own registry), not the separate `npx skills add` CLI — simpler, one fewer tool dependency.
+- **2026-07-14** — `npx skills@latest add emilkowalski/skills` **failed**: the `skills` CLI (v1.5.17) imports `node:util`'s `styleText`, which requires Node ≥20.12; this machine runs Node v20.10.0. Worked around by shallow-cloning `github.com/emilkowalski/skills` and `github.com/muratcankoylan/Agent-Skills-for-Context-Engineering` into the scratchpad and copying only the needed skill folders into `.claude/skills/` (intact, not flattened), then deleting the clones. All 11 target skills confirmed present with intact `SKILL.md` under `.claude/skills/`: `taste-skill`, `emil-design-eng`, `animation-vocabulary`, `apple-design`, `improve-animations`, `review-animations`, `context-fundamentals`, `filesystem-context`, `context-compression`, `context-degradation`, `long-horizon-prompting`. If a future session tries `npx skills add` again, upgrade Node first or expect the same crash.
+- **2026-07-14** — Extended golden-master suite added: `test_conversion.js` (new), 35/35 checks, drives the real app end-to-end (real ffmpeg/qpdf subprocess execution) across all 4 categories + filename-collision + live-estimate + progress-completion. `test_drop.js` (18/18) still passes unchanged. Both are now the Phase-gate regression net.
+- **2026-07-14** — Found while writing `test_conversion.js`: every `<select class="input">` gets wrapped by `liquid-glass.js`'s `LiquidSelect` into a custom dropdown that sets the native `<select>` to `display:none` (`liquid-glass.js:253`). Naive Playwright `selectOption()`/`fill()` on these hangs or throws. Any future Playwright test touching format/bitrate/optimize dropdowns must set `.value` directly and dispatch `change`+`input` (bubbling) instead — mirrors what `LiquidSelect`'s own option-click handler does (`liquid-glass.js:308-315`). `type="range"` inputs have a similar Playwright `.fill()` reliability issue (unrelated to LiquidSelect) — same value+dispatch workaround used. See `setSelectValue`/`setRangeValue` helpers in `test_conversion.js`.
+- **2026-07-14** — Observed gap, not fixed here (out of Phase 0 scope — a UI addition, not a rebrand task): `audio-format`'s `<select>` only offers MP3/WAV/AAC/FLAC (`index.html:186-191`); CLAUDE.md's mandatory regression checklist lists MP3/WAV/AAC/FLAC/**OGG** as the 5 formats to cover. OGG has no dropdown option today, so it was excluded from `test_conversion.js`'s audio coverage. Flag to the user — may be an intentional omission or a real gap.
+- **2026-07-14** — Business logic extracted into `resources/js/lib/{filename-collision,ffmpeg-commands,qpdf-commands,progress-parser,size-estimate}.js` (classic `<script>` globals under `window.EstellaLib.*`, no bundler yet — matches the project's current zero-build-tooling setup; loaded in `index.html` before `main.js`). `main.js`'s execute handler and `updateEstimations()` now call these instead of inlining the logic. Both regression suites re-run **after** extraction: `test_conversion.js` 35/35, `test_drop.js` 18/18 — zero behavior change confirmed. These are the exact modules the future React port will import unchanged.
+- **2026-07-14** — `taste-skill` scope check: its own Section 13 ("Out of Scope") says it is not for "dashboards / dense product UI / admin panels" and should say so explicitly rather than force-fit. This app is a single-window drag-drop conversion tool, not a landing/marketing page — so taste-skill's hero/CTA/brief-inference/block-library machinery (Sections 0, 2, 10, 12) does **not** apply here. Applied only its framework-agnostic parts: Section 8 (Dark Mode Protocol) and Appendix C (Liquid Glass honesty check).
+- **2026-07-14** — Fixed, gated by both regression suites (35/35 + 18/18 unchanged after each): 
+  - `resources/styles.css` `.lg-dropdown--closing` used `ease-in` (STANDARDS.md: "Never ease-in on UI — it starts slow, delaying the exact moment the user is watching"). Changed to the same strong ease-out curve already used for the matching open animation.
+  - `prefers-reduced-motion: reduce` only covered `.glass-lens *` (AUDIT.md accessibility category: "movement with no prefers-reduced-motion handling"). Widened to `*, *::before, *::after` — the spin loader, file-item slideIn, statusbar pulse-dot, and lg-pop-down/up dropdown animations were previously unguarded.
+  - `resources/js/liquid-glass.js`'s `LiquidSelect.openDropdown()` never set `transform-origin` on the portaled dropdown panel, so it always scaled from its own center regardless of which trigger it was anchored to (STANDARDS.md "Physicality": "origin-aware popovers... scale from the trigger, not center"). The function already computes an `openUpward` flip flag for positioning — reused it to set `transform-origin: top center` / `bottom center` to match.
+  - Verified visually via Playwright screenshots in both dark and light theme, plus the dropdown open state — no layout regression, hierarchy parity holds in both themes (taste-skill 8.B).
+- **2026-07-14** — Observed, deliberately **not** fixed this pass (logged so Phase 3's second-pass verification doesn't re-litigate these as new findings):
+  - `#progress-bar` animates `width` (STANDARDS.md: only `transform`/`opacity` are GPU-cheap). Left as-is: it's a low-frequency, non-critical-path animation (one progress bar during file conversion, not a 60fps hot path), and switching to a `transform: scaleX()` structure would require restructuring the progress-bar markup and touches `test_conversion.js`'s assertions on `progressBar.style.width` — not worth the churn for a Phase 0 polish pass. Revisit if Phase 2's React port restructures this component anyway.
+  - Several hand-typed `cubic-bezier(...)` curves in `styles.css` are close-but-not-identical (STANDARDS.md "Cohesion & tokens": consolidate into shared `--ease-*` tokens). Left alone — consolidating would touch many already-tuned, unrelated animations at once, higher risk than this pass's scope justifies.
+  - Light theme's `--surface-0: #ffffff` is a pure white (taste-skill 8.B: "no pure #ffffff... pure values kill depth"). This guidance reads as landing-page-oriented; pure-white base surfaces are common and generally accepted in dense utility UIs. Not changed.
+
+## Phase checkpoints (mechanical success predicates)
+
+- **Phase 0 done** iff: `design-system/MASTER.md` exists (this file) AND Playwright suite covers all 4 conversion categories + shared behaviors and passes AND `resources/js/lib/*.js` extraction exists with zero behavior change AND `.claude/skills/{taste-skill,emil-design-eng,review-animations,improve-animations,animation-vocabulary,apple-design,context-fundamentals,filesystem-context,context-compression,context-degradation,long-horizon-prompting}/SKILL.md` all exist AND the taste/animation pass on the current vanilla app is logged above AND `resources/` is still what `neutralino.config.json` serves.
+- **Phase 1 done** iff: `vite.config.js` + `src/` exist AND `npm run build` succeeds AND `neutralino.config.json` still points at `resources/` (not the Vite output) AND `tailwind.config.js theme.extend` contains every token in the frozen snapshot above.
+- **Phase 2 done** iff: all 5 component slices (shell, DropZone/FileList, SettingsPanel, ProgressBar, Modals/Trim) are ported AND the Phase 0 Playwright suite passes against the React build AND `neutralino.config.json` now serves the Vite build.
+- **Phase 3 done** iff: `baseline-ui`/`fixing-accessibility`/`fixing-motion-performance`/`fixing-metadata` second-pass checks logged above AND old `resources/index.html`/`styles.css`/vanilla `main.js` deleted AND this file's decisions log is closed out.
+
+## Tooling surface (which skill produced which decision)
+
+Installed project-locally under `.claude/skills/` (Phase 0.5). When a design/motion/a11y change lands, note which skill's audit produced it here vs. an ad hoc judgment call — keeps Phase 3's second-pass verification honest about what's already covered.
+
+- `review-animations` (`STANDARDS.md`) + `improve-animations` (`AUDIT.md`) drove all 3 Phase 0.6 fixes above (ease-in, reduced-motion coverage, transform-origin).
+- `taste-skill` drove the Section-13 scope check (this app isn't its target surface) and the dark-mode parity visual check.
+- `emil-design-eng`, `animation-vocabulary`, `apple-design` were consulted but produced no additional findings beyond what `review-animations`/`improve-animations` already covered for this pass — the liquid-glass engine's existing motion (scale 0.97→1 pop, not scale(0); strong custom easing curves) already matched their guidance.

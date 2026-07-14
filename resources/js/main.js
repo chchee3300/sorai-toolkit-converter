@@ -83,70 +83,27 @@ function updateEstimations() {
                 targetFpsDisplay = `<span style="color: var(--muted); margin-left: 5px; font-size: 0.8em;">[${targetFpsStr} fps]</span>`;
             }
 
-            let fpsFactor = 1.0;
-            if (targetFps && fileObj.fps) {
-                fpsFactor = targetFps / fileObj.fps;
-            }
-            
             let format = document.getElementById('video-format').value;
-            if (format === '.gif') {
-                let scaleFactor = qualityPercent / 100;
-                estMB = currentSizeMB * durationRatio * (scaleFactor * scaleFactor) * fpsFactor * 2.5 / speed;
-            } else {
-                estMB = (currentSizeMB * durationRatio * (qualityPercent / 100) * fpsFactor) / speed;
-
-                // Apply a codec compression-efficiency factor so switching codecs moves
-                // the estimate, even though in the bitrate-targeted path (duration known)
-                // the real output size is mostly set by the bitrate target itself.
-                const codec = document.getElementById('video-codec').value;
-                const codecFactor = { 'libx264': 1.0, 'libx265': 0.6, 'libvpx-vp9': 0.65, 'libsvtav1': 0.5 }[codec] || 1.0;
-                estMB *= codecFactor;
-            }
-            if (estMB < 0.1) estMB = 0.1;
+            const codec = document.getElementById('video-codec').value;
+            estMB = EstellaLib.sizeEstimate.estimateVideoMB({
+                currentSizeMB, durationRatio, qualityPercent, speed, format, targetFps, fileFps: fileObj.fps, codec
+            });
         }
         else if (currentFileType === 'audio') {
             let format = document.getElementById('audio-format').value;
             let bitrateStr = document.getElementById('audio-bitrate').value;
             let speed = parseFloat(document.getElementById('audio-speed').value) || 1.0;
-            let kbps = parseInt(bitrateStr.replace('k', ''));
-            
-            if (format === '.flac') {
-                kbps = 900; // FLAC average bitrate
-            } else if (format === '.wav') {
-                kbps = 1411; // WAV uncompressed CD quality
-            }
-
-            if (fileObj.duration) {
-                let trimmedDuration = fileObj.duration * durationRatio;
-                let calculatedEst = (kbps * 1000 * trimmedDuration) / 8 / (1024 * 1024) / speed;
-                
-                if ((format === '.flac' && fileObj.path.toLowerCase().endsWith('.flac')) || 
-                    (format === '.wav' && fileObj.path.toLowerCase().endsWith('.wav'))) {
-                    // For lossless -> lossless of same type, use original size as better baseline
-                    estMB = currentSizeMB * durationRatio / speed;
-                } else {
-                    estMB = calculatedEst;
-                }
-            } else {
-                estMB = estMB / speed;
-            }
+            estMB = EstellaLib.sizeEstimate.estimateAudioMB({
+                currentSizeMB, durationRatio, format, bitrateStr, speed, duration: fileObj.duration, sourcePath: fileObj.path
+            });
         }
         else if (currentFileType === 'image') {
             let format = document.getElementById('image-format').value;
             let quality = parseFloat(document.getElementById('image-quality').value) || 85;
             let scale = parseFloat(document.getElementById('image-scale').value) || 100;
             
-            let baseSize = currentSizeMB;
-            if (format === '.png') {
-                if (!fileObj.path.toLowerCase().endsWith('.png')) {
-                    baseSize = currentSizeMB * 2.5; // Inflate estimation if converting from lossy to PNG
-                }
-            } else if (fileObj.path.toLowerCase().endsWith('.png')) {
-                baseSize = currentSizeMB * 0.4; // Deflate estimation if converting from PNG to lossy
-            }
+            estMB = EstellaLib.sizeEstimate.estimateImageMB({ currentSizeMB, format, quality, scale, sourcePath: fileObj.path });
 
-            estMB = baseSize * (quality / 100) * (scale / 100) * (scale / 100);
-            
             let resPreview = document.getElementById('image-resolution-preview');
             if (fileObj.width && fileObj.height) {
                 let w = Math.round(fileObj.width * (scale / 100));
@@ -158,7 +115,7 @@ function updateEstimations() {
         }
         else if (currentFileType === 'pdf') {
             let opt = document.getElementById('pdf-optimize').value;
-            estMB = opt === 'compress' ? currentSizeMB * 0.7 : currentSizeMB * 1.02;
+            estMB = EstellaLib.sizeEstimate.estimatePdfMB({ currentSizeMB, optimize: opt });
         }
 
         let color = estMB > currentSizeMB ? 'var(--danger)' : 'var(--accent)';
@@ -1061,22 +1018,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-async function getUniqueOutPath(outputPath, nameWithoutExt, format) {
-    const slash = outputPath.includes('/') && !outputPath.includes('\\') ? '/' : '\\';
-    let baseName = `${nameWithoutExt}_converted`;
-    let outPath = `${outputPath}${slash}${baseName}${format}`;
-    
-    while (true) {
-        try {
-            await Neutralino.filesystem.getStats(outPath);
-            baseName += '_converted';
-            outPath = `${outputPath}${slash}${baseName}${format}`;
-        } catch (e) {
-            return outPath;
-        }
-    }
-}
-
     document.getElementById('btn-execute').addEventListener('click', async () => {
         if (filesList.length === 0) return;
         
@@ -1124,134 +1065,33 @@ async function getUniqueOutPath(outputPath, nameWithoutExt, format) {
                     const speed = document.getElementById('video-speed').value;
                     let customFps = document.getElementById('video-fps-custom').checked;
                     let targetFpsStr = customFps ? document.getElementById('video-fps').value : 'original';
-                    let fps = targetFpsStr;
-                    let targetFps = targetFpsStr === 'original' ? fileObj.fps : parseFloat(targetFpsStr);
-                    
-                    outPath = await getUniqueOutPath(outputPath, nameWithoutExt, format);
-                    
-                    let trimCmd = '';
-                    if (fileObj.trimStart !== undefined) trimCmd += `-ss ${fileObj.trimStart} `;
-                    if (fileObj.trimEnd !== undefined) trimCmd += `-to ${fileObj.trimEnd} `;
-                    
-                    if (format === '.gif') {
-                        let filterGraph = [];
-                        if (targetFps) filterGraph.push(`fps=${targetFps}`);
-                        
-                        const speedFloat = parseFloat(speed);
-                        if (speedFloat !== 1.0) filterGraph.push(`setpts=${1/speedFloat}*PTS`);
-                        
-                        let scaleFactor = qualityPercent / 100;
-                        if (scaleFactor < 1.0) {
-                            filterGraph.push(`scale=trunc(iw*${scaleFactor}/2)*2:-2:flags=lanczos`);
-                        }
-                        
-                        let preFilters = filterGraph.length > 0 ? filterGraph.join(',') + ',' : '';
-                        let fullFilter = `${preFilters}split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`;
-                        
-                        command = `"${binPath}\\binaries\\ffmpeg.exe" -y ${trimCmd}-i "${file}" -filter_complex "${fullFilter}" "${outPath}"`;
-                    } else {
-                        let fpsFactor = 1.0;
-                        if (targetFps && fileObj.fps) {
-                            fpsFactor = targetFps / fileObj.fps;
-                        }
-                        
-                        let targetBitrateCmd = '';
-                        if (fileObj.duration > 0) {
-                            const originalBitrateKbps = (fileObj.size * 8) / (fileObj.duration * 1024);
-                            const targetBitrateKbps = Math.max(10, Math.floor(originalBitrateKbps * (qualityPercent / 100) * fpsFactor));
-                            targetBitrateCmd = `-b:v ${targetBitrateKbps}k -bufsize ${targetBitrateKbps * 2}k`;
-                        } else {
-                            const crf = 51 - Math.round((qualityPercent / 100) * 51);
-                            targetBitrateCmd = `-crf ${crf}`;
-                        }
-                        
-                        let extraFilters = [];
-                        let audioFilters = [];
-                        
-                        if (fps !== 'original') {
-                            extraFilters.push(`fps=${fps}`);
-                        }
-                        
-                        if (speed !== "1.0" && speed !== "1") {
-                            const speedFloat = parseFloat(speed);
-                            const ptsRatio = 1 / speedFloat;
-                            extraFilters.push(`setpts=${ptsRatio}*PTS`);
-                            audioFilters.push(`atempo=${speedFloat}`);
-                        }
-                        
-                        let filterCmd = '';
-                        if (extraFilters.length > 0) {
-                            filterCmd += `-vf "${extraFilters.join(',')}" `;
-                        }
-                        if (audioFilters.length > 0) {
-                            filterCmd += `-af "${audioFilters.join(',')}" `;
-                        }
-                        
-                        command = `"${binPath}\\binaries\\ffmpeg.exe" -y ${trimCmd}-i "${file}" -c:v ${codec} ${filterCmd}${targetBitrateCmd} "${outPath}"`;
-                    }
-                } 
+
+                    outPath = await EstellaLib.filenameCollision.getUniqueOutPath(outputPath, nameWithoutExt, format);
+                    command = EstellaLib.ffmpegCommands.buildVideoCommand({
+                        binPath, file, outPath, format, codec, qualityPercent, speed, targetFpsStr, fileObj
+                    });
+                }
                 else if (currentFileType === 'image') {
                     const format = document.getElementById('image-format').value;
                     const quality = document.getElementById('image-quality').value;
                     const scale = document.getElementById('image-scale').value;
-                    
-                    outPath = await getUniqueOutPath(outputPath, nameWithoutExt, format);
-                    let qCmd = '';
-                    let filterCmd = '';
-                    let filters = [];
-                    
-                    if (format === '.jpg' || format === '.jpeg') {
-                        let qv = Math.max(2, Math.min(31, 31 - Math.round((quality / 100) * 29)));
-                        qCmd = `-q:v ${qv}`;
-                    } else if (format === '.webp') {
-                        qCmd = `-q:v ${quality}`;
-                    } 
-                    
-                    let scaleFilter = '';
-                    if (scale < 100) {
-                        let scaleFactor = scale / 100;
-                        scaleFilter = `scale=trunc(iw*${scaleFactor}/2)*2:-2:flags=lanczos`;
-                    }
 
-                    if (format === '.png' && quality < 100) {
-                        let colors = Math.max(2, Math.floor(256 * (quality / 100)));
-                        if (scaleFilter) {
-                            filterCmd = `-filter_complex "[0:v]${scaleFilter}[s];[s]split[a][b];[a]palettegen=max_colors=${colors}[p];[b][p]paletteuse"`;
-                        } else {
-                            filterCmd = `-filter_complex "[0:v]split[a][b];[a]palettegen=max_colors=${colors}[p];[b][p]paletteuse"`;
-                        }
-                    } else if (scaleFilter) {
-                        filterCmd = `-vf "${scaleFilter}"`;
-                    }
-                    
-                    command = `"${binPath}\\binaries\\ffmpeg.exe" -y -i "${file}" ${filterCmd} ${qCmd} "${outPath}"`;
+                    outPath = await EstellaLib.filenameCollision.getUniqueOutPath(outputPath, nameWithoutExt, format);
+                    command = EstellaLib.ffmpegCommands.buildImageCommand({ binPath, file, outPath, format, quality, scale });
                 }
                 else if (currentFileType === 'audio') {
-                    const format = document.getElementById('audio-format').value;
                     const bitrate = document.getElementById('audio-bitrate').value;
                     const speed = document.getElementById('audio-speed').value;
-                    
-                    let filterCmd = '';
-                    const speedFloat = parseFloat(speed);
-                    if (speedFloat !== 1.0) {
-                        filterCmd = `-af "atempo=${speedFloat}" `;
-                    }
-                    
-                    outPath = await getUniqueOutPath(outputPath, nameWithoutExt, format);
-                    
-                    let trimCmd = '';
-                    if (fileObj.trimStart !== undefined) trimCmd += `-ss ${fileObj.trimStart} `;
-                    if (fileObj.trimEnd !== undefined) trimCmd += `-to ${fileObj.trimEnd} `;
-                    
-                    command = `"${binPath}\\binaries\\ffmpeg.exe" -y ${trimCmd}-i "${file}" ${filterCmd}-b:a ${bitrate} "${outPath}"`;
+                    const format = document.getElementById('audio-format').value;
+
+                    outPath = await EstellaLib.filenameCollision.getUniqueOutPath(outputPath, nameWithoutExt, format);
+                    command = EstellaLib.ffmpegCommands.buildAudioCommand({ binPath, file, outPath, bitrate, speed, fileObj });
                 }
                 else if (currentFileType === 'pdf') {
                     const optimize = document.getElementById('pdf-optimize').value;
-                    
-                    outPath = await getUniqueOutPath(outputPath, nameWithoutExt, '.pdf');
-                    
-                    const optFlag = optimize === 'linearize' ? '--linearize' : '--stream-data=compress';
-                    command = `"${binPath}\\binaries\\qpdf.exe" ${optFlag} "${file}" "${outPath}"`;
+
+                    outPath = await EstellaLib.filenameCollision.getUniqueOutPath(outputPath, nameWithoutExt, '.pdf');
+                    command = EstellaLib.qpdfCommands.buildPdfCommand({ binPath, file, outPath, optimize });
                 }
 
                 if (command) {
@@ -1261,28 +1101,17 @@ async function getUniqueOutPath(outputPath, nameWithoutExt, format) {
                         term.scrollTop = term.scrollHeight;
 
                         await runCommandWithLogs(command, (data) => {
-                            if (fileObj.duration) {
-                                let timeMatch = data.match(/time=(\d{2}):(\d{2}):(\d{2}\.\d{2})/);
-                                if (timeMatch) {
-                                    let h = parseInt(timeMatch[1], 10);
-                                    let m = parseInt(timeMatch[2], 10);
-                                    let s = parseFloat(timeMatch[3]);
-                                    let currentSec = h * 3600 + m * 60 + s;
-                                    
-                                    let speed = 1.0;
-                                    if (currentFileType === 'video') {
-                                        speed = parseFloat(document.getElementById('video-speed').value) || 1.0;
-                                    } else if (currentFileType === 'audio') {
-                                        speed = parseFloat(document.getElementById('audio-speed').value) || 1.0;
-                                    }
-                                    
-                                    let totalOutputDuration = fileObj.duration / speed;
-                                    let percent = (currentSec / totalOutputDuration) * 100;
-                                    if (percent > 100) percent = 100;
-                                    
-                                    document.getElementById('progress-bar').style.width = `${percent}%`;
-                                    document.getElementById('progress-text').innerText = `Processing: ${filename} (${i + 1}/${filesList.length}) - ${Math.round(percent)}%`;
-                                }
+                            let speed = 1.0;
+                            if (currentFileType === 'video') {
+                                speed = parseFloat(document.getElementById('video-speed').value) || 1.0;
+                            } else if (currentFileType === 'audio') {
+                                speed = parseFloat(document.getElementById('audio-speed').value) || 1.0;
+                            }
+
+                            const percent = EstellaLib.progressParser.parseProgress(data, fileObj.duration, speed);
+                            if (percent !== null) {
+                                document.getElementById('progress-bar').style.width = `${percent}%`;
+                                document.getElementById('progress-text').innerText = `Processing: ${filename} (${i + 1}/${filesList.length}) - ${Math.round(percent)}%`;
                             }
                         });
 
