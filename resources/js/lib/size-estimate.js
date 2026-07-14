@@ -45,6 +45,12 @@
   }
 
   function estimateImageMB({ currentSizeMB, format, quality, scale, sourcePath }) {
+    // img2pdf embeds losslessly — quality/scale don't apply to this path
+    // (ImageSettings hides those fields once .pdf is selected).
+    if (format === '.pdf') {
+      return currentSizeMB + 0.05;
+    }
+
     let baseSize = currentSizeMB;
     const lowerPath = sourcePath.toLowerCase();
     if (format === '.png') {
@@ -57,7 +63,13 @@
     return baseSize * (quality / 100) * (scale / 100) * (scale / 100);
   }
 
-  function estimatePdfMB({ currentSizeMB, optimize }) {
+  function estimatePdfMB({ currentSizeMB, optimize, format }) {
+    // Rough flat multiplier — text-heavy PDFs shrink a lot on reflow,
+    // image-heavy/scanned PDFs vary far more; not content-aware. The "~"
+    // prefix in the UI already signals "estimate, not guarantee".
+    if (format === '.docx' || format === '.odt') {
+      return currentSizeMB * 0.6;
+    }
     return optimize === 'compress' ? currentSizeMB * 0.7 : currentSizeMB * 1.02;
   }
 

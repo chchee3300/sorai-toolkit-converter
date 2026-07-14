@@ -165,6 +165,11 @@ function ImageSettings({ visible, image, setImage, lastFile }) {
     resolutionPreview = `${w} x ${h}`
   }
 
+  // img2pdf embeds losslessly and has no resize/quality knobs — hide both
+  // fields rather than disable them, same idiom VideoSettings uses to hide
+  // the whole codec selector when format is .gif.
+  const isPdfOutput = image.format === '.pdf'
+
   return (
     <div id="image-settings" className={visible ? 'settings-block' : 'settings-block hidden'}>
       <p className="settings-subtitle" id="settings-subtitle">Image conversion</p>
@@ -176,9 +181,11 @@ function ImageSettings({ visible, image, setImage, lastFile }) {
             <option value=".png">PNG</option>
             <option value=".webp">WebP</option>
             <option value=".avif">AVIF</option>
+            <option value=".ico">ICO</option>
+            <option value=".pdf">PDF</option>
           </GlassSelect>
         </div>
-        <div className="field">
+        <div className="field" id="image-quality-group" style={{ display: isPdfOutput ? 'none' : 'block' }}>
           <label className="field-label" htmlFor="image-quality">
             Quality — <span className="val-chip tabular-nums" id="image-quality-val">{image.quality}</span>%
           </label>
@@ -193,7 +200,7 @@ function ImageSettings({ visible, image, setImage, lastFile }) {
             onChange={(e) => set({ quality: parseFloat(e.target.value) })}
           />
         </div>
-        <div className="field span-2">
+        <div className="field span-2" id="image-scale-group" style={{ display: isPdfOutput ? 'none' : 'block' }}>
           <div className="field-label-row">
             <label className="field-label" htmlFor="image-scale">
               Scale — <span className="val-chip tabular-nums" id="image-scale-val">{image.scale}</span>%
@@ -232,6 +239,7 @@ function AudioSettings({ visible, audio, setAudio }) {
             <option value=".wav">WAV</option>
             <option value=".aac">AAC</option>
             <option value=".flac">FLAC</option>
+            <option value=".ogg">OGG</option>
           </GlassSelect>
         </div>
         <div className="field">
@@ -266,13 +274,29 @@ function AudioSettings({ visible, audio, setAudio }) {
 }
 
 function PdfSettings({ visible, pdf, setPdf }) {
+  // Was setPdf({ optimize: e.target.value }) — a raw replacement object,
+  // not a merge patch. Harmless while optimize was pdf's only field, but
+  // would silently wipe `format` the instant a second field existed.
+  // Switch to the same set()-merge helper every other settings component
+  // already uses.
+  const set = (patch) => setPdf((v) => ({ ...v, ...patch }))
+  const isConvert = pdf.format !== '.pdf'
+
   return (
     <div id="pdf-settings" className={visible ? 'settings-block' : 'settings-block hidden'}>
-      <p className="settings-subtitle">PDF optimization</p>
+      <p className="settings-subtitle">PDF conversion</p>
       <div className="settings-grid">
         <div className="field span-2">
+          <label className="field-label" htmlFor="pdf-format">Format</label>
+          <GlassSelect id="pdf-format" value={pdf.format} onChange={(e) => set({ format: e.target.value })}>
+            <option value=".pdf">PDF (optimize existing)</option>
+            <option value=".docx">DOCX — Word document</option>
+            <option value=".odt">ODT — OpenDocument Text</option>
+          </GlassSelect>
+        </div>
+        <div className="field span-2" id="pdf-optimize-group" style={{ display: isConvert ? 'none' : 'block' }}>
           <label className="field-label" htmlFor="pdf-optimize">Optimization mode</label>
-          <GlassSelect id="pdf-optimize" value={pdf.optimize} onChange={(e) => setPdf({ optimize: e.target.value })}>
+          <GlassSelect id="pdf-optimize" value={pdf.optimize} onChange={(e) => set({ optimize: e.target.value })}>
             <option value="linearize">Linearize — Fast Web View</option>
             <option value="compress">Maximum Compression</option>
           </GlassSelect>

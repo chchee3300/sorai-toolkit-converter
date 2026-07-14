@@ -25,7 +25,7 @@ const CATEGORIES = [
   },
   {
     title: 'Image',
-    desc: 'JPG, PNG, WebP, or AVIF — control quality and scale resolution down.',
+    desc: 'JPG, PNG, WebP, AVIF, or ICO — control quality, scale resolution down, or export straight to PDF.',
     icon: (
       <>
         <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -36,7 +36,7 @@ const CATEGORIES = [
   },
   {
     title: 'Audio',
-    desc: 'MP3, WAV, AAC, or FLAC — set bitrate and change playback speed.',
+    desc: 'MP3, WAV, AAC, FLAC, or OGG — set bitrate and change playback speed.',
     icon: (
       <>
         <path d="M9 18V5l12-2v13" />
@@ -47,7 +47,7 @@ const CATEGORIES = [
   },
   {
     title: 'PDF',
-    desc: 'Linearize for fast web view, or compress for maximum size reduction.',
+    desc: 'Linearize or compress an existing PDF, or convert it to DOCX/ODT.',
     icon: (
       <>
         <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" />

@@ -88,7 +88,16 @@
       scaleFilter = `scale=trunc(iw*${scaleFactor}/2)*2:-2:flags=lanczos`;
     }
 
-    if (format === '.png' && quality < 100) {
+    if (format === '.ico') {
+      // ffmpeg's ico muxer hard-caps output at 256x256 -- anything larger
+      // fails outright with "Unsupported dimensions" (confirmed against
+      // the bundled binary). Always fit-within-256 regardless of the
+      // scale slider, which is honored as an *additional* reduction
+      // chained in front of the mandatory cap (unlike every other format,
+      // where the scale filter only applies when scale < 100).
+      const preScale = scaleFilter ? `${scaleFilter},` : '';
+      filterCmd = `-vf "${preScale}scale='min(256,iw)':'min(256,ih)':force_original_aspect_ratio=decrease"`;
+    } else if (format === '.png' && quality < 100) {
       let colors = Math.max(2, Math.floor(256 * (quality / 100)));
       if (scaleFilter) {
         filterCmd = `-filter_complex "[0:v]${scaleFilter}[s];[s]split[a][b];[a]palettegen=max_colors=${colors}[p];[b][p]paletteuse"`;
@@ -103,7 +112,7 @@
   }
 
   // fileObj: { trimStart, trimEnd }
-  function buildAudioCommand({ binPath, file, outPath, bitrate, speed, fileObj }) {
+  function buildAudioCommand({ binPath, file, outPath, bitrate, speed, format, fileObj }) {
     let filterCmd = '';
     const speedFloat = parseFloat(speed);
     if (speedFloat !== 1.0) {
@@ -114,7 +123,11 @@
     if (fileObj.trimStart !== undefined) trimCmd += `-ss ${fileObj.trimStart} `;
     if (fileObj.trimEnd !== undefined) trimCmd += `-to ${fileObj.trimEnd} `;
 
-    return `"${binPath}\\binaries\\ffmpeg.exe" -y ${trimCmd}-i "${file}" ${filterCmd}-b:a ${bitrate} "${outPath}"`;
+    // Explicit rather than relying on ffmpeg's default muxer-implied encoder
+    // choice for .ogg — every other format keeps codecCmd === '' (unchanged).
+    const codecCmd = format === '.ogg' ? '-c:a libvorbis ' : '';
+
+    return `"${binPath}\\binaries\\ffmpeg.exe" -y ${trimCmd}-i "${file}" ${filterCmd}${codecCmd}-b:a ${bitrate} "${outPath}"`;
   }
 
   global.EstellaLib = global.EstellaLib || {};

@@ -95,7 +95,7 @@ async function runExecuteAndWait(page, timeoutMs = 60000) {
 }
 
 async function main() {
-    setTimeout(() => { console.error('WATCHDOG: test exceeded 240s, aborting'); process.exit(1); }, 240000);
+    setTimeout(() => { console.error('WATCHDOG: test exceeded 420s, aborting'); process.exit(1); }, 420000);
 
     // Clean up any leftover output files from previous runs so collision-suffix
     // assertions below are deterministic.
@@ -107,6 +107,10 @@ async function main() {
         'test_fixture_video_cancel_a.mp4', 'test_fixture_video_cancel_b.mp4', 'test_fixture_video_cancel_c.mp4',
         'test_fixture_video_cancel_a_converted.mp4',
         'test_fixture_video_fps.mp4', 'test_fixture_video_fps_converted.mp4',
+        'test_fixture_audio_converted.ogg',
+        'test_ico_fixture.ico', 'test_in_converted.ico', 'test_ico_fixture_converted.png',
+        'test_in_converted.pdf',
+        'test_fixture_converted.docx', 'test_fixture_converted.odt',
     ];
     cleanupNames.forEach(n => rmIfExists(path.join(ROOT, n)));
 
@@ -119,6 +123,21 @@ async function main() {
     for (const [k, p] of Object.entries(fixtures)) {
         if (!fs.existsSync(p)) { console.error(`Fixture missing (${k}): ${p}`); process.exit(1); }
     }
+
+    // ICO is bidirectional (also an accepted input) -- generate a fixture at
+    // runtime from test_in.png via the already-downloaded binaries/ffmpeg.exe,
+    // same "derive fixtures at runtime" convention fpsFixture/cancelFixtures
+    // below already use, rather than committing a new binary file. ffmpeg's
+    // ico muxer hard-caps output at 256x256 (test_in.png is 320x240), so
+    // this must scale down the same way buildImageCommand's own .ico
+    // branch does (ffmpeg-commands.js) -- otherwise this generation step
+    // itself fails with "Unsupported dimensions".
+    const icoFixture = path.join(ROOT, 'test_ico_fixture.ico');
+    execFileSync(path.join(ROOT, 'binaries', 'ffmpeg.exe'), [
+        '-y', '-i', fixtures.image,
+        '-vf', "scale='min(256,iw)':'min(256,ih)':force_original_aspect_ratio=decrease",
+        icoFixture,
+    ], { stdio: 'pipe' });
 
     const env = { ...process.env, PATH: process.env.PATH + ';' + path.join(process.env.APPDATA || '', 'npm') };
     const launchTime = Date.now();
@@ -249,6 +268,51 @@ async function main() {
         const iLog2 = await page.$eval('#terminal-log', el => el.innerText);
         check('I7: PNG quality<100 triggers palettegen path', iLog2.includes('palettegen=max_colors=') && iLog2.includes('paletteuse'), iLog2.slice(-400));
 
+        // ICO as OUTPUT — must NOT trigger the PNG-only palettegen branch
+        // even with quality < 100 (CLAUDE.md-flagged regression risk: ICO
+        // has no quality knob of its own, only the generic scale filter
+        // should apply).
+        await setSelectValue(page, '#image-format', '.ico');
+        await setRangeValue(page, '#image-quality', '40');
+        const iIcoProgress = await runExecuteAndWait(page);
+        check('I8: ico batch completes', iIcoProgress.includes('Completed 1 of 1'), iIcoProgress);
+        const iOutIco = path.join(ROOT, 'test_in_converted.ico');
+        check('I9: ico output file created', fs.existsSync(iOutIco), iOutIco);
+        // #terminal-log accumulates every command run this whole session --
+        // "palettegen" genuinely appears earlier (I7's PNG case), so a
+        // negative check must scope to just this command's own logged
+        // output, not the full accumulated buffer.
+        const iIcoFullLog = await page.$eval('#terminal-log', el => el.innerText);
+        const iIcoLog = iIcoFullLog.slice(iIcoFullLog.lastIndexOf('> Executing:'));
+        check('I10: ico output does not trigger palettegen', !iIcoLog.includes('palettegen'), iIcoLog.slice(-400));
+
+        await clearFileList(page);
+
+        // ICO as INPUT (round-trip decode)
+        await dropFile(page, icoFixture);
+        check('I11: ico recognized as image type', await page.$eval('#image-settings', el => !el.classList.contains('hidden')));
+        await setSelectValue(page, '#image-format', '.png');
+        const iIcoInProgress = await runExecuteAndWait(page);
+        check('I12: ico-as-input batch completes', iIcoInProgress.includes('Completed 1 of 1'), iIcoInProgress);
+        const iIcoInOut = path.join(ROOT, 'test_ico_fixture_converted.png');
+        check('I13: ico-as-input output file created', fs.existsSync(iIcoInOut), iIcoInOut);
+
+        await clearFileList(page);
+
+        // Image -> PDF via the bundled img2pdf.exe (not ffmpeg) — Quality/
+        // Scale have no effect on a lossless embed, so both fields hide.
+        await dropFile(page, fixtures.image);
+        await setSelectValue(page, '#image-format', '.pdf');
+        const qualityGroupDisplay = await page.$eval('#image-quality-group', el => el.style.display);
+        const scaleGroupDisplay = await page.$eval('#image-scale-group', el => el.style.display);
+        check('I14: quality/scale hidden for PDF output', qualityGroupDisplay === 'none' && scaleGroupDisplay === 'none', `${qualityGroupDisplay} / ${scaleGroupDisplay}`);
+        const iPdfProgress = await runExecuteAndWait(page);
+        check('I15: image-to-pdf batch completes', iPdfProgress.includes('Completed 1 of 1'), iPdfProgress);
+        const iOutPdf = path.join(ROOT, 'test_in_converted.pdf');
+        check('I16: image-to-pdf output file created', fs.existsSync(iOutPdf), iOutPdf);
+        const iPdfLog = await page.$eval('#terminal-log', el => el.innerText);
+        check('I17: image-to-pdf used img2pdf.exe (not ffmpeg.exe)', iPdfLog.includes('img2pdf.exe') && !iPdfLog.includes('ffmpeg.exe -y -i'), iPdfLog.slice(-400));
+
         await clearFileList(page);
 
         // ============================================================
@@ -269,6 +333,19 @@ async function main() {
         const aLog = await page.$eval('#terminal-log', el => el.innerText);
         check('A3: command used target bitrate', aLog.includes('-b:a 128k'), aLog.slice(-400));
         check('A4: speed 2.0x produced atempo filter', aLog.includes('atempo=2'), aLog.slice(-400));
+
+        // OGG output — explicit libvorbis encoder (not left to ffmpeg's
+        // default muxer-implied choice) + bitrate
+        await setSelectValue(page, '#audio-format', '.ogg');
+        await setSelectValue(page, '#audio-bitrate', '192k');
+        await setRangeValue(page, '#audio-speed', '1.0'); // reset speed from the AAC case above
+        const aOggProgress = await runExecuteAndWait(page);
+        check('A5: ogg batch completes', aOggProgress.includes('Completed 1 of 1'), aOggProgress);
+        const aOggOut = path.join(ROOT, 'test_fixture_audio_converted.ogg');
+        check('A6: ogg output file created', fs.existsSync(aOggOut), aOggOut);
+        const aOggLog = await page.$eval('#terminal-log', el => el.innerText);
+        check('A7: ogg command used explicit libvorbis encoder', aOggLog.includes('-c:a libvorbis'), aOggLog.slice(-400));
+        check('A8: ogg command used target bitrate', aOggLog.includes('-b:a 192k'), aOggLog.slice(-400));
 
         await clearFileList(page);
 
@@ -296,6 +373,59 @@ async function main() {
         } else {
             check('P4: qpdf --check validates compressed output', false, 'no output file');
         }
+        rmIfExists(pOut); // keep the collision-suffix namespace clean for P5-P14 below
+
+        await clearFileList(page);
+
+        // ============================================================
+        // PDF -> DOCX / ODT via LibreOffice headless (soffice.exe) — the
+        // staged-copy workaround for soffice's basename-preserving
+        // --outdir-only output, and the original qpdf path still working
+        // unmodified alongside the new format fork.
+        // ============================================================
+        console.log('\n--- PDF: DOCX/ODT conversion ---');
+        await dropFile(page, fixtures.pdf);
+        await setSelectValue(page, '#pdf-format', '.docx');
+        const optimizeGroupDisplay = await page.$eval('#pdf-optimize-group', el => el.style.display);
+        check('P5: optimize-mode group hidden when format is docx', optimizeGroupDisplay === 'none', optimizeGroupDisplay);
+
+        // LibreOffice's first invocation on a machine initializes a user
+        // profile dir and is markedly slower than ffmpeg/qpdf calls —
+        // give docx/odt conversions extra time over the 60s default.
+        const pDocxProgress = await runExecuteAndWait(page, 90000);
+        check('P6: docx batch completes', pDocxProgress.includes('Completed 1 of 1'), pDocxProgress);
+        const pOutDocx = path.join(ROOT, 'test_fixture_converted.docx');
+        check('P7: docx output file created', fs.existsSync(pOutDocx), pOutDocx);
+        const pDocxLog = await page.$eval('#terminal-log', el => el.innerText);
+        check('P8: docx command used soffice.exe --convert-to docx', pDocxLog.includes('soffice.exe') && pDocxLog.includes('--convert-to docx'), pDocxLog.slice(-400));
+        const stagedLeftover = path.join(ROOT, 'test_fixture_converted.pdf');
+        check('P9: staged temp pdf copy cleaned up after docx conversion', !fs.existsSync(stagedLeftover), stagedLeftover);
+        rmIfExists(pOutDocx);
+
+        await clearFileList(page);
+
+        await dropFile(page, fixtures.pdf);
+        await setSelectValue(page, '#pdf-format', '.odt');
+        const pOdtProgress = await runExecuteAndWait(page, 90000);
+        check('P10: odt batch completes', pOdtProgress.includes('Completed 1 of 1'), pOdtProgress);
+        const pOutOdt = path.join(ROOT, 'test_fixture_converted.odt');
+        check('P11: odt output file created', fs.existsSync(pOutOdt), pOutOdt);
+        const pOdtLog = await page.$eval('#terminal-log', el => el.innerText);
+        check('P12: odt command used soffice.exe --convert-to odt', pOdtLog.includes('soffice.exe') && pOdtLog.includes('--convert-to odt'), pOdtLog.slice(-400));
+        rmIfExists(pOutOdt);
+
+        await clearFileList(page);
+
+        // Reverting format back to .pdf must still exercise the original
+        // qpdf optimize path, unmodified, alongside the new format fork.
+        await dropFile(page, fixtures.pdf);
+        await setSelectValue(page, '#pdf-format', '.pdf');
+        await setSelectValue(page, '#pdf-optimize', 'linearize');
+        const pBackProgress = await runExecuteAndWait(page);
+        check('P13: reverting to pdf format still runs qpdf optimize path', pBackProgress.includes('Completed 1 of 1'), pBackProgress);
+        const pBackLog = await page.$eval('#terminal-log', el => el.innerText);
+        check('P14: reverted-to-pdf command used --linearize', pBackLog.includes('--linearize'), pBackLog.slice(-300));
+        rmIfExists(path.join(ROOT, 'test_fixture_converted.pdf'));
 
         await clearFileList(page);
 

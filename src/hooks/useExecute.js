@@ -162,15 +162,37 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
         } else if (fileType === 'image') {
           const { format, quality, scale } = settings.image
           outPath = await window.EstellaLib.filenameCollision.getUniqueOutPath(resolvedOutputPath, nameWithoutExt, format)
-          command = window.EstellaLib.ffmpegCommands.buildImageCommand({ binPath, file, outPath, format, quality, scale })
+          command = format === '.pdf'
+            ? window.EstellaLib.img2pdfCommands.buildImageToPdfCommand({ binPath, file, outPath })
+            : window.EstellaLib.ffmpegCommands.buildImageCommand({ binPath, file, outPath, format, quality, scale })
         } else if (fileType === 'audio') {
           const { bitrate, speed, format } = settings.audio
           outPath = await window.EstellaLib.filenameCollision.getUniqueOutPath(resolvedOutputPath, nameWithoutExt, format)
-          command = window.EstellaLib.ffmpegCommands.buildAudioCommand({ binPath, file, outPath, bitrate, speed, fileObj })
+          command = window.EstellaLib.ffmpegCommands.buildAudioCommand({ binPath, file, outPath, bitrate, speed, format, fileObj })
         } else if (fileType === 'pdf') {
-          const { optimize } = settings.pdf
-          outPath = await window.EstellaLib.filenameCollision.getUniqueOutPath(resolvedOutputPath, nameWithoutExt, '.pdf')
-          command = window.EstellaLib.qpdfCommands.buildPdfCommand({ binPath, file, outPath, optimize })
+          const { format, optimize } = settings.pdf
+          if (format === '.docx' || format === '.odt') {
+            // soffice --convert-to has no exact-output-path flag — it only
+            // writes "<outdir>/<input-basename>.<ext>". Stage a same-named
+            // copy of the source PDF at the reserved collision-safe
+            // basename first, so soffice's basename-preserving output
+            // naturally lands where getUniqueOutPathMulti already reserved
+            // it. The staged copy is removed below (success, cancel, and
+            // error paths alike — see the cleanup after this if/else and
+            // inside the catch block further down).
+            const [convOutPath, stagedPdfPath] = await window.EstellaLib.filenameCollision.getUniqueOutPathMulti(
+              resolvedOutputPath, nameWithoutExt, [format, '.pdf'],
+            )
+            outPath = convOutPath
+            await window.Neutralino.filesystem.copy(file, stagedPdfPath)
+            fileObj.__stagedPdfPath = stagedPdfPath
+            command = window.EstellaLib.libreOfficeCommands.buildPdfConvertCommand({
+              binPath, stagedFile: stagedPdfPath, outDir: resolvedOutputPath, format,
+            })
+          } else {
+            outPath = await window.EstellaLib.filenameCollision.getUniqueOutPath(resolvedOutputPath, nameWithoutExt, '.pdf')
+            command = window.EstellaLib.qpdfCommands.buildPdfCommand({ binPath, file, outPath, optimize })
+          }
         }
 
         if (command) {
@@ -211,7 +233,15 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
             } catch (e) {
               console.error('Could not read new file size', e)
             }
+
+            if (fileObj.__stagedPdfPath) {
+              await window.Neutralino.filesystem.remove(fileObj.__stagedPdfPath).catch(() => {})
+            }
           } catch (err) {
+            if (fileObj.__stagedPdfPath) {
+              await window.Neutralino.filesystem.remove(fileObj.__stagedPdfPath).catch(() => {})
+            }
+
             if (cancelRequestedRef.current) {
               // User-requested cancellation, not a real error: a forced kill
               // (TerminateProcess-style) doesn't let ffmpeg/qpdf finalize the

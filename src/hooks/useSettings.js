@@ -2,8 +2,9 @@ import { useCallback, useState } from 'react'
 
 // Matches resources/index.html's <option> lists exactly (index.html:108-219).
 export const VIDEO_FORMATS = ['.mp4', '.mkv', '.webm', '.avi', '.gif']
-export const IMAGE_FORMATS = ['.jpg', '.png', '.webp', '.avif']
-export const AUDIO_FORMATS = ['.mp3', '.wav', '.aac', '.flac']
+export const IMAGE_FORMATS = ['.jpg', '.png', '.webp', '.avif', '.ico', '.pdf']
+export const AUDIO_FORMATS = ['.mp3', '.wav', '.aac', '.flac', '.ogg']
+export const PDF_FORMATS = ['.pdf', '.docx', '.odt']
 
 const DEFAULT_VIDEO = {
   format: '.mp4',
@@ -16,7 +17,7 @@ const DEFAULT_VIDEO = {
 }
 const DEFAULT_IMAGE = { format: '.jpg', quality: 85, scale: 100 }
 const DEFAULT_AUDIO = { format: '.mp3', bitrate: '320k', speed: 1.0 }
-const DEFAULT_PDF = { optimize: 'linearize' }
+const DEFAULT_PDF = { format: '.pdf', optimize: 'linearize' }
 
 // Owns the 4 per-category settings blocks. setFormatForType is the
 // DropZone -> SettingsPanel coupling point (see useFileManager's
@@ -36,6 +37,8 @@ export function useSettings() {
       setImage((v) => ({ ...v, format: ext }))
     } else if (type === 'audio' && AUDIO_FORMATS.includes(ext)) {
       setAudio((v) => ({ ...v, format: ext }))
+    } else if (type === 'pdf' && PDF_FORMATS.includes(ext)) {
+      setPdf((v) => ({ ...v, format: ext }))
     }
   }, [])
 

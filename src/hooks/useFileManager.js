@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 // Ported unchanged from resources/js/main.js's getFileType (main.js:6-18
 // pre-extraction).
 const VIDEO_EXTS = ['mp4', 'mkv', 'avi', 'mov', 'webm']
-const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif']
+const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif', 'ico']
 const AUDIO_EXTS = ['mp3', 'wav', 'aac', 'flac', 'ogg']
 const PDF_EXTS = ['pdf']
 

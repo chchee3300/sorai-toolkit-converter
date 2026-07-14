@@ -53,7 +53,9 @@ export function computeEstimate(fileObj, fileType, settings) {
       sourcePath: fileObj.path,
     })
   } else if (fileType === 'pdf') {
-    estMB = window.EstellaLib.sizeEstimate.estimatePdfMB({ currentSizeMB, optimize: settings.pdf.optimize })
+    estMB = window.EstellaLib.sizeEstimate.estimatePdfMB({
+      currentSizeMB, optimize: settings.pdf.optimize, format: settings.pdf.format,
+    })
   }
 
   return { estMB, warn: estMB > currentSizeMB, targetFpsLabel }
