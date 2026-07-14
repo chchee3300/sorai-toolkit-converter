@@ -14,6 +14,15 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Must be a real <script src>, not bundled — neu's dev server injects
+         window.NL_PORT/NL_TOKEN/etc. into its response for this exact path
+         (neutralino.config.json's "clientLibrary"), triggered by the
+         browser's own HTTP request. Bundling neutralino.js at build time
+         (as loadNeutralino.js originally tried via a `?raw` import) skips
+         that request entirely, so the globals never get set — found via
+         the Phase 2.2+2.3+2.4 real-Neutralino probe test, see
+         design-system/MASTER.md decisions log. -->
+    <script src="/js/neutralino.js"></script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
