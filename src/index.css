@@ -1,3 +1,18 @@
+/* Phase 2 scope decision (see design-system/MASTER.md decisions log,
+   2026-07-14): reuse the existing hand-tuned stylesheet verbatim for
+   component classes (.header, .statusbar, .panel, .btn, etc.) rather than
+   re-expressing ~1478 lines of glassmorphism CSS as Tailwind utilities
+   while simultaneously porting complex interactive logic (drag/drop, the
+   trim scrubber) with no visual-regression safety net yet. Structural/
+   behavioral fidelity is Phase 2's job; baseline-ui's Tailwind-ification
+   pass is Phase 3's, once the golden-master suite can gate it directly
+   against the React build (Phase 2.6). Single source of truth — not
+   duplicated — since this is the same file resources/index.html links.
+   Must be imported BEFORE "tailwindcss" — Tailwind v4's import expands
+   inline into @layer rules, and CSS requires @import to precede all
+   non-import/@layer-statement rules (warning otherwise; some parsers
+   would hard-error). */
+@import url("../resources/styles.css");
 @import "tailwindcss";
 
 /* Token-preservation step (Phase 1.3, plan step 3): ported 1:1 from

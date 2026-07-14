@@ -1,17 +1,23 @@
-// Phase 1 scaffold placeholder — proves the Vite + React + Tailwind pipeline
-// and the ported design tokens work end-to-end. Real components (DropZone,
-// SettingsPanel, etc., wired to resources/js/lib/*.js) land in Phase 2 per
-// design-system/MASTER.md. Do not build real UI here yet.
+import Header from './components/Header.jsx'
+import StatusBar from './components/StatusBar.jsx'
+import { useTheme } from './hooks/useTheme.js'
+
+// Phase 2.1: static shell only (Header/StatusBar/theme toggle). The main
+// content area is a placeholder until Phase 2.2-2.5 port DropZone,
+// SettingsPanel, ProgressBar, and the Trim modal — see
+// design-system/MASTER.md's Phase 2 checkpoint for what "done" means here.
 function App() {
+  const { toggleTheme } = useTheme()
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg text-text-primary">
-      <div className="rounded-glass border border-glass-border bg-glass-bg px-8 py-6 text-center">
-        <h1 className="text-lg font-semibold">Estella Converter</h1>
-        <p className="mt-2 text-sm text-text-secondary">
-          Phase 1 scaffold: Vite + React + Tailwind pipeline verification.
-          Real components land in Phase 2.
-        </p>
-      </div>
+    <div className="app-shell">
+      <Header fileType={null} onToggleTheme={toggleTheme} />
+      <main className="main" id="main-content">
+        <div className="flex h-full items-center justify-center text-text-secondary text-sm">
+          Phase 2.1 shell scaffold — DropZone/SettingsPanel/ProgressBar/Trim land in later sub-phases.
+        </div>
+      </main>
+      <StatusBar text="Ready" state="ready" />
     </div>
   )
 }

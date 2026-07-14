@@ -1,9 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Estella Converter (Vite dev preview)</title>
+    <!-- Prevent flash of wrong theme, ported unchanged from resources/index.html:11-17 -->
+    <script>
+      (function () {
+        var t = localStorage.getItem('estella-theme') || 'dark'
+        document.documentElement.setAttribute('data-theme', t)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
