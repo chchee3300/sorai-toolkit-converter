@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+/* Token-preservation step (Phase 1.3, plan step 3): ported 1:1 from
+   resources/styles.css's :root (dark, default) block — see
+   design-system/MASTER.md's frozen token snapshot, dated 2026-07-14.
+   Tailwind v4 is CSS-native config (@theme), not tailwind.config.js's
+   theme.extend as the original plan text assumed when written pre-recon —
+   same intent (utilities resolve to the app's real values), different
+   mechanism because v4 is now the current major. See MASTER.md decisions
+   log for the full note.
+
+   Light theme ([data-theme="light"] override in the vanilla app) is
+   intentionally NOT ported yet — deferred to Phase 2 when the real theme
+   toggle is ported and Tailwind's dark-mode variant strategy is wired up
+   against it. This file only needs to prove the token-preservation
+   mechanism works for Phase 1's scaffold checkpoint. */
+@theme {
+  --color-bg: #070809;
+  --color-surface-0: #0c0e12;
+  --color-surface-1: #111418;
+  --color-surface-2: #171b22;
+  --color-surface-3: #1e2330;
+
+  --color-text-primary: #eef0f4;
+  --color-text-secondary: #b8bcc8;
+  --color-text-muted: #525a6e;
+  --color-text-dim: #303544;
+
+  --color-accent: #5b7fff;
+  --color-danger: #f04f4f;
+  --color-success: #3ecf8e;
+
+  --color-glass-bg: rgba(13, 16, 22, 0.65);
+  --color-glass-border: rgba(255, 255, 255, 0.065);
+  --color-glass-border-hi: rgba(255, 255, 255, 0.12);
+
+  --radius-glass: 10px;
+}
+
+/* One-off layout constants, not part of Tailwind's generated spacing scale
+   — kept as plain CSS variables, referenced via arbitrary values
+   (h-[var(--header-h)]) once real layout components exist in Phase 2. */
+:root {
+  --header-h: 2.75rem;
+  --statusbar-h: 1.625rem;
+}

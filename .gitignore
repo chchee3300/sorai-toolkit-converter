@@ -14,6 +14,9 @@
 /bin
 /dist
 
+# Vite build output (Phase 1 scaffold — distinct from Neutralino's own /dist)
+/web-dist
+
 # Third-party executables fetched by setup.ps1 (ffmpeg, qpdf, etc.) — too large for GitHub
 /binaries
 
