@@ -33,6 +33,9 @@
 - `playwright` 是 `devDependencies`（只有 `tests/*.js` 用得到），且 `.github/workflows/release.yml` 設了全域 `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'`——沒有這個，每個 job 的 `npm ci` 都會下載瀏覽器執行檔（數百 MB），曾經因此在 macOS runner 上把硬碟空間耗盡，導致 `hdiutil create` 失敗（`No space left on device`）。不要把 `playwright` 移回 `dependencies`，也不要把這個 env var 拿掉。
 - `setup.mjs`/CI 解壓縮 zip 時**不要假設裸指令 `tar` 支援 zip**——這個坑踩過兩次：Windows 上 Git Bash 的 `/usr/bin/tar`（GNU tar，不支援 zip）會蓋過真正支援 zip 的 `System32\tar.exe`（bsdtar），必須用完整路徑指定；Linux（包含 ubuntu-latest CI runner）預設的 `tar` 也是不支援 zip 的 GNU tar。現在的作法是 Windows 用完整路徑的 `System32\tar.exe`，macOS/Linux 一律用 `unzip`（標準、幾乎必定預裝的工具）。不要「簡化」回單純呼叫 `tar`。
 
+## UI 視覺風格參考
+新增或修改 UI 元件時，先看 `design-system/UI_STYLE_REFERENCE.md`（Liquid Glass × Digital 風格指南的本專案精簡版，已對照 `resources/styles.css` 實際狀態標註哪些原則已符合、哪些是既有落差不必回頭改）。不要憑感覺發明新的圓角值或替非玻璃元件加陰影——這兩點正是該指南特別點名要避免的既有落差。
+
 ## Neutralino 設定檔 (`neutralino.config.json`) 關鍵注意事項
 這幾個設定值有非常隱蔽的失敗模式（改壞了在 `neu run` 開發模式下完全测不出來，只有實際打包後的版本才會出問題）：
 

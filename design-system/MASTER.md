@@ -2,6 +2,8 @@
 
 > Read this top-to-bottom in under a few minutes to resume the migration cold. Full narrative plan lives at `usage-skills-implenment-happy-shamir.md` and its addendum `taste-skills-https-github-com-emilkowal-wondrous-shannon.md` in `~/.claude/plans/` — this file is the fast-reference companion, not a replacement.
 
+> For visual/style decisions on **new or changed UI** (not migration history), see `design-system/UI_STYLE_REFERENCE.md` — a Liquid Glass × Digital style guide adapted specifically for this project, cross-checked against the actual current tokens below (not a generic copy).
+
 ## Do-not-touch list (check this before editing `resources/js/main.js`)
 
 - **ffmpeg/qpdf command-building** — moved by Phase 0.4's extraction (was `resources/js/main.js:23, 1151, 1190, 1227, 1246, 1254` before extraction, now stale — corrected here 2026-07-14 to avoid exactly the stale-line-number trap this list exists to prevent). Now lives in `resources/js/lib/ffmpeg-commands.js` (`buildVideoCommand`, `buildImageCommand`, `buildAudioCommand`) and `resources/js/lib/qpdf-commands.js` (`buildPdfCommand`), called from `main.js:1069-1094`. Byte-identical behavior must survive every phase — verified via `test_conversion.js` before/after every change since.
