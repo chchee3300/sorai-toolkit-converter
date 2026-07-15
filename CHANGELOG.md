@@ -1,3 +1,10 @@
+## [0.2.1](https://github.com/chchee3300/FileConverterApp/compare/v0.2.0...v0.2.1) (2026-07-15)
+
+
+### Bug Fixes
+
+* packaged builds 404 on launch (resourcesPath didn't match documentRoot) ([14d4dc7](https://github.com/chchee3300/FileConverterApp/commit/14d4dc7d14c8dcd09c586aa4353179a7ca038ef5))
+
 # [0.2.0](https://github.com/chchee3300/FileConverterApp/compare/v0.1.0...v0.2.0) (2026-07-15)
 
 
