@@ -10,6 +10,14 @@ on:
 permissions:
   contents: write
 
+# playwright (a devDependency, used only by tests/*.js) triggers a
+# multi-hundred-MB browser-binary download on every `npm ci` unless this is
+# set -- no job here runs the test suite, and this was severe enough to hit
+# "No space left on device" building the macOS package. Set globally so
+# every job's `npm ci` skips it.
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false

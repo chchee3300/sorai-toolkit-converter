@@ -30,6 +30,7 @@
 - `src/hooks/useUpdateChecker.js` 會在啟動時打 GitHub API 檢查新版本 —— 修改 release assets 的檔名規則（`.releaserc.json` 的 assets glob）時，必須同步更新這裡的 `currentAssetPattern`/`pickAsset` 邏輯，否則應用內更新會抓不到正確的安裝檔。
 - `@neutralinojs/neu` **刻意鎖在 `11.7.1`**（`package.json` 的 `setup` script、`.github/workflows/release.yml` 三個 build job 都是）——`latest`（`11.7.2`）宣告的 `uuid` 依賴範圍會解析到一個 ESM-only 的版本，但它自己的程式碼還是用 CommonJS `require('uuid')`，導致全新安裝時直接 `ERR_REQUIRE_ESM` 崩潰。不要把這個版本號「升級」回 `latest`，除非先確認上游已修好。
 - Linux 的 `.deb`/`.rpm`（`packaging/linux/build.sh`）宣告了 `libgtk-3-0`/`libwebkit2gtk-4.1-0`（deb）與 `gtk3`/`webkit2gtk4.1`（rpm）作為套件依賴 —— Neutralino 在 Linux 上要靠這些函式庫才能開視窗，`ldd` 只會顯示 gtk3 是直接依賴（webkit2gtk 是透過 GTK widget factory 動態載入，`ldd` 看不到，但實際會用到）。修改打包腳本時別把這些依賴拿掉。
+- `playwright` 是 `devDependencies`（只有 `tests/*.js` 用得到），且 `.github/workflows/release.yml` 設了全域 `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'`——沒有這個，每個 job 的 `npm ci` 都會下載瀏覽器執行檔（數百 MB），曾經因此在 macOS runner 上把硬碟空間耗盡，導致 `hdiutil create` 失敗（`No space left on device`）。不要把 `playwright` 移回 `dependencies`，也不要把這個 env var 拿掉。
 - `setup.mjs`/CI 解壓縮 zip 時**不要假設裸指令 `tar` 支援 zip**——這個坑踩過兩次：Windows 上 Git Bash 的 `/usr/bin/tar`（GNU tar，不支援 zip）會蓋過真正支援 zip 的 `System32\tar.exe`（bsdtar），必須用完整路徑指定；Linux（包含 ubuntu-latest CI runner）預設的 `tar` 也是不支援 zip 的 GNU tar。現在的作法是 Windows 用完整路徑的 `System32\tar.exe`，macOS/Linux 一律用 `unzip`（標準、幾乎必定預裝的工具）。不要「簡化」回單純呼叫 `tar`。
 
 ## Neutralino 設定檔 (`neutralino.config.json`) 關鍵注意事項
