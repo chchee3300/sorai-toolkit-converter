@@ -75,7 +75,7 @@
   },
   "cli": {
     "binaryName": "FileConverterApp",
-    "resourcesPath": "/resources/",
+    "resourcesPath": "/web-dist/",
     "extensionsPath": "/extensions/",
     "clientLibrary": "/web-dist/js/neutralino.js",
     "binaryVersion": "6.8.0",
