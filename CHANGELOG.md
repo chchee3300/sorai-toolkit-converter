@@ -1,3 +1,10 @@
+## [0.2.5](https://github.com/chchee3300/FileConverterApp/compare/v0.2.4...v0.2.5) (2026-07-15)
+
+
+### Bug Fixes
+
+* window close button did nothing; Update Now silently failed (CORS) ([023ed81](https://github.com/chchee3300/FileConverterApp/commit/023ed81ce378d28cd387bf9a1e73d6e35147c2fe))
+
 ## [0.2.4](https://github.com/chchee3300/FileConverterApp/compare/v0.2.3...v0.2.4) (2026-07-15)
 
 
