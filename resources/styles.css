@@ -1102,16 +1102,35 @@ select.input { display: none; }
    that are portaled to <body> as position:fixed and repositioned/resized
    dynamically via JS (LiquidSelect's dropdown): backdrop-filter was found
    to be unreliable in this engine there (computed styles were correct via
-   DevTools, but nothing was actually painted after the panel moved). The
-   background opacity is bumped up to stay fully opaque without blur. */
+   DevTools, but nothing was actually painted after the panel moved).
+   Also fully opaque (alpha 1), not semi-transparent — confirmed via
+   getBoundingClientRect + elementFromPoint that layout and stacking order
+   were BOTH already correct, yet content behind the dropdown still bled
+   through. Root cause: two stacked semi-transparent absolutely-positioned
+   layers (frost + tint) on top of a position:fixed, GPU-layer-promoted,
+   reparented-to-body element is enough to trigger a real compositing bug
+   in this engine — the browser's own hit-testing agreed this element was
+   topmost, but the pixels painted didn't reflect that. A single fully
+   opaque layer needs no blending with whatever's beneath at all, which
+   sidesteps the buggy blend path entirely (verified: this fixed both the
+   video-format dropdown here and Downloader's format dropdown, in the
+   sorai-toolkit hub repo where this bug was actually found/fixed — see
+   that repo's resources/styles.css for the fuller writeup). Tint (below)
+   is folded into this color and disabled for the flat variant — see
+   .glass-lens--flat .glass-lens__tint. */
 .glass-lens--flat .glass-lens__frost {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  background: rgba(13, 16, 22, 0.82);
+  background: rgb(13, 16, 22);
+  opacity: 1;
 }
 
 [data-theme="light"] .glass-lens--flat .glass-lens__frost {
-  background: rgba(245, 246, 250, 0.85);
+  background: rgb(245, 246, 250);
+}
+
+.glass-lens--flat .glass-lens__tint {
+  display: none;
 }
 
 /* Specular rim — bright edge sells the dome shape */
@@ -1150,6 +1169,19 @@ select.input { display: none; }
 .glass-lens__content {
   position: relative;
   z-index: 4;
+}
+
+/* LiquidSelect's dropdown scrolls its option list internally, not the
+   panel itself (see .lg-dropdown's comment) -- flex:1/min-height:0 lets
+   this shrink within .lg-dropdown's max-height instead of forcing the
+   panel to grow past it. Scoped to .lg-dropdown specifically rather than
+   the base .glass-lens__content rule, since createGlassLens() has exactly
+   one caller today (this dropdown) but a future non-scrolling glass-lens
+   use shouldn't inherit this. */
+.lg-dropdown .glass-lens__content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* Accessibility */
@@ -1252,7 +1284,21 @@ select.input { display: none; }
     0 8px 32px -4px rgba(0,0,0,0.4),
     inset 0 0.5px 0 rgba(255,255,255,0.12);
   max-height: 220px;
-  overflow-y: auto;
+  /* NOT overflow-y: auto here — that was the actual bug (found via
+     getBoundingClientRect, not just computed styles): .glass-lens__refracted/
+     frost/rim/tint are `position: absolute; inset: 0` DESCENDANTS of this
+     element, so if *this* element is the scroll container, they scroll away
+     together with the option list content instead of staying fixed as a
+     backdrop behind the whole visible panel. Confirmed directly: after
+     scrollIntoView() shifted the list ~11px to reveal the selected option,
+     frost/tint's own rects moved by that same 11px, uncovering most of the
+     panel with a fully transparent gap — exactly the "content behind the
+     dropdown bleeds through" bug, not a paint/compositing issue at all.
+     Scrolling now happens on .glass-lens__content alone (see below) so the
+     background layers, siblings of content rather than ancestors of the
+     scroll offset, never move. */
+  display: flex;
+  flex-direction: column;
   /* Reset the [popover] UA stylesheet defaults (margin/padding/background/
      inset/width auto-centering) — our own inline top/left/width/max-height
      and the glass-lens layers fully control appearance and position. */
