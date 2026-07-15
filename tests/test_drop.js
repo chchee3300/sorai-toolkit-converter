@@ -98,6 +98,16 @@ async function main() {
         console.log('\n--- Test B: browser-mode DOM drop fallback ---');
         const fixtureName = `drop_fixture_${Date.now()}.png`;
         await page.evaluate(async ({ b64, name }) => {
+            // neutralino.config.json's defaultMode is 'window' (the real
+            // app always runs that way now), which makes useFileManager
+            // .js's onDrop bail out before reading dataTransfer (real
+            // native drops arrive via the 'filesDropped' event instead,
+            // exercised by Test A below). This test specifically targets
+            // the browser-mode DOM-drop fallback path, so force NL_MODE at
+            // the moment of the drop -- by now the app has already
+            // finished reading the real value during its own init, so this
+            // plain overwrite isn't itself clobbered by anything later.
+            window.NL_MODE = 'browser';
             window.__DROP_CHUNK_SIZE = 16384; // force multi-chunk write for the fixture
             const bin = atob(b64);
             const bytes = new Uint8Array(bin.length);

@@ -1347,12 +1347,16 @@ select.input { display: none; }
 
 /* Update notification -- deliberately not a modal-overlay (see
    UpdateBanner.jsx): a fixed toast so a new-version notice never blocks an
-   in-progress conversion or settings edit. */
+   in-progress conversion or settings edit. z-index stays below
+   .modal-overlay (100) on purpose -- an open Trim/Crop/MixedType modal's
+   full-screen backdrop must cover and block the toast, not the other way
+   around, or its buttons intercept clicks meant for a modal whose controls
+   happen to render in the same bottom-right screen region. */
 .update-toast {
   position: fixed;
   right: 1.25rem;
   bottom: 1.25rem;
-  z-index: 200;
+  z-index: 90;
   width: 320px;
   max-width: calc(100vw - 2.5rem);
   background: var(--surface-1);

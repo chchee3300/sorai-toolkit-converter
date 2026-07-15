@@ -30,7 +30,13 @@ SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
-DisableProgramGroupPage=yes
+; Explicit (rather than relying on Inno Setup's defaults) so both the
+; destination-folder and Start Menu wizard pages always show -- the latter
+; also gives the user its built-in "Don't create a Start Menu folder"
+; checkbox, rather than silently always creating one.
+DisableDirPage=no
+DisableProgramGroupPage=no
+AllowNoIcons=yes
 ; Detects a running previous instance (by matching the exe being replaced)
 ; and offers to close it before install -- this is also what powers the
 ; in-app self-update flow's /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS flags
