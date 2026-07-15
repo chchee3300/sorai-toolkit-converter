@@ -1,52 +1,40 @@
 # Claude 自動化測試指引 (FileConverterApp)
 
-## 核心規則：強制大範圍全類別測試 (Automatic Wide-Range Testing)
-在每次修改程式碼（尤其是 `main.js` 或 `index.html` 的核心邏輯）之後，Claude 必須確保「所有檔案類別」的轉換邏輯沒有因為程式碼的變動而被意外破壞（Regression）。
+## 核心規則：修改核心邏輯後強制全類別回歸測試
+修改轉檔相關程式碼後，必須確認以下 4 大類別都沒有被破壞：
 
-### 必須涵蓋的四個主要類別與核心參數：
-1. **Video (影片)**：格式切換 (MP4/WebM/GIF)、編碼器自動隱藏邏輯、FPS 計算、畫質壓縮、影片變速。
-2. **Image (圖片)**：格式切換 (JPG/PNG/WebP/AVIF)、Quality 品質控制 (需特別注意 PNG 的 `palettegen` 演算法是否正確觸發)、Scale 解析度縮放計算。
-3. **Audio (音訊)**：格式切換 (MP3/WAV/AAC/FLAC/OGG)、Bitrate 控制、音訊變速 (`atempo`)。
-4. **PDF (文件)**：最佳化模式 (Compress/Linearize) 與 `qpdf` 指令。
-5. **共用功能**：檔案大小的「即時預估算法」、轉檔進度條 (Progress Bar) 解析、以及「重複轉檔時的檔名防覆蓋機制 (`_converted_converted`)」。
+1. **Video**：格式切換 (MP4/WebM/GIF)、編碼器自動隱藏、FPS 計算、畫質壓縮、變速。
+2. **Image**：格式切換 (JPG/PNG/WebP/AVIF)、Quality（注意 PNG `palettegen` 是否正確觸發）、Scale 計算。
+3. **Audio**：格式切換 (MP3/WAV/AAC/FLAC/OGG)、Bitrate、變速 (`atempo`)。
+4. **PDF**：Compress/Linearize 模式與 `qpdf` 指令。
+5. **共用功能**：即時預估算法、進度條解析、檔名防覆蓋機制 (`_converted_converted`)。
 
-### Claude 執行動作：
-- **靜態分析**：在完成程式碼修改後，Claude 必須在輸出的思考過程中，主動追蹤上述 4 大類別的 `command` 生成邏輯是否依舊正確。
-- **測試清單 (Checklist)**：在回覆使用者時，主動列出上述 4 種格式的測試清單，請使用者確認是否正常運作，或者若情況允許，透過 CLI 輔助驗證底層的 `ffmpeg` 與 `qpdf` 參數是否合法。
+執行 `node tests/test_conversion.js`、`test_drop.js`、`test_crop_ui.js` 三個完整套件（不是只挑幾個 case）—— 這次 session 有兩次「看似無關的修改」（`defaultMode` 切換、update-toast 新增）意外讓其他套件出現真實 regression，回覆使用者時也要附上這份 checklist。
 
-## Commit 訊息規範 (Conventional Commits)
-本專案的版本號、CHANGELOG、GitHub Release 由 `semantic-release` 自動產生（見 `.releaserc.json` 與 `.github/workflows/release.yml`），**完全依賴 `master` 分支上的 commit 訊息格式**來判斷是否要發版、以及發版的類型。Claude 建立 commit 時必須使用 [Conventional Commits](https://www.conventionalcommits.org/) 格式：
+## Commit 規範：一定要用 Conventional Commits
+版本號/CHANGELOG/GitHub Release 全靠 `semantic-release`（`.releaserc.json` + `.github/workflows/release.yml`）自動判斷，**完全依賴 commit 訊息格式**：
+- `fix:` → patch，`feat:` → minor，`feat!:`/body 含 `BREAKING CHANGE:` → major
+- `chore:`/`docs:`/`refactor:`/`test:`/`style:` 或沒有前綴 → 不觸發發版（安全但代表這次修改不會被計入版本）
 
-- `fix: ...` → patch 版號
-- `feat: ...` → minor 版號
-- `feat!: ...` 或 commit body 含 `BREAKING CHANGE:` → major 版號
-- `chore:` / `docs:` / `refactor:` / `test:` / `style:` 等不會觸發發版
+## UI 視覺風格
+新增/修改 UI 前先看 `design-system/UI_STYLE_REFERENCE.md`（已對照 `resources/styles.css` 現況標註哪些原則已符合、哪些落差不必回頭改）。不要憑感覺發明新圓角值，也不要替非玻璃元件加陰影。
 
-沒有這個前綴的 commit（例如單純描述性的訊息）不會被 semantic-release 辨識，不會觸發任何版本異動 —— 這本身是安全的，但代表 Claude 若忘記加前綴，該次修改就不會被計入下一個版本。
+## Neutralino / 打包 / CI 常見誤區
+以下都是**在 `neu run` 開發模式測不出來、只有真正打包執行才會炸的坑**：
 
-## 打包與應用內更新
-- `packaging/{linux,windows,macos}/` 是各平台安裝檔的建置腳本（fpm 產生 .deb/.rpm、Inno Setup 產生 Windows 安裝精靈、hdiutil 產生 macOS .dmg）。修改 `binaries/` 的檔案佈局、`neu build` 的輸出結構、或 `NL_PATH` 相關的路徑解析邏輯時，必須同步檢查這些打包腳本是否還正確（尤其是 `platform.js` 的 `ffmpegPath`/`qpdfCommand` 系列函式與 packaging 腳本裡的路徑假設是否一致）。
-- `src/version.json` 是 `StatusBar.jsx`（畫面右下角版本號）與 `useUpdateChecker.js` 共用的版本來源。`scripts/write-version.mjs` 在 CI 建置時（每個 build-* job）覆寫它，**`release` job 現在也會在跑 `semantic-release` 之前呼叫一次**，讓 `@semantic-release/git`（`.releaserc.json` 的 `assets` 含 `src/version.json`）把正確版本號一起 commit 回 `chore(release): X.Y.Z` —— 這樣每次真的發版後，repo 裡的 `src/version.json` 才會跟著更新，而不是永遠停在建立當下的佔位符。修改 release pipeline 時，這個「release job 也要 write-version」的步驟不能拿掉，不然畫面上的版本號會一直卡在上一次手動設定的值。本地開發時請勿手動更動其值。
-- `src/hooks/useUpdateChecker.js` 會在啟動時打 GitHub API 檢查新版本 —— 修改 release assets 的檔名規則（`.releaserc.json` 的 assets glob）時，必須同步更新這裡的 `currentAssetPattern`/`pickAsset` 邏輯，否則應用內更新會抓不到正確的安裝檔。
-- `@neutralinojs/neu` **刻意鎖在 `11.7.1`**（`package.json` 的 `setup` script、`.github/workflows/release.yml` 三個 build job 都是）——`latest`（`11.7.2`）宣告的 `uuid` 依賴範圍會解析到一個 ESM-only 的版本，但它自己的程式碼還是用 CommonJS `require('uuid')`，導致全新安裝時直接 `ERR_REQUIRE_ESM` 崩潰。不要把這個版本號「升級」回 `latest`，除非先確認上游已修好。
-- Linux 的 `.deb`/`.rpm`（`packaging/linux/build.sh`）宣告了 `libgtk-3-0`/`libwebkit2gtk-4.1-0`（deb）與 `gtk3`/`webkit2gtk4.1`（rpm）作為套件依賴 —— Neutralino 在 Linux 上要靠這些函式庫才能開視窗，`ldd` 只會顯示 gtk3 是直接依賴（webkit2gtk 是透過 GTK widget factory 動態載入，`ldd` 看不到，但實際會用到）。修改打包腳本時別把這些依賴拿掉。
-- `playwright` 是 `devDependencies`（只有 `tests/*.js` 用得到），且 `.github/workflows/release.yml` 設了全域 `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'`——沒有這個，每個 job 的 `npm ci` 都會下載瀏覽器執行檔（數百 MB），曾經因此在 macOS runner 上把硬碟空間耗盡，導致 `hdiutil create` 失敗（`No space left on device`）。不要把 `playwright` 移回 `dependencies`，也不要把這個 env var 拿掉。
-- `setup.mjs`/CI 解壓縮 zip 時**不要假設裸指令 `tar` 支援 zip**——這個坑踩過兩次：Windows 上 Git Bash 的 `/usr/bin/tar`（GNU tar，不支援 zip）會蓋過真正支援 zip 的 `System32\tar.exe`（bsdtar），必須用完整路徑指定；Linux（包含 ubuntu-latest CI runner）預設的 `tar` 也是不支援 zip 的 GNU tar。現在的作法是 Windows 用完整路徑的 `System32\tar.exe`，macOS/Linux 一律用 `unzip`（標準、幾乎必定預裝的工具）。不要「簡化」回單純呼叫 `tar`。
-
-## UI 視覺風格參考
-新增或修改 UI 元件時，先看 `design-system/UI_STYLE_REFERENCE.md`（Liquid Glass × Digital 風格指南的本專案精簡版，已對照 `resources/styles.css` 實際狀態標註哪些原則已符合、哪些是既有落差不必回頭改）。不要憑感覺發明新的圓角值或替非玻璃元件加陰影——這兩點正是該指南特別點名要避免的既有落差。
-
-## Neutralino 設定檔 (`neutralino.config.json`) 關鍵注意事項
-這幾個設定值有非常隱蔽的失敗模式（改壞了在 `neu run` 開發模式下完全测不出來，只有實際打包後的版本才會出問題）：
-
-- **`cli.resourcesPath` 必須等於 `documentRoot`**（目前都是 `/web-dist/`）。`neu build` 只會把 `resourcesPath` 指到的資料夾打包進 `resources.neu`/`--embed-resources`，但實際提供網頁內容的是 `documentRoot`。這兩個值曾經不一致過（`resourcesPath` 錯指到 `/resources/`），造成**每一個打包版本開啟後都是 404** —— `neu run` 因為用 `--load-dir-res` 直接讀硬碟所以完全不會發現這個問題，只有透過 `neu build --release` 實際包出來執行才測得到。改動這兩個設定任何一個時，必須真的建置一份 release 版本並實際執行、curl 內部 server 確認回 200，不能只跑 `neu run`/Playwright 測試。
-- **`defaultMode` 必須是 `"window"`**，不能是 `"browser"`（Neutralino 專案樣板的預設值，之前不小心留著沒改）。設成 `"browser"` 的話，使用者點開安裝好的 App 會跳出系統瀏覽器分頁，而不是獨立的原生視窗。
-- **`modes.window.enableInspector` 必須是 `false`**（正式版不應該讓使用者看得到/開得了 DevTools）。這個設定不影響 Playwright 測試——測試是用獨立的 Chromium 連到 app 的 localhost server，跟這個視窗本身的 inspector 開關無關。
-- **`main.jsx` 必須註冊 `windowClose` 事件監聽器並呼叫 `Neutralino.app.exit()`**。window 模式的 `exitProcessOnClose` 設成 `false`（見上一條的 `defaultMode`），這代表 Neutralino 會攔截視窗右上角的關閉按鈕、改成觸發 `windowClose` 事件，而不是直接關閉——沒有監聽器的話，點關閉按鈕完全沒反應，process 會一直留在背景。這個問題存在了一整個 session 都沒被發現，因為開發時都是用 `taskkill` 強制關閉測試用的 process，從來沒有真的測過「使用者點 X 關閉視窗」這個路徑。
-- **不要用瀏覽器 `fetch()` 下載 GitHub Release 的 asset**（`useUpdateChecker.js` 的 `downloadFile`）。`api.github.com` 的 API 本身有開放 CORS，但 release asset 實際下載會 redirect 到 GitHub 的 CDN，那邊**沒有**回 `Access-Control-Allow-Origin`，導致 webview 內的 `fetch()` 直接被瀏覽器擋掉（`TypeError: Failed to fetch`），使用者點「Update now」會看起來完全沒反應。目前改用 `Neutralino.os.execCommand` 呼叫 `curl`（Windows/macOS/Linux 都內建或幾乎必定存在）繞過 webview 的 CORS 限制，不要又改回 `fetch()`。因為改用 `execCommand`（一次等到完成，不是串流），也拿不到即時下載百分比了，UI 上是不確定進度條（`.progress-bar--indeterminate`），不是 bug。
-- `neu update` 會把 client library 直接寫到 `web-dist/js/neutralino.js`（照 `clientLibrary` 設定），但 `vite.config.mjs` 的複製 plugin 是從 `resources/js/neutralino.js`（gitignored）讀「唯一正確來源」再複製回 `web-dist/`——這兩個路徑不一樣，且 vite build 的 `emptyOutDir` 會把 `web-dist/` 清空。全新 checkout 後必須先跑 `node scripts/copy-neutralino-client.mjs`（`npm run setup`/CI 都已經接好這步），否則 `npm run build` 會因為找不到 `resources/js/neutralino.js` 直接失敗。
-
-## 測試與 UI 補充注意事項
-- `defaultMode` 從 `"browser"` 換成 `"window"` 後，`useFileManager.js` 的 `onDrop`（DOM drop fallback）在 `NL_MODE === 'window'` 時會直接 return（真正的原生拖放走 `filesDropped` event）。`tests/test_drop.js` 的「Test B: browser-mode DOM drop fallback」因此需要在觸發 drop 事件前手動把 `window.NL_MODE` 設回 `'browser'` 才測得到那條路徑——修改 `onDrop`/drop 相關邏輯時要留意這個測試的特殊處理，不要以為它測的是目前預設模式的行為。
-- `.update-toast`（`src/components/UpdateBanner.jsx`）的 z-index **必須小於** `.modal-overlay`（100）——目前是 90。曾經設成 200（比 modal 高）導致有更新通知時，toast 會蓋在 Trim/Crop/MixedType 等 modal 上面並吃掉點擊事件。開著的 modal 應該要蓋住/擋住 toast，反過來就是 bug。
-- 每次修改核心轉檔邏輯或共用 UI 元件後，除了跑本節開頭的 4 大類別 checklist，也要重新跑一次 `node tests/test_conversion.js`、`test_drop.js`、`test_crop_ui.js` 三個完整套件（不是只挑幾個 case），因為這次 session 有兩次是「看似無關的修改」（`defaultMode` 切換、update-toast 新增）意外讓其他測試套件出現真實的 regression。
+- **`neutralino.config.json` 的 `cli.resourcesPath` 必須等於 `documentRoot`**（現在都是 `/web-dist/`）。`neu build` 只打包 `resourcesPath` 指到的資料夾，但真正 serve 內容的是 `documentRoot`——不一致會讓每個打包版本開啟後都是 404。改動後必須真的 `neu build --release` 執行、curl 內部 server 確認 200，不能只跑 `neu run`。
+- **`defaultMode` 必須是 `"window"`**，不是 Neutralino 樣板預設的 `"browser"`，否則開啟安裝好的 App 會跳系統瀏覽器而不是原生視窗。
+- **`modes.window.enableInspector` 必須是 `false`**（正式版不該讓使用者開得了 DevTools；不影響 Playwright，那是走獨立 Chromium 連 localhost）。
+- **`main.jsx` 必須監聽 `windowClose` 並呼叫 `Neutralino.app.exit()`**。`exitProcessOnClose: false` 讓 Neutralino 攔截視窗關閉鈕、改觸發 `windowClose` 事件——沒監聽的話點 X 完全沒反應、process 留在背景。（此問題整個 session 沒被發現，因為開發測試都用 `taskkill` 強制關閉，從沒測過真的點 X。）
+- **`useUpdateChecker.js` 下載 release asset 不能用瀏覽器 `fetch()`**——`api.github.com` 有開 CORS，但 asset 實際下載會 redirect 到 GitHub CDN，那邊沒有 `Access-Control-Allow-Origin`，`fetch()` 會被擋掉（點 Update now 沒反應）。改用 `Neutralino.os.execCommand` 呼叫 `curl`。副作用：拿不到即時下載百分比，UI 用不確定進度條（`.progress-bar--indeterminate`），不是 bug。
+- **`installer.iss` 的 `[Run]` postinstall 項目不能有 `skipifsilent`**。應用內更新是用 `/VERYSILENT` 跑安裝檔，`skipifsilent` 會讓這個「安裝完自動開啟」的項目完全不執行——實測過：拿掉 `skipifsilent` 前，`/CLOSEAPPLICATIONS` 有正確關掉舊的 process，但裝完後**完全沒有自動重開**；拿掉之後才會自動重開（用真的裝著、真的在跑的 app 測試 `/CLOSEAPPLICATIONS /RESTARTAPPLICATIONS` 兩個旗標確認過）。命令列的 `/RESTARTAPPLICATIONS` 旗標本身沒有實際作用，重開是靠這個 `[Run]` 項目。
+- **全新 checkout 後必須跑 `node scripts/copy-neutralino-client.mjs`**（`npm run setup`/CI 已接好）。`neu update` 把 client library 寫到 `web-dist/js/neutralino.js`，但 `vite.config.mjs` 的複製 plugin 是從 `resources/js/neutralino.js`（gitignored）讀取——兩個路徑不同，且 vite build 會清空 `web-dist/`，不跑這步 `npm run build` 會直接失敗。
+- **`.update-toast` 的 z-index 必須小於 `.modal-overlay`**（100；目前 90）。曾設成 200 導致更新通知蓋住 Trim/Crop/MixedType modal 並吃掉點擊——開著的 modal 應該蓋住 toast，不是反過來。
+- **`defaultMode` 換成 `"window"` 後**，`useFileManager.js` 的 `onDrop`（瀏覽器模式 DOM drop fallback）在 `NL_MODE === 'window'` 時會直接 return（原生拖放走 `filesDropped`）。`tests/test_drop.js` 的「Test B」因此需要手動把 `window.NL_MODE` 設回 `'browser'` 才測得到——修改 drop 邏輯時留意這個測試的特殊處理。
+- **`src/version.json`** 是 `StatusBar.jsx`（畫面版本號）與 `useUpdateChecker.js` 的版本來源。CI 的 `release` job 會在跑 `semantic-release` 前呼叫 `write-version.mjs`，讓 `@semantic-release/git` 把正確版本一起 commit 回 `chore(release): X.Y.Z`——這步不能拿掉，否則版本號會卡死。本地開發勿手動改值。
+- **`useUpdateChecker.js` 的 `currentAssetPattern`/`pickAsset`** 要跟 `.releaserc.json` 的 assets 檔名規則同步，改一邊沒改另一邊，應用內更新會抓不到安裝檔。
+- **`@neutralinojs/neu` 鎖死在 `11.7.1`**（`package.json` setup script + 3 個 release build job）。`latest`（11.7.2）的 `uuid` 依賴會解析到 ESM-only 版本，但它自己用 CommonJS `require`，全新安裝直接 `ERR_REQUIRE_ESM` 崩潰。不要升級，除非確認上游修好。
+- **Linux `.deb`/`.rpm`（`packaging/linux/build.sh`）宣告 `gtk3`/`webkit2gtk` 依賴**（deb: `libgtk-3-0`/`libwebkit2gtk-4.1-0`；rpm: `gtk3`/`webkit2gtk4.1`）——Neutralino 開視窗需要，`ldd` 只看得到 gtk3（webkit2gtk 是動態載入）。別拿掉。
+- **`playwright` 必須是 `devDependencies`**，且 CI 全域設 `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'`——沒有的話每個 job 的 `npm ci` 都會下載瀏覽器（數百 MB），曾在 macOS runner 上因此炸硬碟（`hdiutil: No space left on device`）。
+- **解壓縮 zip 不能假設裸指令 `tar` 支援**（踩過兩次：Git Bash 的 `/usr/bin/tar` 蓋過真正支援 zip 的 `System32\tar.exe`；Ubuntu CI runner 的預設 tar 也不支援 zip）。Windows 用完整路徑 `System32\tar.exe`，macOS/Linux 一律用 `unzip`。
+- **修改 `binaries/` 佈局、`neu build` 輸出結構、或 `NL_PATH` 路徑解析邏輯時**，同步檢查 `packaging/{linux,windows,macos}/` 建置腳本與 `platform.js` 的 `ffmpegPath`/`qpdfCommand` 是否還一致。

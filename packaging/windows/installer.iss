@@ -60,4 +60,10 @@ Name: "{group}\Uninstall SORAI Toolkit"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\SORAI Toolkit"; Filename: "{app}\sorai-toolkit.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\sorai-toolkit.exe"; Description: "Launch SORAI Toolkit"; Flags: nowait postinstall skipifsilent
+; No `skipifsilent` -- the in-app auto-update flow (useUpdateChecker.js)
+; runs this installer with /VERYSILENT, and needs the app to relaunch
+; automatically afterward with no one watching a wizard to click a
+; "launch now" checkbox. This does mean a manual /VERYSILENT install
+; (not just the auto-updater) also auto-launches after finishing --
+; intentional, since that's the only other way this installer runs silently.
+Filename: "{app}\sorai-toolkit.exe"; Description: "Launch SORAI Toolkit"; Flags: nowait postinstall
