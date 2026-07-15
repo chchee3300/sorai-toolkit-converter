@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=SORAI Toolkit
+Comment=Convert video, image, audio, and PDF files locally
+Exec=sorai-toolkit
+Icon=sorai-toolkit
+Terminal=false
+Categories=Utility;AudioVideo;Graphics;

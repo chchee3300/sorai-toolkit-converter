@@ -73,6 +73,24 @@ node tests/test_drop.js         # file drag-and-drop behavior
 
 Both drive the real app end-to-end via Playwright and a `neu run` instance, so they must be run from the project root (they resolve `binaries/`, `.tmp/`, and `neutralino.config.json` relative to it). Fixtures live in `tests/fixtures/`.
 
+## Releases
+
+Versioning and GitHub Releases are automated with [semantic-release](https://semantic-release.gitbook.io/), driven by [Conventional Commits](https://www.conventionalcommits.org/) on `master`:
+
+- `fix: ...` → patch release
+- `feat: ...` → minor release
+- `feat: ...` + a `BREAKING CHANGE:` footer (or `!` after the type, e.g. `feat!: ...`) → major release
+- Other prefixes (`chore:`, `docs:`, `refactor:`, `test:`, etc.) don't trigger a release
+
+Every push to `master` runs `.github/workflows/release.yml`, which:
+1. Computes whether a release is warranted and, if so, the next version (`scripts/get-next-version.mjs`, semantic-release in dry-run).
+2. Builds and packages all platforms in parallel: `.deb`/`.rpm` (Linux, via [fpm](https://fpm.readthedocs.io/)), `.zip` (Windows), and `.zip` ×2 for macOS (Intel + Apple Silicon).
+3. Publishes the GitHub Release with those packages attached, and updates `CHANGELOG.md`.
+
+No manual version bumping or tagging — the version number lives entirely in git tags/GitHub Releases, driven by commit messages.
+
+To build a Linux package locally without CI: `neu build --release --embed-resources`, then `bash packaging/linux/build.sh <version>` (needs [fpm](https://fpm.readthedocs.io/en/latest/installing.html) and `rpmbuild` installed). Windows/macOS have equivalent `packaging/windows/build.ps1` / `packaging/macos/build.sh` scripts.
+
 ## License
 
 [MIT](LICENSE)

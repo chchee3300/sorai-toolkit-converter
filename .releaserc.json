@@ -1,0 +1,27 @@
+{
+  "branches": ["master"],
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    "@semantic-release/changelog",
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          { "path": "release-assets/*.deb", "label": "Linux .deb (Ubuntu/Debian, x86_64)" },
+          { "path": "release-assets/*.rpm", "label": "Linux .rpm (Fedora, x86_64)" },
+          { "path": "release-assets/*win_x64.zip", "label": "Windows (x86_64)" },
+          { "path": "release-assets/*mac_x64.zip", "label": "macOS (Intel)" },
+          { "path": "release-assets/*mac_arm64.zip", "label": "macOS (Apple Silicon)" }
+        ]
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["CHANGELOG.md"],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ]
+  ]
+}

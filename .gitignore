@@ -17,8 +17,11 @@
 # Vite build output (Phase 1 scaffold — distinct from Neutralino's own /dist)
 /web-dist
 
-# Third-party executables fetched by setup.ps1 (ffmpeg, qpdf, etc.) — too large for GitHub
+# Third-party executables fetched by setup.mjs (ffmpeg, qpdf, etc.) — too large for GitHub
 /binaries
+
+# CI packaging output (packaging/*/build.sh, packaging/windows/build.ps1)
+/release-assets
 
 # Neutralinojs client (minified)
 neutralino.js

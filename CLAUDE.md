@@ -13,3 +13,13 @@
 ### Claude 執行動作：
 - **靜態分析**：在完成程式碼修改後，Claude 必須在輸出的思考過程中，主動追蹤上述 4 大類別的 `command` 生成邏輯是否依舊正確。
 - **測試清單 (Checklist)**：在回覆使用者時，主動列出上述 4 種格式的測試清單，請使用者確認是否正常運作，或者若情況允許，透過 CLI 輔助驗證底層的 `ffmpeg` 與 `qpdf` 參數是否合法。
+
+## Commit 訊息規範 (Conventional Commits)
+本專案的版本號、CHANGELOG、GitHub Release 由 `semantic-release` 自動產生（見 `.releaserc.json` 與 `.github/workflows/release.yml`），**完全依賴 `master` 分支上的 commit 訊息格式**來判斷是否要發版、以及發版的類型。Claude 建立 commit 時必須使用 [Conventional Commits](https://www.conventionalcommits.org/) 格式：
+
+- `fix: ...` → patch 版號
+- `feat: ...` → minor 版號
+- `feat!: ...` 或 commit body 含 `BREAKING CHANGE:` → major 版號
+- `chore:` / `docs:` / `refactor:` / `test:` / `style:` 等不會觸發發版
+
+沒有這個前綴的 commit（例如單純描述性的訊息）不會被 semantic-release 辨識，不會觸發任何版本異動 —— 這本身是安全的，但代表 Claude 若忘記加前綴，該次修改就不會被計入下一個版本。
