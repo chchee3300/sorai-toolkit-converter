@@ -161,6 +161,13 @@ jobs:
           pattern: '*-packages'
           merge-multiple: true
       - run: ls -la release-assets
+      # Writes the real version into src/version.json in *this* checkout so
+      # @semantic-release/git (see .releaserc.json) commits it back to the
+      # repo as part of the "chore(release)" commit -- otherwise the
+      # committed file stays at whatever placeholder it last had, and the
+      # StatusBar version display / useUpdateChecker.js's baseline never
+      # reflects the actual last release.
+      - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
       - run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
