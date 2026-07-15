@@ -175,7 +175,6 @@ async function main() {
         console.log('\n--- VIDEO ---');
         await dropFile(page, fixtures.video);
         check('V0: settings panel shows video settings', await page.$eval('#video-settings', el => !el.classList.contains('hidden')));
-        check('V0b: type badge says Video', (await page.$eval('#type-badge', el => el.textContent)) === 'Video');
         const vEstBefore = await page.$eval('#file-est-0', el => el.innerHTML);
         check('V1: live size estimate shown before conversion', vEstBefore.includes('→ ~'), vEstBefore);
 

@@ -1,12 +1,10 @@
-import versionInfo from '../version.json'
-
 // Ported unchanged from resources/index.html:247-252 (markup) and
 // main.js's setStatus(text, state) (main.js:207-216 pre-extraction):
 // state is 'ready' | 'busy' | 'error', mapped to the same dot class names.
-// versionInfo comes from src/version.json -- see useUpdateChecker.js for
-// the other consumer. Kept current by the release pipeline itself: the
-// "chore(release)" commit (.releaserc.json's @semantic-release/git assets)
-// commits the real version back here, not just an in-CI ephemeral write.
+// The app-version display that used to live here moved to the hub repo's
+// Header.jsx during the multi-repo restructure -- version is a shell-level
+// concern (the hub's own release version), not something this per-tool
+// component should own or need its own version.json for.
 export default function StatusBar({ text = 'Ready', state = 'ready' }) {
   const dotClass =
     state === 'busy'
@@ -19,8 +17,6 @@ export default function StatusBar({ text = 'Ready', state = 'ready' }) {
     <footer className="statusbar">
       <span className={dotClass} id="statusbar-dot"></span>
       <span className="statusbar-text" id="status-text" role="status" aria-live="polite">{text}</span>
-      <span className="statusbar-sep"></span>
-      <span className="statusbar-version">v{versionInfo.version}</span>
     </footer>
   )
 }

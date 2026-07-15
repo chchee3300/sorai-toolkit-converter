@@ -40,8 +40,15 @@ if (window.Neutralino) {
   })
 }
 
+// App.jsx no longer provides its own .app-shell grid wrapper -- that div
+// (header|main|statusbar 3-row grid) is the hub's job when this component
+// is consumed as a library (ConverterApp renders straight into the hub's
+// own .app-shell). This standalone dev-harness entry point provides it
+// directly so `neu run` here still lays out correctly in isolation.
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <div className="app-shell">
+      <App />
+    </div>
   </StrictMode>,
 )

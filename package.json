@@ -1,10 +1,26 @@
 {
+  "name": "sorai-toolkit-converter",
+  "version": "0.0.0",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:lib": "vite build --config vite.lib.config.mjs",
+    "prepare": "npm run build:lib",
     "preview": "vite preview",
     "release": "semantic-release",
     "setup": "npm install -g @neutralinojs/neu@11.7.1 && neu update && node scripts/copy-neutralino-client.mjs && node setup.mjs"
+  },
+  "peerDependencies": {
+    "react": "^19",
+    "react-dom": "^19"
   },
   "dependencies": {
     "react": "^19.2.7",

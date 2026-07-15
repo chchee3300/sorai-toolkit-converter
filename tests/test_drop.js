@@ -195,17 +195,21 @@ async function main() {
         // "Keep current files" leaves the existing batch untouched.
         await page.click('#btn-mixed-type-cancel');
         await page.waitForFunction(() => document.getElementById('mixed-type-modal').classList.contains('hidden'), { timeout: 5000 });
-        const typeBadgeD1 = await page.$eval('#type-badge', el => el.textContent);
-        const itemCountD2 = await page.$$eval('#file-list .file-item', els => els.length);
-        check('D3: declining keeps the original file/type untouched', typeBadgeD1 === 'Image' && itemCountD2 === 1, typeBadgeD1 + ' / ' + itemCountD2);
+        const itemsD1 = await page.$$eval('#file-list .file-item', els => els.map(el => el.innerText));
+        check('D3: declining keeps the original file/type untouched', itemsD1.length === 1 && !itemsD1[0].includes('.mp4'), itemsD1);
 
         // "Clear & load" swaps the batch to the new type.
         await page.evaluate(p => Neutralino.events.dispatch('filesDropped', [p]), VIDEO_FIXTURE);
         await page.waitForSelector('#mixed-type-modal:not(.hidden)', { timeout: 5000 });
         await page.click('#btn-mixed-type-confirm');
         await page.waitForFunction(() => document.getElementById('mixed-type-modal').classList.contains('hidden'), { timeout: 5000 });
-        // loadFiles' getMediaInfo probe is a real ffmpeg.exe subprocess call.
-        await page.waitForFunction(() => document.getElementById('type-badge').textContent === 'Video', { timeout: 15000 });
+        // loadFiles' getMediaInfo probe is a real ffmpeg.exe subprocess call --
+        // wait for the new file to actually appear (not just the modal
+        // closing) before asserting on the list contents below.
+        await page.waitForFunction(
+          () => document.querySelector('#file-list .file-item')?.innerText.includes('test_fixture_video.mp4'),
+          { timeout: 15000 },
+        );
         const itemsD3 = await page.$$eval('#file-list .file-item', els => els.map(el => el.innerText));
         check('D4: confirming clears the old batch and loads the new type', itemsD3.length === 1 && itemsD3[0].includes('test_fixture_video.mp4'), itemsD3);
 

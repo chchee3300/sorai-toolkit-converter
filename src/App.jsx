@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import Header from './components/Header.jsx'
 import StatusBar from './components/StatusBar.jsx'
 import DropZone from './components/DropZone.jsx'
 import FileList from './components/FileList.jsx'
@@ -9,12 +8,9 @@ import ProgressLog from './components/ProgressLog.jsx'
 import MixedTypeModal from './components/MixedTypeModal.jsx'
 import TrimModal from './components/TrimModal.jsx'
 import CropModal from './components/CropModal.jsx'
-import UpdateBanner from './components/UpdateBanner.jsx'
-import { useTheme } from './hooks/useTheme.js'
 import { useFileManager } from './hooks/useFileManager.js'
 import { useSettings } from './hooks/useSettings.js'
 import { useExecute } from './hooks/useExecute.js'
-import { useUpdateChecker } from './hooks/useUpdateChecker.js'
 
 // Ported from resources/index.html:42-46 (loading overlay markup).
 function LoadingOverlay({ visible }) {
@@ -26,10 +22,19 @@ function LoadingOverlay({ visible }) {
   )
 }
 
+// This is the Converter tool's own content -- no <Header>, no useTheme()/
+// useUpdateChecker() here. Those became shell/hub-level concerns during
+// the multi-repo restructure (see the sorai-toolkit hub repo's App.jsx):
+// the hub renders a persistent header (with a hamburger menu covering
+// navigation + theme toggle) around whichever tool is active, and self-
+// update-checking is a shell-level concern, not per-tool. When this repo
+// is consumed as a library by the hub (src/index.js), `App` is exported
+// as `ConverterApp` and rendered inside the hub's own layout. Standalone
+// (`neu run` in this repo directly, via src/main.jsx) it's the same
+// component with no surrounding chrome -- fine for isolated dev/testing of
+// conversion behavior, which is what this dev harness is for.
 function App() {
-  const { toggleTheme } = useTheme()
   const settings = useSettings()
-  const updateChecker = useUpdateChecker()
 
   const {
     files,
@@ -97,8 +102,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
-      <Header fileType={fileType} onToggleTheme={toggleTheme} />
+    <>
       <main className="main" id="main-content">
         <LoadingOverlay visible={loading} />
 
@@ -172,14 +176,7 @@ function App() {
         onConfirm={confirmClearAndLoad}
         onCancel={cancelPendingMismatch}
       />
-      <UpdateBanner
-        status={updateChecker.status}
-        latestRelease={updateChecker.latestRelease}
-        updateError={updateChecker.updateError}
-        onInstall={updateChecker.installUpdate}
-        onDismiss={updateChecker.dismiss}
-      />
-    </div>
+    </>
   )
 }
 
