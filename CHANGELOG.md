@@ -1,3 +1,10 @@
+## [0.2.7](https://github.com/chchee3300/FileConverterApp/compare/v0.2.6...v0.2.7) (2026-07-15)
+
+
+### Bug Fixes
+
+* installer never auto-restarted the app after a silent update ([1fe22d1](https://github.com/chchee3300/FileConverterApp/commit/1fe22d1acaafe1c37e75426acd415bbd46ff36dd))
+
 ## [0.2.6](https://github.com/chchee3300/FileConverterApp/compare/v0.2.5...v0.2.6) (2026-07-15)
 
 
