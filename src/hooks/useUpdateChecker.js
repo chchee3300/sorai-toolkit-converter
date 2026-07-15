@@ -43,25 +43,18 @@ function pickAsset(assets) {
   return (assets || []).find((a) => pattern.test(a.name)) || null
 }
 
-async function downloadWithProgress(url, destPath, onProgress) {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`Download failed (HTTP ${res.status})`)
-  const total = Number(res.headers.get('content-length')) || 0
-  const reader = res.body.getReader()
-  let received = 0
-  let wroteFirstChunk = false
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    const chunk = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)
-    if (!wroteFirstChunk) {
-      await window.Neutralino.filesystem.writeBinaryFile(destPath, chunk)
-      wroteFirstChunk = true
-    } else {
-      await window.Neutralino.filesystem.appendBinaryFile(destPath, chunk)
-    }
-    received += value.byteLength
-    if (total && onProgress) onProgress(Math.round((received / total) * 100))
+// GitHub's release-asset CDN (the redirect target of browser_download_url)
+// doesn't send Access-Control-Allow-Origin, so a browser-side fetch() from
+// this app's own http://localhost origin is blocked by CORS before a byte
+// of the body is ever readable -- confirmed via a real download attempt
+// (TypeError: Failed to fetch). curl runs outside the webview entirely, so
+// it isn't subject to that restriction. This is why checkForUpdate's fetch
+// to api.github.com still works fine (that endpoint *does* send permissive
+// CORS headers) while downloading the actual asset never could.
+async function downloadFile(url, destPath) {
+  const res = await window.Neutralino.os.execCommand(`curl -sL -o "${destPath}" "${url}"`)
+  if (res.exitCode !== 0) {
+    throw new Error(`Download failed (curl exit ${res.exitCode}): ${(res.stdErr || res.stdOut || '').slice(0, 300)}`)
   }
 }
 
@@ -76,7 +69,6 @@ async function downloadWithProgress(url, destPath, onProgress) {
 export function useUpdateChecker() {
   const [status, setStatus] = useState('idle') // idle | checking | available | none | error | downloading | downloaded | installing
   const [latestRelease, setLatestRelease] = useState(null)
-  const [downloadPercent, setDownloadPercent] = useState(0)
   const [updateError, setUpdateError] = useState(null)
 
   const checkForUpdate = useCallback(async () => {
@@ -106,7 +98,6 @@ export function useUpdateChecker() {
   const installUpdate = useCallback(async () => {
     if (!latestRelease) return
     setUpdateError(null)
-    setDownloadPercent(0)
     setStatus('downloading')
     try {
       const asset = pickAsset(latestRelease.assets)
@@ -114,7 +105,7 @@ export function useUpdateChecker() {
 
       const downloadsDir = await window.Neutralino.os.getPath('downloads')
       const destPath = window.EstellaLib.platform.joinPath(downloadsDir, asset.name)
-      await downloadWithProgress(asset.browser_download_url, destPath, setDownloadPercent)
+      await downloadFile(asset.browser_download_url, destPath)
 
       if (window.EstellaLib.platform.isWindows()) {
         setStatus('installing')
@@ -139,7 +130,6 @@ export function useUpdateChecker() {
     currentVersion: versionInfo.version,
     status,
     latestRelease,
-    downloadPercent,
     updateError,
     installUpdate,
     dismiss,

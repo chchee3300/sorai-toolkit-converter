@@ -29,6 +29,15 @@ import '../resources/js/lib/size-estimate.js'
 // when this becomes fully testable end-to-end.
 if (window.Neutralino) {
   window.Neutralino.init()
+  // neutralino.config.json's window mode sets exitProcessOnClose: false,
+  // which makes Neutralino intercept the window's close button and emit
+  // 'windowClose' instead of actually closing anything -- without a
+  // listener that calls app.exit(), clicking the close button does
+  // nothing at all (the window won't close, and the process is left
+  // running in the background).
+  window.Neutralino.events.on('windowClose', () => {
+    window.Neutralino.app.exit()
+  })
 }
 
 createRoot(document.getElementById('root')).render(

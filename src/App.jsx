@@ -175,7 +175,6 @@ function App() {
       <UpdateBanner
         status={updateChecker.status}
         latestRelease={updateChecker.latestRelease}
-        downloadPercent={updateChecker.downloadPercent}
         updateError={updateChecker.updateError}
         onInstall={updateChecker.installUpdate}
         onDismiss={updateChecker.dismiss}

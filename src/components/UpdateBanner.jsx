@@ -4,7 +4,7 @@
 // in-progress conversion or settings edit. See useUpdateChecker.js for the
 // status machine (idle/checking/available/downloading/installing/
 // downloaded/error/none) and the Windows-vs-macOS/Linux install split.
-export default function UpdateBanner({ status, latestRelease, downloadPercent, updateError, onInstall, onDismiss }) {
+export default function UpdateBanner({ status, latestRelease, updateError, onInstall, onDismiss }) {
   if (status === 'idle' || status === 'checking' || status === 'none') return null
 
   const version = latestRelease?.tag_name?.replace(/^v/, '')
@@ -14,10 +14,14 @@ export default function UpdateBanner({ status, latestRelease, downloadPercent, u
       {status === 'available' && (
         <>
           <div className="update-toast-title">Update available — v{version}</div>
-          {latestRelease?.name && <div className="update-toast-body">{latestRelease.name}</div>}
+          {updateError ? (
+            <div className="update-toast-body">Update failed: {updateError}</div>
+          ) : (
+            latestRelease?.name && <div className="update-toast-body">{latestRelease.name}</div>
+          )}
           <div className="update-toast-actions">
             <button className="btn btn-ghost btn-xs" onClick={onDismiss}>Later</button>
-            <button className="btn btn-primary btn-xs" onClick={onInstall}>Update now</button>
+            <button className="btn btn-primary btn-xs" onClick={onInstall}>{updateError ? 'Try again' : 'Update now'}</button>
           </div>
         </>
       )}
@@ -26,7 +30,7 @@ export default function UpdateBanner({ status, latestRelease, downloadPercent, u
         <>
           <div className="update-toast-title">Downloading v{version}…</div>
           <div className="progress-track">
-            <div className="progress-bar" style={{ width: `${downloadPercent}%` }} />
+            <div className="progress-bar progress-bar--indeterminate" />
           </div>
         </>
       )}

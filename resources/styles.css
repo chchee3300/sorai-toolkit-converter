@@ -978,6 +978,19 @@ select.input { display: none; }
   letter-spacing: 0.04em;
 }
 
+/* Update download has no real percentage (curl runs opaquely via
+   execCommand, see useUpdateChecker.js) -- a sliding indeterminate bar
+   instead of a fake/stuck percentage. */
+.progress-bar--indeterminate {
+  width: 40% !important;
+  animation: progress-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
 .terminal {
   background: var(--surface-0);
   color: #6db87a;
