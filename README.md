@@ -1,6 +1,6 @@
-# FileConverterApp
+# sorai-toolkit-converter
 
-A desktop file converter for video, image, audio, and PDF files, built with [Neutralino.js](https://neutralino.js.org/) and React. Drag files in, tweak per-format settings, and convert locally — no upload, no cloud processing.
+The **Converter tool** for [SORAI Toolkit](https://github.com/chchee3300/sorai-toolkit) — convert video, image, audio, and PDF files locally, no upload, no cloud processing. This repo is consumed by the [`sorai-toolkit`](https://github.com/chchee3300/sorai-toolkit) hub repo as an npm git dependency; it is **not** independently installable or shippable — the hub is the actual installable app.
 
 ## Features
 
@@ -9,36 +9,30 @@ A desktop file converter for video, image, audio, and PDF files, built with [Neu
 - **Audio** — convert between MP3 / WAV / AAC / FLAC / OGG, with bitrate control, trimming, and speed change (`atempo`).
 - **PDF** — optimize with linearize or compress modes.
 - Live file-size estimation before you convert, batch conversion with a progress log, and automatic filename collision avoidance (`_converted`, `_converted_converted`, …) so re-running a conversion never overwrites the previous output.
-- Checks for updates on launch and offers a one-click install of new versions on Windows (see [Releases](#releases)).
-
-## Installation
-
-Pick one:
-
-- **Download a pre-built package** — grab the file for your OS from the [latest release](https://github.com/chchee3300/FileConverterApp/releases/latest):
-  - **Windows** — `sorai-toolkit-setup-*-win_x64.exe`. Run it; the installer asks for a destination folder and whether to add a Start Menu shortcut.
-  - **macOS** — `sorai-toolkit-*-mac_x64.dmg` (Intel) or `*-mac_arm64.dmg` (Apple Silicon). Open it and drag the app into Applications. These builds aren't code-signed, so the first launch needs right-click → Open (or System Settings → Privacy & Security → "Open Anyway") to get past Gatekeeper.
-  - **Linux** — `sorai-toolkit_*_amd64.deb` (`sudo apt install ./sorai-toolkit_*_amd64.deb`) or `sorai-toolkit-*.x86_64.rpm` (`sudo dnf install ./sorai-toolkit-*.x86_64.rpm`). Both declare their own `qpdf`/`gtk3`/`webkit2gtk` dependencies, so the package manager pulls those in automatically.
-- **Build it yourself from source** — see [Setup](#setup) below. Useful if you want to modify the app, or your platform/architecture isn't covered by the prebuilt packages.
 
 ## How it works
 
 The UI (React + Vite, in `src/`) runs inside a [Neutralino.js](https://neutralino.js.org/) shell, which gives it native filesystem access and the ability to spawn local command-line tools. Conversions are performed by:
 
-- [`ffmpeg`](https://ffmpeg.org/) — video, image, and audio conversion. Bundled on every platform, no separate install needed.
+- [`ffmpeg`](https://ffmpeg.org/) — video, image, and audio conversion.
 - [`qpdf`](https://qpdf.readthedocs.io/) — PDF optimization. Bundled on Windows; on macOS/Linux it's a system-installed dependency (`brew`/`apt`/etc.).
 - [`img2pdf`](https://gitlab.mister-muffin.de/josch/img2pdf) — image-to-PDF conversion. Bundled on Windows; on macOS/Linux it's a system-installed dependency (`pip`).
 
-These live in per-platform folders under `binaries/` (`win_x64/`, `mac_x64/`, `mac_arm64/`, `linux_x64/`), fetched by `setup.mjs` (see [Setup](#setup)).
+When composed into the hub, the hub itself provides these binaries and the runtime globals that call into them (`window.EstellaLib.*`, see `resources/js/lib/`) — this repo's own copy of that infrastructure only exists for its **standalone dev harness** (see below), and is not part of what ships to the hub.
+
+## This repo's two build outputs
+
+- **Library build** (`vite.lib.config.mjs` → `dist/index.js`) — a plain ESM bundle exporting `{ ConverterApp }` (`src/index.js`), with React as a peer dependency and no bundled CSS (the hub already loads the shared stylesheet itself). This is what the hub actually consumes; it's built automatically by the `prepare` npm lifecycle script whenever this repo is installed as a git dependency — the hub never needs a manual build step for it.
+- **Standalone dev harness** (`vite.config.mjs` → `web-dist/`) — a self-contained build of this repo alone (own `neutralino.config.json`, own copies of the shared runtime globals), for developing/testing Converter in isolation without needing the hub at all. See [Development](#development) below.
 
 ## Requirements
 
 Building from source needs:
 
 - [Node.js](https://nodejs.org/) (for the Vite build and `setup.mjs`)
-- The [Neutralino CLI](https://neutralino.js.org/docs/cli/neu-cli) — installed automatically by `npm run setup` (see [Setup](#setup))
+- The [Neutralino CLI](https://neutralino.js.org/docs/cli/neu-cli) — installed automatically by `npm run setup` (only needed for the standalone dev harness)
 - Windows, macOS, or Linux
-- **macOS/Linux only**: `qpdf` and `img2pdf` must be installed system-wide for PDF features (`brew install qpdf` / `sudo apt install qpdf`, and `pip install img2pdf`) — ffmpeg is bundled on every platform, so video/image/audio conversion needs no extra install. This applies whether you built from source or installed a pre-built `.deb`/`.rpm`/`.dmg` — see [Installation](#installation).
+- **macOS/Linux only**: `qpdf` and `img2pdf` must be installed system-wide for PDF features (`brew install qpdf` / `sudo apt install qpdf`, and `pip install img2pdf`) — ffmpeg is bundled on every platform.
 
 ## Setup
 
@@ -47,7 +41,7 @@ npm install
 npm run setup
 ```
 
-`npm run setup` chains everything a fresh clone needs:
+`npm run setup` chains everything a fresh clone needs for the standalone dev harness:
 
 ```bash
 npm install -g @neutralinojs/neu@11.7.1   # pinned -- see note below
@@ -67,69 +61,54 @@ The `@neutralinojs/neu` version is pinned rather than left at `latest`: as of th
 
 ```bash
 npm run dev         # start the Vite dev server (UI only, in a browser)
-neu run             # build the web UI and launch the Neutralino desktop shell
+neu run             # build the web UI and launch the Neutralino desktop shell, standalone
 ```
 
-`neu run` serves the app from `web-dist/`, which is built from `src/` via Vite (`vite.config.mjs` also copies the Neutralino client library into place). Rebuild the UI with:
+`neu run` serves this repo's own standalone dev harness from `web-dist/`. Rebuild it with:
 
 ```bash
 npm run build
+```
+
+To build the library output the hub actually consumes:
+
+```bash
+npm run build:lib   # -> dist/index.js (also runs automatically via "prepare" when this repo
+                     #    is installed as a git dependency elsewhere)
 ```
 
 ## Project structure
 
 ```
 src/                 React UI (components, hooks, settings state)
-resources/           Static assets served by Neutralino (icons, styles, neutralino.js client, platform/command-builder libs)
-binaries/            Bundled conversion binaries, per platform (fetched by setup.mjs):
-                       win_x64/    ffmpeg.exe, qpdf.exe, img2pdf.exe + runtime DLLs
-                       mac_x64/    ffmpeg
-                       mac_arm64/  ffmpeg
-                       linux_x64/  ffmpeg
-bin/                 Neutralino runtime binaries (per-platform)
+src/index.js          Library entry point — exports { ConverterApp } for the hub to consume
+src/main.jsx          Standalone dev-harness entry point (wraps ConverterApp in its own .app-shell)
+resources/           Static assets for the standalone dev harness (icons, styles, neutralino.js client,
+                      platform/command-builder libs) — mirrors what the hub provides when composed
+binaries/            Bundled conversion binaries for the standalone dev harness, per platform (fetched by setup.mjs)
+bin/                 Neutralino runtime binaries for the standalone dev harness (per-platform)
 tests/               Regression/E2E test scripts and their fixture files (tests/fixtures/)
-packaging/           Per-platform installer/package build scripts (linux/, windows/, macos/)
-scripts/             Setup and CI helper scripts (neutralino.js client copy, version computation/stamping)
-neutralino.config.json   Neutralino app configuration (window size, allowed native APIs, etc.)
-setup.mjs            Downloads the third-party conversion binaries (cross-platform)
+scripts/             Dev-harness setup helper (neutralino.js client copy)
+neutralino.config.json   Standalone dev harness's own Neutralino config (not used by the hub)
+vite.config.mjs      Standalone dev harness build config
+vite.lib.config.mjs  Library build config (what the hub actually consumes)
+setup.mjs            Downloads third-party conversion binaries for the standalone dev harness
 ```
 
 ## Testing
 
 ```bash
-node tests/test_conversion.js   # golden-master regression suite (all 4 conversion categories)
-node tests/test_drop.js         # file drag-and-drop behavior
+node tests/test_conversion.js         # golden-master regression suite (all 4 conversion categories)
+node tests/test_drop.js               # file drag-and-drop behavior
+node tests/test_crop_ui.js            # image crop UI
+node tests/test_image_crop_commands.js
 ```
 
-Both drive the real app end-to-end via Playwright and a `neu run` instance, so they must be run from the project root (they resolve `binaries/`, `.tmp/`, and `neutralino.config.json` relative to it). Fixtures live in `tests/fixtures/`.
+All drive the real app end-to-end via Playwright and a `neu run` instance (this repo's standalone dev harness), so they must be run from the project root. Fixtures live in `tests/fixtures/`. The same suites are also run against the real composed hub — see the hub repo's own `tests/`.
 
-## Releases
+## Versioning
 
-Versioning and GitHub Releases are automated with [semantic-release](https://semantic-release.gitbook.io/), driven by [Conventional Commits](https://www.conventionalcommits.org/) on `master`:
-
-- `fix: ...` → patch release
-- `feat: ...` → minor release
-- `feat: ...` + a `BREAKING CHANGE:` footer (or `!` after the type, e.g. `feat!: ...`) → major release
-- Other prefixes (`chore:`, `docs:`, `refactor:`, `test:`, etc.) don't trigger a release
-
-Every push to `master` runs `.github/workflows/release.yml`, which:
-1. Computes whether a release is warranted and, if so, the next version (`scripts/get-next-version.mjs`, semantic-release in dry-run).
-2. Builds and packages all platforms in parallel: `.deb`/`.rpm` (Linux, via [fpm](https://fpm.readthedocs.io/)), a Windows installer (via [Inno Setup](https://jrsoftware.org/isinfo.php)), and a `.dmg` ×2 for macOS (Intel + Apple Silicon).
-3. Publishes the GitHub Release with those packages attached, and updates `CHANGELOG.md`.
-
-No manual version bumping or tagging — the version number lives entirely in git tags/GitHub Releases, driven by commit messages. `scripts/write-version.mjs` stamps the computed version into `src/version.json` before each platform build, so the running app knows its own version (used by the update checker below).
-
-To build packages locally without CI:
-- **Linux**: `neu build --release --embed-resources`, then `bash packaging/linux/build.sh <version>` (needs [fpm](https://fpm.readthedocs.io/en/latest/installing.html) and `rpmbuild` installed).
-- **Windows**: same `neu build` step, then `packaging/windows/install-innosetup.ps1` (one-time) and `packaging/windows/build.ps1 -Version <version>`.
-- **macOS**: same `neu build` step, then `packaging/macos/build.sh <version>` (needs `sips`/`iconutil`/`hdiutil`, all built into macOS).
-
-### In-app updates
-
-On launch, the app checks `GET /repos/chchee3300/FileConverterApp/releases/latest` and compares it against `src/version.json`. If a newer version is available it shows a toast (`src/hooks/useUpdateChecker.js`, `src/components/UpdateBanner.jsx`):
-
-- **Windows**: downloads the installer and runs it with `/VERYSILENT /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS`, then quits — the installer closes the running app, replaces it, and relaunches it automatically.
-- **macOS/Linux**: downloads the asset and reveals it in the file manager instead of self-installing — an unsigned `.dmg` gets Gatekeeper's quarantine flag, and `.deb`/`.rpm` need a privilege prompt either way, so neither can be silently self-replaced from inside the app.
+This repo has no independent release pipeline — no semantic-release, no CHANGELOG, no GitHub Releases. Versioning and packaging both live in the [`sorai-toolkit`](https://github.com/chchee3300/sorai-toolkit) hub repo, which consumes this repo via a git ref. Commit messages here don't need Conventional Commits prefixes.
 
 ## License
 
