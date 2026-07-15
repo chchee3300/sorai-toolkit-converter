@@ -9,10 +9,12 @@ import ProgressLog from './components/ProgressLog.jsx'
 import MixedTypeModal from './components/MixedTypeModal.jsx'
 import TrimModal from './components/TrimModal.jsx'
 import CropModal from './components/CropModal.jsx'
+import UpdateBanner from './components/UpdateBanner.jsx'
 import { useTheme } from './hooks/useTheme.js'
 import { useFileManager } from './hooks/useFileManager.js'
 import { useSettings } from './hooks/useSettings.js'
 import { useExecute } from './hooks/useExecute.js'
+import { useUpdateChecker } from './hooks/useUpdateChecker.js'
 
 // Ported from resources/index.html:42-46 (loading overlay markup).
 function LoadingOverlay({ visible }) {
@@ -27,6 +29,7 @@ function LoadingOverlay({ visible }) {
 function App() {
   const { toggleTheme } = useTheme()
   const settings = useSettings()
+  const updateChecker = useUpdateChecker()
 
   const {
     files,
@@ -168,6 +171,14 @@ function App() {
         incomingCount={pendingMismatch?.paths.length ?? 0}
         onConfirm={confirmClearAndLoad}
         onCancel={cancelPendingMismatch}
+      />
+      <UpdateBanner
+        status={updateChecker.status}
+        latestRelease={updateChecker.latestRelease}
+        downloadPercent={updateChecker.downloadPercent}
+        updateError={updateChecker.updateError}
+        onInstall={updateChecker.installUpdate}
+        onDismiss={updateChecker.dismiss}
       />
     </div>
   )

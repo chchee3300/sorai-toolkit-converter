@@ -45,6 +45,7 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
       - run: npm run build
       - run: npm install -g @neutralinojs/neu
       - run: neu update
@@ -72,11 +73,13 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
       - run: npm run build
       - run: npm install -g @neutralinojs/neu
       - run: neu update
       - run: node setup.mjs
       - run: neu build --release --embed-resources
+      - run: pwsh packaging/windows/install-innosetup.ps1
       - run: pwsh packaging/windows/build.ps1 -Version "${{ needs.get-next-version.outputs.version }}"
       - uses: actions/upload-artifact@v4
         with:
@@ -94,6 +97,7 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
       - run: npm run build
       - run: npm install -g @neutralinojs/neu
       - run: neu update

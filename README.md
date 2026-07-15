@@ -9,6 +9,7 @@ A desktop file converter for video, image, audio, and PDF files, built with [Neu
 - **Audio** — convert between MP3 / WAV / AAC / FLAC / OGG, with bitrate control, trimming, and speed change (`atempo`).
 - **PDF** — optimize with linearize or compress modes.
 - Live file-size estimation before you convert, batch conversion with a progress log, and automatic filename collision avoidance (`_converted`, `_converted_converted`, …) so re-running a conversion never overwrites the previous output.
+- Checks for updates on launch and offers a one-click install of new versions on Windows (see [Releases](#releases)).
 
 ## How it works
 
@@ -60,6 +61,8 @@ binaries/            Bundled conversion binaries, per platform (fetched by setup
                        linux_x64/  ffmpeg
 bin/                 Neutralino runtime binaries (per-platform)
 tests/               Regression/E2E test scripts and their fixture files (tests/fixtures/)
+packaging/           Per-platform installer/package build scripts (linux/, windows/, macos/)
+scripts/             CI helper scripts (version computation/stamping)
 neutralino.config.json   Neutralino app configuration (window size, allowed native APIs, etc.)
 setup.mjs            Downloads the third-party conversion binaries (cross-platform)
 ```
@@ -84,12 +87,22 @@ Versioning and GitHub Releases are automated with [semantic-release](https://sem
 
 Every push to `master` runs `.github/workflows/release.yml`, which:
 1. Computes whether a release is warranted and, if so, the next version (`scripts/get-next-version.mjs`, semantic-release in dry-run).
-2. Builds and packages all platforms in parallel: `.deb`/`.rpm` (Linux, via [fpm](https://fpm.readthedocs.io/)), `.zip` (Windows), and `.zip` ×2 for macOS (Intel + Apple Silicon).
+2. Builds and packages all platforms in parallel: `.deb`/`.rpm` (Linux, via [fpm](https://fpm.readthedocs.io/)), a Windows installer (via [Inno Setup](https://jrsoftware.org/isinfo.php)), and a `.dmg` ×2 for macOS (Intel + Apple Silicon).
 3. Publishes the GitHub Release with those packages attached, and updates `CHANGELOG.md`.
 
-No manual version bumping or tagging — the version number lives entirely in git tags/GitHub Releases, driven by commit messages.
+No manual version bumping or tagging — the version number lives entirely in git tags/GitHub Releases, driven by commit messages. `scripts/write-version.mjs` stamps the computed version into `src/version.json` before each platform build, so the running app knows its own version (used by the update checker below).
 
-To build a Linux package locally without CI: `neu build --release --embed-resources`, then `bash packaging/linux/build.sh <version>` (needs [fpm](https://fpm.readthedocs.io/en/latest/installing.html) and `rpmbuild` installed). Windows/macOS have equivalent `packaging/windows/build.ps1` / `packaging/macos/build.sh` scripts.
+To build packages locally without CI:
+- **Linux**: `neu build --release --embed-resources`, then `bash packaging/linux/build.sh <version>` (needs [fpm](https://fpm.readthedocs.io/en/latest/installing.html) and `rpmbuild` installed).
+- **Windows**: same `neu build` step, then `packaging/windows/install-innosetup.ps1` (one-time) and `packaging/windows/build.ps1 -Version <version>`.
+- **macOS**: same `neu build` step, then `packaging/macos/build.sh <version>` (needs `sips`/`iconutil`/`hdiutil`, all built into macOS).
+
+### In-app updates
+
+On launch, the app checks `GET /repos/chchee3300/FileConverterApp/releases/latest` and compares it against `src/version.json`. If a newer version is available it shows a toast (`src/hooks/useUpdateChecker.js`, `src/components/UpdateBanner.jsx`):
+
+- **Windows**: downloads the installer and runs it with `/VERYSILENT /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS`, then quits — the installer closes the running app, replaces it, and relaunches it automatically.
+- **macOS/Linux**: downloads the asset and reveals it in the file manager instead of self-installing — an unsigned `.dmg` gets Gatekeeper's quarantine flag, and `.deb`/`.rpm` need a privilege prompt either way, so neither can be silently self-replaced from inside the app.
 
 ## License
 

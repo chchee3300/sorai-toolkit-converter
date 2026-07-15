@@ -10,9 +10,9 @@
         "assets": [
           { "path": "release-assets/*.deb", "label": "Linux .deb (Ubuntu/Debian, x86_64)" },
           { "path": "release-assets/*.rpm", "label": "Linux .rpm (Fedora, x86_64)" },
-          { "path": "release-assets/*win_x64.zip", "label": "Windows (x86_64)" },
-          { "path": "release-assets/*mac_x64.zip", "label": "macOS (Intel)" },
-          { "path": "release-assets/*mac_arm64.zip", "label": "macOS (Apple Silicon)" }
+          { "path": "release-assets/*setup*win_x64.exe", "label": "Windows installer (x86_64)" },
+          { "path": "release-assets/*mac_x64.dmg", "label": "macOS installer (Intel)" },
+          { "path": "release-assets/*mac_arm64.dmg", "label": "macOS installer (Apple Silicon)" }
         ]
       }
     ],

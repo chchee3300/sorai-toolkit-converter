@@ -23,3 +23,8 @@
 - `chore:` / `docs:` / `refactor:` / `test:` / `style:` 等不會觸發發版
 
 沒有這個前綴的 commit（例如單純描述性的訊息）不會被 semantic-release 辨識，不會觸發任何版本異動 —— 這本身是安全的，但代表 Claude 若忘記加前綴，該次修改就不會被計入下一個版本。
+
+## 打包與應用內更新
+- `packaging/{linux,windows,macos}/` 是各平台安裝檔的建置腳本（fpm 產生 .deb/.rpm、Inno Setup 產生 Windows 安裝精靈、hdiutil 產生 macOS .dmg）。修改 `binaries/` 的檔案佈局、`neu build` 的輸出結構、或 `NL_PATH` 相關的路徑解析邏輯時，必須同步檢查這些打包腳本是否還正確（尤其是 `platform.js` 的 `ffmpegPath`/`qpdfCommand` 系列函式與 packaging 腳本裡的路徑假設是否一致）。
+- `src/version.json` 由 `scripts/write-version.mjs` 在 CI 建置時覆寫，本地開發請勿手動更動其值（`0.1.0` 只是佔位符）。
+- `src/hooks/useUpdateChecker.js` 會在啟動時打 GitHub API 檢查新版本 —— 修改 release assets 的檔名規則（`.releaserc.json` 的 assets glob）時，必須同步更新這裡的 `currentAssetPattern`/`pickAsset` 邏輯，否則應用內更新會抓不到正確的安裝檔。

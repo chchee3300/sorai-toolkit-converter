@@ -1345,6 +1345,46 @@ select.input { display: none; }
   transform: translateY(10px) scale(0.98);
 }
 
+/* Update notification -- deliberately not a modal-overlay (see
+   UpdateBanner.jsx): a fixed toast so a new-version notice never blocks an
+   in-progress conversion or settings edit. */
+.update-toast {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 200;
+  width: 320px;
+  max-width: calc(100vw - 2.5rem);
+  background: var(--surface-1);
+  border: 1px solid var(--glass-border-hi);
+  border-radius: var(--glass-radius);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.update-toast-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.update-toast-body {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  max-height: 4.5em;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.update-toast-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .modal-header {
   padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--glass-border);
