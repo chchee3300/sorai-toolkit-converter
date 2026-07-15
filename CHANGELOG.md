@@ -1,3 +1,10 @@
+## [0.2.3](https://github.com/chchee3300/FileConverterApp/compare/v0.2.2...v0.2.3) (2026-07-15)
+
+
+### Bug Fixes
+
+* declare Linux GTK/WebKit deps, pin broken neu CLI, add setup script ([a84e1bc](https://github.com/chchee3300/FileConverterApp/commit/a84e1bc39e7759bedf640ffccf1309eb4dc2a716))
+
 ## [0.2.2](https://github.com/chchee3300/FileConverterApp/compare/v0.2.1...v0.2.2) (2026-07-15)
 
 
