@@ -56,13 +56,13 @@ jobs:
       - run: node -e "require('fs').copyFileSync('web-dist/js/neutralino.js', 'resources/js/neutralino.js')"
       - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
       - run: npm run build
-      - run: node setup.mjs
-      - run: neu build --release --embed-resources
-      - name: Install fpm
+      - name: Install unzip and fpm
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ruby ruby-dev build-essential rpm
+          sudo apt-get install -y -qq unzip ruby ruby-dev build-essential rpm
           sudo gem install --no-document fpm
+      - run: node setup.mjs
+      - run: neu build --release --embed-resources
       - run: bash packaging/linux/build.sh "${{ needs.get-next-version.outputs.version }}"
       - uses: actions/upload-artifact@v4
         with:

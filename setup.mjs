@@ -40,23 +40,32 @@ function tarBinary() {
   // 1803. Must reference it by full path rather than bare `tar` -- under
   // Git Bash / MSYS shells, /usr/bin/tar (plain GNU tar, no zip support:
   // fails with "This does not look like a tar archive" on a real zip)
-  // shadows it on PATH. macOS/Linux bare `tar` is fine either way since
-  // it's only used there for .tar.gz.
-  if (platform() !== 'win32') return 'tar';
+  // shadows it on PATH.
   const sys32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
   return existsSync(sys32) ? sys32 : 'tar';
 }
 
 async function unzip(zipPath, destDir) {
-  // Pass relative filenames with cwd set to the containing dir -- tar's
-  // "X:..." remote-shell heuristic misfires on an absolute Windows path's
-  // drive letter (e.g. "E:\foo" is parsed as host "E" + remote path) if
-  // passed directly as an argument.
-  execFileSync(
-    tarBinary(),
-    ['-xf', path.basename(zipPath), '-C', path.relative(path.dirname(zipPath), destDir) || '.'],
-    { cwd: path.dirname(zipPath), stdio: 'inherit' },
-  );
+  if (platform() === 'win32') {
+    // Pass relative filenames with cwd set to the containing dir -- tar's
+    // "X:..." remote-shell heuristic misfires on an absolute Windows path's
+    // drive letter (e.g. "E:\foo" is parsed as host "E" + remote path) if
+    // passed directly as an argument.
+    execFileSync(
+      tarBinary(),
+      ['-xf', path.basename(zipPath), '-C', path.relative(path.dirname(zipPath), destDir) || '.'],
+      { cwd: path.dirname(zipPath), stdio: 'inherit' },
+    );
+    return;
+  }
+  // macOS's system `tar` is bsdtar (zip-capable), but plain Linux distros
+  // (confirmed: ubuntu-latest GitHub Actions runner) ship GNU tar with no
+  // zip support at all -- fails the same way Git Bash's /usr/bin/tar does
+  // on Windows ("This does not look like a tar archive" on a real zip).
+  // `unzip` is the standard, near-universally-preinstalled tool for this
+  // on both platforms, so use it uniformly here instead of relying on
+  // whichever `tar` happens to be present.
+  execFileSync('unzip', ['-o', '-q', zipPath, '-d', destDir], { stdio: 'inherit' });
 }
 
 async function setupWindows() {
