@@ -1,3 +1,10 @@
+## [0.2.2](https://github.com/chchee3300/FileConverterApp/compare/v0.2.1...v0.2.2) (2026-07-15)
+
+
+### Bug Fixes
+
+* app opened in browser instead of a window; installer skipped prompts ([33cbdc1](https://github.com/chchee3300/FileConverterApp/commit/33cbdc1f029ef040e3553379abd9d3c852a1a842))
+
 ## [0.2.1](https://github.com/chchee3300/FileConverterApp/compare/v0.2.0...v0.2.1) (2026-07-15)
 
 
