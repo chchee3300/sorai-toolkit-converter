@@ -15,7 +15,6 @@
     "build:lib": "vite build --config vite.lib.config.mjs",
     "prepare": "npm run build:lib",
     "preview": "vite preview",
-    "release": "semantic-release",
     "setup": "npm install -g @neutralinojs/neu@11.7.1 && neu update && node scripts/copy-neutralino-client.mjs && node setup.mjs"
   },
   "peerDependencies": {
@@ -27,15 +26,9 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
-    "@semantic-release/changelog": "^6.0.3",
-    "@semantic-release/commit-analyzer": "^13.0.1",
-    "@semantic-release/git": "^10.0.1",
-    "@semantic-release/github": "^12.0.9",
-    "@semantic-release/release-notes-generator": "^14.1.1",
     "@tailwindcss/vite": "^4.3.2",
     "@vitejs/plugin-react": "^4.7.0",
     "playwright": "^1.61.1",
-    "semantic-release": "^25.0.7",
     "tailwindcss": "^4.3.2",
     "vite": "^6.4.3"
   }
