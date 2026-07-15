@@ -12,37 +12,39 @@ A desktop file converter for video, image, audio, and PDF files, built with [Neu
 
 ## How it works
 
-The UI (React + Vite, in `src/`) runs inside a [Neutralino.js](https://neutralino.js.org/) shell, which gives it native filesystem access and the ability to spawn local command-line tools. Conversions are performed by bundled binaries — no ffmpeg/qpdf install or internet connection required at runtime:
+The UI (React + Vite, in `src/`) runs inside a [Neutralino.js](https://neutralino.js.org/) shell, which gives it native filesystem access and the ability to spawn local command-line tools. Conversions are performed by:
 
-- [`ffmpeg`](https://ffmpeg.org/) — video, image, and audio conversion
-- [`qpdf`](https://qpdf.readthedocs.io/) — PDF optimization
-- [`img2pdf`](https://gitlab.mister-muffin.de/josch/img2pdf) — image-to-PDF conversion
+- [`ffmpeg`](https://ffmpeg.org/) — video, image, and audio conversion. Bundled on every platform, no separate install needed.
+- [`qpdf`](https://qpdf.readthedocs.io/) — PDF optimization. Bundled on Windows; on macOS/Linux it's a system-installed dependency (`brew`/`apt`/etc.).
+- [`img2pdf`](https://gitlab.mister-muffin.de/josch/img2pdf) — image-to-PDF conversion. Bundled on Windows; on macOS/Linux it's a system-installed dependency (`pip`).
 
-These live in `binaries/` and are fetched by `setup.ps1` (see [Setup](#setup)).
+These live in per-platform folders under `binaries/` (`win_x64/`, `mac_x64/`, `mac_arm64/`, `linux_x64/`), fetched by `setup.mjs` (see [Setup](#setup)).
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/) (for the Vite build)
+- [Node.js](https://nodejs.org/) (for the Vite build and `setup.mjs`)
 - The [Neutralino CLI](https://neutralino.js.org/docs/cli/neu-cli): `npm install -g @neutralinojs/neu`
-- Windows (the bundled binaries and `setup.ps1` currently target `win64`)
+- Windows, macOS, or Linux
+- **macOS/Linux only**: `qpdf` and `img2pdf` must be installed system-wide for PDF features (`brew install qpdf` / `sudo apt install qpdf`, and `pip install img2pdf`) — ffmpeg is bundled on every platform, so video/image/audio conversion needs no extra install.
 
 ## Setup
 
-```powershell
+```bash
 npm install
-./setup.ps1        # downloads ffmpeg, qpdf, and img2pdf into binaries/
+node setup.mjs      # downloads ffmpeg (all platforms) into binaries/, plus qpdf/img2pdf on Windows;
+                     # on macOS/Linux it checks for system qpdf/img2pdf and prints install hints if missing
 ```
 
 ## Development
 
-```powershell
+```bash
 npm run dev         # start the Vite dev server (UI only, in a browser)
 neu run             # build the web UI and launch the Neutralino desktop shell
 ```
 
 `neu run` serves the app from `web-dist/`, which is built from `src/` via Vite (`vite.config.mjs` also copies the Neutralino client library into place). Rebuild the UI with:
 
-```powershell
+```bash
 npm run build
 ```
 
@@ -50,17 +52,21 @@ npm run build
 
 ```
 src/                 React UI (components, hooks, settings state)
-resources/           Static assets served by Neutralino (icons, styles, neutralino.js client)
-binaries/            Bundled ffmpeg / qpdf / img2pdf executables (fetched by setup.ps1)
+resources/           Static assets served by Neutralino (icons, styles, neutralino.js client, platform/command-builder libs)
+binaries/            Bundled conversion binaries, per platform (fetched by setup.mjs):
+                       win_x64/    ffmpeg.exe, qpdf.exe, img2pdf.exe + runtime DLLs
+                       mac_x64/    ffmpeg
+                       mac_arm64/  ffmpeg
+                       linux_x64/  ffmpeg
 bin/                 Neutralino runtime binaries (per-platform)
 tests/               Regression/E2E test scripts and their fixture files (tests/fixtures/)
 neutralino.config.json   Neutralino app configuration (window size, allowed native APIs, etc.)
-setup.ps1            Downloads the third-party conversion binaries
+setup.mjs            Downloads the third-party conversion binaries (cross-platform)
 ```
 
 ## Testing
 
-```powershell
+```bash
 node tests/test_conversion.js   # golden-master regression suite (all 4 conversion categories)
 node tests/test_drop.js         # file drag-and-drop behavior
 ```

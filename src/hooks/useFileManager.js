@@ -19,8 +19,9 @@ function getFileType(filename) {
 // Ported unchanged from main.js's getMediaInfo (main.js:20-50 pre-extraction).
 async function getMediaInfo(path) {
   try {
-    const binPath = window.NL_PATH.replace(/\//g, '\\')
-    const command = `"${binPath}\\binaries\\ffmpeg.exe" -i "${path}"`
+    const platform = window.EstellaLib.platform
+    const binPath = platform.resolveBinPath()
+    const command = `"${platform.ffmpegPath(binPath)}" -i "${path}"`
     const res = await window.Neutralino.os.execCommand(command)
     const output = res.stdErr
     const match = output.match(/Duration:\s+(\d+):(\d+):(\d+\.\d+)/)
@@ -192,7 +193,7 @@ export function useFileManager({ onFirstFileType }) {
 
   const copyDroppedFileToTemp = useCallback(async (file, dropDir, onProgress) => {
     const CHUNK = window.__DROP_CHUNK_SIZE || 8 * 1024 * 1024
-    const destPath = `${dropDir}\\${file.name}`
+    const destPath = window.EstellaLib.platform.joinPath(dropDir, file.name)
     let offset = 0
     while (offset < file.size) {
       const buf = await file.slice(offset, offset + CHUNK).arrayBuffer()
@@ -234,7 +235,12 @@ export function useFileManager({ onFirstFileType }) {
       setLoading(true)
       try {
         const tempBase = await window.Neutralino.os.getPath('temp')
-        const dropDir = `${tempBase}\\FileConverterApp\\dropped\\${Date.now()}_${dropSeqRef.current++}`
+        const dropDir = window.EstellaLib.platform.joinPath(
+          tempBase,
+          'FileConverterApp',
+          'dropped',
+          `${Date.now()}_${dropSeqRef.current++}`,
+        )
         await window.Neutralino.filesystem.createDirectory(dropDir)
 
         const tempPaths = []
@@ -250,7 +256,7 @@ export function useFileManager({ onFirstFileType }) {
             console.error('Failed to import dropped file: ' + file.name, err)
             setStatus(`Failed to import ${file.name}`, 'error')
             try {
-              await window.Neutralino.filesystem.remove(`${dropDir}\\${file.name}`)
+              await window.Neutralino.filesystem.remove(window.EstellaLib.platform.joinPath(dropDir, file.name))
             } catch (e) {
               /* partial file may not exist */
             }

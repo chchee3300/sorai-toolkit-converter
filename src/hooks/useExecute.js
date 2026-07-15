@@ -122,12 +122,30 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
       }
     }
 
+    const platform = window.EstellaLib.platform
+    if (!platform.isWindows()) {
+      const needsQpdf = fileType === 'pdf'
+      const needsImg2pdf = fileType === 'image' && settings.image.format === '.pdf'
+      const tool = needsQpdf ? 'qpdf' : needsImg2pdf ? 'img2pdf' : null
+      if (tool) {
+        const available = await platform.checkToolAvailable(tool)
+        if (!available) {
+          const hint = tool === 'qpdf'
+            ? "Install it via 'brew install qpdf' (macOS) or 'sudo apt install qpdf' (Linux)"
+            : "Install it via 'pip install img2pdf' (macOS/Linux)"
+          alert(`${tool} not found. ${hint}, then restart the app.`)
+          setStatus(`Error: ${tool} not found`, 'error')
+          return
+        }
+      }
+    }
+
     setExecuting(true)
     setProgressVisible(true)
     setStatus('Processing…', 'busy')
 
     let completed = 0
-    const binPath = window.NL_PATH.replace(/\//g, '\\')
+    const binPath = platform.resolveBinPath()
 
     try {
       for (let i = 0; i < files.length; i++) {

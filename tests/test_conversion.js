@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
 const { chromium } = require('playwright');
+const { spawnNeu, killNeuTree } = require('./lib/neu-launch');
 
 // neu run must launch from the project root (neutralino.config.json,
 // binaries/, .tmp/ all live there); fixtures + this run's converted
@@ -136,15 +137,14 @@ async function main() {
     // branch does (ffmpeg-commands.js) -- otherwise this generation step
     // itself fails with "Unsupported dimensions".
     const icoFixture = path.join(FIXTURES_DIR, 'test_ico_fixture.ico');
-    execFileSync(path.join(PROJECT_ROOT, 'binaries', 'ffmpeg.exe'), [
+    execFileSync(path.join(PROJECT_ROOT, 'binaries', 'win_x64', 'ffmpeg.exe'), [
         '-y', '-i', fixtures.image,
         '-vf', "scale='min(256,iw)':'min(256,ih)':force_original_aspect_ratio=decrease",
         icoFixture,
     ], { stdio: 'pipe' });
 
-    const env = { ...process.env, PATH: process.env.PATH + ';' + path.join(process.env.APPDATA || '', 'npm') };
     const launchTime = Date.now();
-    const neu = cp.spawn('cmd.exe', ['/c', 'neu run -- --export-auth-info'], { stdio: 'pipe', cwd: PROJECT_ROOT, env });
+    const neu = spawnNeu(PROJECT_ROOT);
     neu.stdout.on('data', d => process.stdout.write('[neu] ' + d));
     neu.stderr.on('data', d => process.stderr.write('[neu:err] ' + d));
     let browser = null;
@@ -368,7 +368,7 @@ async function main() {
         check('P3: compress mode used --stream-data=compress', pLog.includes('--stream-data=compress'), pLog.slice(-300));
         if (fs.existsSync(pOut)) {
             try {
-                execFileSync(path.join(PROJECT_ROOT, 'binaries', 'qpdf.exe'), ['--check', pOut], { stdio: 'pipe' });
+                execFileSync(path.join(PROJECT_ROOT, 'binaries', 'win_x64', 'qpdf.exe'), ['--check', pOut], { stdio: 'pipe' });
                 check('P4: qpdf --check validates compressed output', true);
             } catch (e) {
                 check('P4: qpdf --check validates compressed output', false, e.message);
@@ -445,7 +445,7 @@ async function main() {
         results.push({ name: 'harness completed', ok: false });
     } finally {
         if (browser) await browser.close().catch(() => {});
-        try { cp.execSync(`taskkill /pid ${neu.pid} /T /F`, { stdio: 'ignore' }); } catch (e) { /* already gone */ }
+        killNeuTree(neu.pid);
         cleanupNames.forEach(n => rmIfExists(path.join(FIXTURES_DIR, n)));
     }
 

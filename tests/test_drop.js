@@ -8,6 +8,7 @@ const path = require('path');
 const cp = require('child_process');
 const os = require('os');
 const { chromium } = require('playwright');
+const { spawnNeu, killNeuTree } = require('./lib/neu-launch');
 
 // neu run must launch from the project root (neutralino.config.json,
 // binaries/, .tmp/ all live there); fixtures live alongside this script.
@@ -60,11 +61,8 @@ async function main() {
     }
     const fixtureBytes = fs.readFileSync(FIXTURE);
 
-    // Make the neu CLI resolvable even when the global npm bin dir is not in PATH
-    const env = { ...process.env, PATH: process.env.PATH + ';' + path.join(process.env.APPDATA || '', 'npm') };
-
     const launchTime = Date.now();
-    const neu = cp.spawn('cmd.exe', ['/c', 'neu run -- --export-auth-info'], { stdio: 'pipe', cwd: PROJECT_ROOT, env });
+    const neu = spawnNeu(PROJECT_ROOT);
     neu.stdout.on('data', d => process.stdout.write('[neu] ' + d));
     neu.stderr.on('data', d => process.stderr.write('[neu:err] ' + d));
     let browser = null;
@@ -211,7 +209,7 @@ async function main() {
         results.push({ name: 'harness completed', ok: false });
     } finally {
         if (browser) await browser.close().catch(() => {});
-        try { cp.execSync(`taskkill /pid ${neu.pid} /T /F`, { stdio: 'ignore' }); } catch (e) { /* already gone */ }
+        killNeuTree(neu.pid);
         try { fs.rmSync(DROP_TEMP, { recursive: true, force: true }); } catch (e) { /* best effort */ }
     }
 

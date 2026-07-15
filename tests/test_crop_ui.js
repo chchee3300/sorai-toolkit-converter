@@ -12,6 +12,7 @@ const path = require('path');
 const cp = require('child_process');
 const { chromium } = require('playwright');
 const { execFileSync } = cp;
+const { spawnNeu, killNeuTree } = require('./lib/neu-launch');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const FIXTURES_DIR = path.join(__dirname, 'fixtures');
@@ -69,9 +70,8 @@ async function main() {
     const imageFixture = path.join(FIXTURES_DIR, 'test_in.png'); // 320x240, per test_conversion.js's ICO comment
     if (!fs.existsSync(imageFixture)) { console.error('Fixture missing: ' + imageFixture); process.exit(1); }
 
-    const env = { ...process.env, PATH: process.env.PATH + ';' + path.join(process.env.APPDATA || '', 'npm') };
     const launchTime = Date.now();
-    const neu = cp.spawn('cmd.exe', ['/c', 'neu run -- --export-auth-info'], { stdio: 'pipe', cwd: PROJECT_ROOT, env });
+    const neu = spawnNeu(PROJECT_ROOT);
     neu.stdout.on('data', d => process.stdout.write('[neu] ' + d));
     neu.stderr.on('data', d => process.stderr.write('[neu:err] ' + d));
     let browser = null;
@@ -190,7 +190,7 @@ async function main() {
             let probe = '';
             try {
                 probe = execFileSync(
-                    path.join(PROJECT_ROOT, 'binaries', 'ffmpeg.exe'),
+                    path.join(PROJECT_ROOT, 'binaries', 'win_x64', 'ffmpeg.exe'),
                     ['-i', outFile],
                     { stdio: 'pipe' },
                 ).toString();
@@ -223,7 +223,7 @@ async function main() {
         results.push({ name: 'harness completed', ok: false });
     } finally {
         if (browser) await browser.close().catch(() => {});
-        try { cp.execSync(`taskkill /pid ${neu.pid} /T /F`, { stdio: 'ignore' }); } catch (e) { /* already gone */ }
+        killNeuTree(neu.pid);
         cleanupNames.forEach(n => rmIfExists(path.join(FIXTURES_DIR, n)));
     }
 

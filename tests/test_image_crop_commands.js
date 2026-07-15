@@ -12,6 +12,7 @@
 // IIFEs that attach to `global.EstellaLib` — stubbing `window === global`
 // (Node's implicit-global convention) lets them load unmodified under `require`.
 global.window = global;
+require('../resources/js/lib/platform.js');
 require('../resources/js/lib/ffmpeg-commands.js');
 require('../resources/js/lib/size-estimate.js');
 const { buildImageCommand } = global.EstellaLib.ffmpegCommands;
@@ -98,7 +99,7 @@ const crop = { x: 10, y: 20, width: 300, height: 200 };
   const cmd = buildImageCommand({ ...base, outPath: 'C:\\out.ico', format: '.ico', quality: 100, scale: 50, crop });
   check(
     'ico+crop+scale: crop,preScale both precede the mandatory cap',
-    /^"C:\\App\\binaries\\ffmpeg\.exe" -y -i "C:\\in\.jpg" -vf "crop=300:200:10:20,scale=trunc\(iw\*0\.5\/2\)\*2:-2:flags=lanczos,scale='min\(256,iw\)'/.test(cmd),
+    /^"C:\\App\\binaries\\win_x64\\ffmpeg\.exe" -y -i "C:\\in\.jpg" -vf "crop=300:200:10:20,scale=trunc\(iw\*0\.5\/2\)\*2:-2:flags=lanczos,scale='min\(256,iw\)'/.test(cmd),
     cmd
   );
 }

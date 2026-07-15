@@ -5,6 +5,9 @@
 // these must stay byte-identical to pre-migration output for every code path
 // that predates the Photo Crop feature. buildImageCommand's `crop` param is a
 // deliberate, reviewed addition (not migration drift) — see its own comment.
+// The ffmpeg binary path fragment is routed through
+// window.EstellaLib.platform.ffmpegPath(binPath) (cross-platform seam) —
+// also a reviewed, deliberate change, not migration drift.
 (function (global) {
   // fileObj: { fps, duration, size, trimStart, trimEnd } (subset of the app's file record)
   function buildVideoCommand({ binPath, file, outPath, format, codec, qualityPercent, speed, targetFpsStr, fileObj }) {
@@ -30,7 +33,7 @@
       let preFilters = filterGraph.length > 0 ? filterGraph.join(',') + ',' : '';
       let fullFilter = `${preFilters}split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`;
 
-      return `"${binPath}\\binaries\\ffmpeg.exe" -y ${trimCmd}-i "${file}" -filter_complex "${fullFilter}" "${outPath}"`;
+      return `"${global.EstellaLib.platform.ffmpegPath(binPath)}" -y ${trimCmd}-i "${file}" -filter_complex "${fullFilter}" "${outPath}"`;
     }
 
     let fpsFactor = 1.0;
@@ -70,7 +73,7 @@
       filterCmd += `-af "${audioFilters.join(',')}" `;
     }
 
-    return `"${binPath}\\binaries\\ffmpeg.exe" -y ${trimCmd}-i "${file}" -c:v ${codec} ${filterCmd}${targetBitrateCmd} "${outPath}"`;
+    return `"${global.EstellaLib.platform.ffmpegPath(binPath)}" -y ${trimCmd}-i "${file}" -c:v ${codec} ${filterCmd}${targetBitrateCmd} "${outPath}"`;
   }
 
   // crop: { x, y, width, height } in the source image's natural pixel
@@ -125,7 +128,7 @@
       filterCmd = `-vf "${cropAndScale}"`;
     }
 
-    return `"${binPath}\\binaries\\ffmpeg.exe" -y -i "${file}" ${filterCmd} ${qCmd} "${outPath}"`;
+    return `"${global.EstellaLib.platform.ffmpegPath(binPath)}" -y -i "${file}" ${filterCmd} ${qCmd} "${outPath}"`;
   }
 
   // fileObj: { trimStart, trimEnd }
@@ -144,7 +147,7 @@
     // choice for .ogg — every other format keeps codecCmd === '' (unchanged).
     const codecCmd = format === '.ogg' ? '-c:a libvorbis ' : '';
 
-    return `"${binPath}\\binaries\\ffmpeg.exe" -y ${trimCmd}-i "${file}" ${filterCmd}${codecCmd}-b:a ${bitrate} "${outPath}"`;
+    return `"${global.EstellaLib.platform.ffmpegPath(binPath)}" -y ${trimCmd}-i "${file}" ${filterCmd}${codecCmd}-b:a ${bitrate} "${outPath}"`;
   }
 
   global.EstellaLib = global.EstellaLib || {};
