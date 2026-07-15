@@ -1,3 +1,10 @@
+## [0.2.6](https://github.com/chchee3300/FileConverterApp/compare/v0.2.5...v0.2.6) (2026-07-15)
+
+
+### Bug Fixes
+
+* disable DevTools inspector in the shipped app ([64a3ac3](https://github.com/chchee3300/FileConverterApp/commit/64a3ac308185f8790359bfd35318b33e9f61cefd))
+
 ## [0.2.5](https://github.com/chchee3300/FileConverterApp/compare/v0.2.4...v0.2.5) (2026-07-15)
 
 
