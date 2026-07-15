@@ -28,3 +28,5 @@
 - `packaging/{linux,windows,macos}/` 是各平台安裝檔的建置腳本（fpm 產生 .deb/.rpm、Inno Setup 產生 Windows 安裝精靈、hdiutil 產生 macOS .dmg）。修改 `binaries/` 的檔案佈局、`neu build` 的輸出結構、或 `NL_PATH` 相關的路徑解析邏輯時，必須同步檢查這些打包腳本是否還正確（尤其是 `platform.js` 的 `ffmpegPath`/`qpdfCommand` 系列函式與 packaging 腳本裡的路徑假設是否一致）。
 - `src/version.json` 由 `scripts/write-version.mjs` 在 CI 建置時覆寫，本地開發請勿手動更動其值（`0.1.0` 只是佔位符）。
 - `src/hooks/useUpdateChecker.js` 會在啟動時打 GitHub API 檢查新版本 —— 修改 release assets 的檔名規則（`.releaserc.json` 的 assets glob）時，必須同步更新這裡的 `currentAssetPattern`/`pickAsset` 邏輯，否則應用內更新會抓不到正確的安裝檔。
+- `@neutralinojs/neu` **刻意鎖在 `11.7.1`**（`package.json` 的 `setup` script、`.github/workflows/release.yml` 三個 build job 都是）——`latest`（`11.7.2`）宣告的 `uuid` 依賴範圍會解析到一個 ESM-only 的版本，但它自己的程式碼還是用 CommonJS `require('uuid')`，導致全新安裝時直接 `ERR_REQUIRE_ESM` 崩潰。不要把這個版本號「升級」回 `latest`，除非先確認上游已修好。
+- Linux 的 `.deb`/`.rpm`（`packaging/linux/build.sh`）宣告了 `libgtk-3-0`/`libwebkit2gtk-4.1-0`（deb）與 `gtk3`/`webkit2gtk4.1`（rpm）作為套件依賴 —— Neutralino 在 Linux 上要靠這些函式庫才能開視窗，`ldd` 只會顯示 gtk3 是直接依賴（webkit2gtk 是透過 GTK widget factory 動態載入，`ldd` 看不到，但實際會用到）。修改打包腳本時別把這些依賴拿掉。

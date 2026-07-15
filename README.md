@@ -11,6 +11,16 @@ A desktop file converter for video, image, audio, and PDF files, built with [Neu
 - Live file-size estimation before you convert, batch conversion with a progress log, and automatic filename collision avoidance (`_converted`, `_converted_converted`, …) so re-running a conversion never overwrites the previous output.
 - Checks for updates on launch and offers a one-click install of new versions on Windows (see [Releases](#releases)).
 
+## Installation
+
+Pick one:
+
+- **Download a pre-built package** — grab the file for your OS from the [latest release](https://github.com/chchee3300/FileConverterApp/releases/latest):
+  - **Windows** — `sorai-toolkit-setup-*-win_x64.exe`. Run it; the installer asks for a destination folder and whether to add a Start Menu shortcut.
+  - **macOS** — `sorai-toolkit-*-mac_x64.dmg` (Intel) or `*-mac_arm64.dmg` (Apple Silicon). Open it and drag the app into Applications. These builds aren't code-signed, so the first launch needs right-click → Open (or System Settings → Privacy & Security → "Open Anyway") to get past Gatekeeper.
+  - **Linux** — `sorai-toolkit_*_amd64.deb` (`sudo apt install ./sorai-toolkit_*_amd64.deb`) or `sorai-toolkit-*.x86_64.rpm` (`sudo dnf install ./sorai-toolkit-*.x86_64.rpm`). Both declare their own `qpdf`/`gtk3`/`webkit2gtk` dependencies, so the package manager pulls those in automatically.
+- **Build it yourself from source** — see [Setup](#setup) below. Useful if you want to modify the app, or your platform/architecture isn't covered by the prebuilt packages.
+
 ## How it works
 
 The UI (React + Vite, in `src/`) runs inside a [Neutralino.js](https://neutralino.js.org/) shell, which gives it native filesystem access and the ability to spawn local command-line tools. Conversions are performed by:
@@ -23,24 +33,35 @@ These live in per-platform folders under `binaries/` (`win_x64/`, `mac_x64/`, `m
 
 ## Requirements
 
+Building from source needs:
+
 - [Node.js](https://nodejs.org/) (for the Vite build and `setup.mjs`)
-- The [Neutralino CLI](https://neutralino.js.org/docs/cli/neu-cli): `npm install -g @neutralinojs/neu`
+- The [Neutralino CLI](https://neutralino.js.org/docs/cli/neu-cli) — installed automatically by `npm run setup` (see [Setup](#setup))
 - Windows, macOS, or Linux
-- **macOS/Linux only**: `qpdf` and `img2pdf` must be installed system-wide for PDF features (`brew install qpdf` / `sudo apt install qpdf`, and `pip install img2pdf`) — ffmpeg is bundled on every platform, so video/image/audio conversion needs no extra install.
+- **macOS/Linux only**: `qpdf` and `img2pdf` must be installed system-wide for PDF features (`brew install qpdf` / `sudo apt install qpdf`, and `pip install img2pdf`) — ffmpeg is bundled on every platform, so video/image/audio conversion needs no extra install. This applies whether you built from source or installed a pre-built `.deb`/`.rpm`/`.dmg` — see [Installation](#installation).
 
 ## Setup
 
 ```bash
 npm install
-npm install -g @neutralinojs/neu
-neu update          # fetches the Neutralino client lib + runtime binaries (bin/, gitignored)
-node -e "require('fs').copyFileSync('web-dist/js/neutralino.js', 'resources/js/neutralino.js')"
-                     # neu update writes the client lib to web-dist/js/ (per neutralino.config.json's
-                     # clientLibrary); vite.config.mjs re-copies it there from resources/js/ (its
-                     # source of truth, also gitignored) on every build, so this needs doing once
-node setup.mjs      # downloads ffmpeg (all platforms) into binaries/, plus qpdf/img2pdf on Windows;
-                     # on macOS/Linux it checks for system qpdf/img2pdf and prints install hints if missing
+npm run setup
 ```
+
+`npm run setup` chains everything a fresh clone needs:
+
+```bash
+npm install -g @neutralinojs/neu@11.7.1   # pinned -- see note below
+neu update                                 # fetches the Neutralino client lib + runtime binaries (bin/, gitignored)
+node scripts/copy-neutralino-client.mjs    # neu update writes the client lib to web-dist/js/ (per
+                                            # neutralino.config.json's clientLibrary); vite.config.mjs
+                                            # re-copies it from resources/js/ (its source of truth, also
+                                            # gitignored) on every build, so this needs doing once
+node setup.mjs                             # downloads ffmpeg (all platforms) into binaries/, plus qpdf/img2pdf
+                                            # on Windows; on macOS/Linux it checks for system qpdf/img2pdf
+                                            # and prints install hints if missing
+```
+
+The `@neutralinojs/neu` version is pinned rather than left at `latest`: as of this writing, the latest published version (`11.7.2`) declares a `uuid` dependency range that resolves to an ESM-only release, which crashes its own (CommonJS) code with `ERR_REQUIRE_ESM` on install. `11.7.1` is the last version that doesn't have this problem — worth re-checking occasionally in case upstream fixes it.
 
 ## Development
 
@@ -68,7 +89,7 @@ binaries/            Bundled conversion binaries, per platform (fetched by setup
 bin/                 Neutralino runtime binaries (per-platform)
 tests/               Regression/E2E test scripts and their fixture files (tests/fixtures/)
 packaging/           Per-platform installer/package build scripts (linux/, windows/, macos/)
-scripts/             CI helper scripts (version computation/stamping)
+scripts/             Setup and CI helper scripts (neutralino.js client copy, version computation/stamping)
 neutralino.config.json   Neutralino app configuration (window size, allowed native APIs, etc.)
 setup.mjs            Downloads the third-party conversion binaries (cross-platform)
 ```

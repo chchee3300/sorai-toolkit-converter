@@ -55,10 +55,19 @@ COMMON_ARGS=(
 )
 
 echo "Building .deb..."
+# libgtk-3-0/libwebkit2gtk-4.1-0: Neutralino's Linux binary renders its
+# window via GTK+WebKitGTK (confirmed via ldd -- libgtk-3.so.0 is a direct
+# dependency; webkit2gtk is loaded through GTK's widget factory, invisible
+# to ldd but still required at runtime, verified by launching in a bare
+# container that lacked it). Neither is guaranteed present outside a full
+# desktop install, so declare them rather than let the app silently fail
+# to open a window post-install.
 fpm "${COMMON_ARGS[@]}" \
   -t deb \
   --architecture amd64 \
   --depends qpdf \
+  --depends libgtk-3-0 \
+  --depends libwebkit2gtk-4.1-0 \
   -p "$OUT_DIR/sorai-toolkit_${VERSION}_amd64.deb" \
   opt usr
 
@@ -67,6 +76,8 @@ fpm "${COMMON_ARGS[@]}" \
   -t rpm \
   --architecture x86_64 \
   --depends qpdf \
+  --depends gtk3 \
+  --depends webkit2gtk4.1 \
   -p "$OUT_DIR/sorai-toolkit-${VERSION}.x86_64.rpm" \
   opt usr
 

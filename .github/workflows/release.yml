@@ -45,15 +45,15 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: npm install -g @neutralinojs/neu
+      # Pinned: @neutralinojs/neu's "latest" (11.7.2) declares "uuid": "^14.0.0"
+      # but its own code still does a CommonJS require('uuid') -- uuid 14 is
+      # ESM-only, so a fresh `npm install -g` of "latest" crashes immediately
+      # with ERR_REQUIRE_ESM. 11.7.1 is the last version pinning uuid to the
+      # CJS-safe ^8.3.2 range. Re-check occasionally for a fixed upstream
+      # release before assuming this pin is still needed.
+      - run: npm install -g @neutralinojs/neu@11.7.1
       - run: neu update
-      # neu update (per neutralino.config.json's cli.clientLibrary) writes
-      # the client lib straight to web-dist/js/neutralino.js -- but vite's
-      # build wipes web-dist/ (emptyOutDir) before copying it back in from
-      # resources/js/neutralino.js (vite.config.mjs's declared "single
-      # source of truth", gitignored, otherwise never populated on a fresh
-      # checkout). Persist neu update's output there first.
-      - run: node -e "require('fs').copyFileSync('web-dist/js/neutralino.js', 'resources/js/neutralino.js')"
+      - run: node scripts/copy-neutralino-client.mjs
       - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
       - run: npm run build
       - name: Install unzip and fpm
@@ -80,15 +80,15 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: npm install -g @neutralinojs/neu
+      # Pinned: @neutralinojs/neu's "latest" (11.7.2) declares "uuid": "^14.0.0"
+      # but its own code still does a CommonJS require('uuid') -- uuid 14 is
+      # ESM-only, so a fresh `npm install -g` of "latest" crashes immediately
+      # with ERR_REQUIRE_ESM. 11.7.1 is the last version pinning uuid to the
+      # CJS-safe ^8.3.2 range. Re-check occasionally for a fixed upstream
+      # release before assuming this pin is still needed.
+      - run: npm install -g @neutralinojs/neu@11.7.1
       - run: neu update
-      # neu update (per neutralino.config.json's cli.clientLibrary) writes
-      # the client lib straight to web-dist/js/neutralino.js -- but vite's
-      # build wipes web-dist/ (emptyOutDir) before copying it back in from
-      # resources/js/neutralino.js (vite.config.mjs's declared "single
-      # source of truth", gitignored, otherwise never populated on a fresh
-      # checkout). Persist neu update's output there first.
-      - run: node -e "require('fs').copyFileSync('web-dist/js/neutralino.js', 'resources/js/neutralino.js')"
+      - run: node scripts/copy-neutralino-client.mjs
       - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
       - run: npm run build
       - run: node setup.mjs
@@ -111,15 +111,15 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: npm install -g @neutralinojs/neu
+      # Pinned: @neutralinojs/neu's "latest" (11.7.2) declares "uuid": "^14.0.0"
+      # but its own code still does a CommonJS require('uuid') -- uuid 14 is
+      # ESM-only, so a fresh `npm install -g` of "latest" crashes immediately
+      # with ERR_REQUIRE_ESM. 11.7.1 is the last version pinning uuid to the
+      # CJS-safe ^8.3.2 range. Re-check occasionally for a fixed upstream
+      # release before assuming this pin is still needed.
+      - run: npm install -g @neutralinojs/neu@11.7.1
       - run: neu update
-      # neu update (per neutralino.config.json's cli.clientLibrary) writes
-      # the client lib straight to web-dist/js/neutralino.js -- but vite's
-      # build wipes web-dist/ (emptyOutDir) before copying it back in from
-      # resources/js/neutralino.js (vite.config.mjs's declared "single
-      # source of truth", gitignored, otherwise never populated on a fresh
-      # checkout). Persist neu update's output there first.
-      - run: node -e "require('fs').copyFileSync('web-dist/js/neutralino.js', 'resources/js/neutralino.js')"
+      - run: node scripts/copy-neutralino-client.mjs
       - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
       - run: npm run build
       - run: node setup.mjs
