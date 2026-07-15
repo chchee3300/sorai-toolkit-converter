@@ -1,3 +1,11 @@
+## [0.2.4](https://github.com/chchee3300/FileConverterApp/compare/v0.2.3...v0.2.4) (2026-07-15)
+
+
+### Bug Fixes
+
+* macOS build ran out of disk space downloading playwright's browsers ([94e5c07](https://github.com/chchee3300/FileConverterApp/commit/94e5c077ce8155cf7d5ab9bd95bd465456145da1))
+* version number in status bar was a hardcoded, never-updated "v1.0" ([251b3e4](https://github.com/chchee3300/FileConverterApp/commit/251b3e4abb720bb5734ae95bc8d29373d0386c99))
+
 ## [0.2.3](https://github.com/chchee3300/FileConverterApp/compare/v0.2.2...v0.2.3) (2026-07-15)
 
 
