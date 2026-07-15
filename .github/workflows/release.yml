@@ -45,10 +45,17 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
-      - run: npm run build
       - run: npm install -g @neutralinojs/neu
       - run: neu update
+      # neu update (per neutralino.config.json's cli.clientLibrary) writes
+      # the client lib straight to web-dist/js/neutralino.js -- but vite's
+      # build wipes web-dist/ (emptyOutDir) before copying it back in from
+      # resources/js/neutralino.js (vite.config.mjs's declared "single
+      # source of truth", gitignored, otherwise never populated on a fresh
+      # checkout). Persist neu update's output there first.
+      - run: node -e "require('fs').copyFileSync('web-dist/js/neutralino.js', 'resources/js/neutralino.js')"
+      - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
+      - run: npm run build
       - run: node setup.mjs
       - run: neu build --release --embed-resources
       - name: Install fpm
@@ -73,10 +80,17 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
-      - run: npm run build
       - run: npm install -g @neutralinojs/neu
       - run: neu update
+      # neu update (per neutralino.config.json's cli.clientLibrary) writes
+      # the client lib straight to web-dist/js/neutralino.js -- but vite's
+      # build wipes web-dist/ (emptyOutDir) before copying it back in from
+      # resources/js/neutralino.js (vite.config.mjs's declared "single
+      # source of truth", gitignored, otherwise never populated on a fresh
+      # checkout). Persist neu update's output there first.
+      - run: node -e "require('fs').copyFileSync('web-dist/js/neutralino.js', 'resources/js/neutralino.js')"
+      - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
+      - run: npm run build
       - run: node setup.mjs
       - run: neu build --release --embed-resources
       - run: pwsh packaging/windows/install-innosetup.ps1
@@ -97,10 +111,17 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
-      - run: npm run build
       - run: npm install -g @neutralinojs/neu
       - run: neu update
+      # neu update (per neutralino.config.json's cli.clientLibrary) writes
+      # the client lib straight to web-dist/js/neutralino.js -- but vite's
+      # build wipes web-dist/ (emptyOutDir) before copying it back in from
+      # resources/js/neutralino.js (vite.config.mjs's declared "single
+      # source of truth", gitignored, otherwise never populated on a fresh
+      # checkout). Persist neu update's output there first.
+      - run: node -e "require('fs').copyFileSync('web-dist/js/neutralino.js', 'resources/js/neutralino.js')"
+      - run: node scripts/write-version.mjs "${{ needs.get-next-version.outputs.version }}"
+      - run: npm run build
       - run: node setup.mjs
       - name: Populate the other mac arch folder
         # evermeet.cx publishes one ffmpeg build advertised as covering both

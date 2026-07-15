@@ -32,6 +32,12 @@ These live in per-platform folders under `binaries/` (`win_x64/`, `mac_x64/`, `m
 
 ```bash
 npm install
+npm install -g @neutralinojs/neu
+neu update          # fetches the Neutralino client lib + runtime binaries (bin/, gitignored)
+node -e "require('fs').copyFileSync('web-dist/js/neutralino.js', 'resources/js/neutralino.js')"
+                     # neu update writes the client lib to web-dist/js/ (per neutralino.config.json's
+                     # clientLibrary); vite.config.mjs re-copies it there from resources/js/ (its
+                     # source of truth, also gitignored) on every build, so this needs doing once
 node setup.mjs      # downloads ffmpeg (all platforms) into binaries/, plus qpdf/img2pdf on Windows;
                      # on macOS/Linux it checks for system qpdf/img2pdf and prints install hints if missing
 ```
