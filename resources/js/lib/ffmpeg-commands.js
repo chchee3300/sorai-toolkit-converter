@@ -2,7 +2,9 @@
 // handler. Framework-agnostic strangler-fig seam: the future React port
 // imports these unchanged — see design-system/MASTER.md do-not-touch list.
 // Do NOT alter the string-building here without a dedicated CLAUDE.md review;
-// these must stay byte-identical to pre-migration output.
+// these must stay byte-identical to pre-migration output for every code path
+// that predates the Photo Crop feature. buildImageCommand's `crop` param is a
+// deliberate, reviewed addition (not migration drift) — see its own comment.
 (function (global) {
   // fileObj: { fps, duration, size, trimStart, trimEnd } (subset of the app's file record)
   function buildVideoCommand({ binPath, file, outPath, format, codec, qualityPercent, speed, targetFpsStr, fileObj }) {
@@ -71,7 +73,12 @@
     return `"${binPath}\\binaries\\ffmpeg.exe" -y ${trimCmd}-i "${file}" -c:v ${codec} ${filterCmd}${targetBitrateCmd} "${outPath}"`;
   }
 
-  function buildImageCommand({ binPath, file, outPath, format, quality, scale }) {
+  // crop: { x, y, width, height } in the source image's natural pixel
+  // coordinates, or undefined for no crop. Always applied *before* scale in
+  // the filter chain (crop the region first, then resize what's left) --
+  // every branch below joins crop ahead of scale/the .ico mandatory cap via
+  // joinFilters.
+  function buildImageCommand({ binPath, file, outPath, format, quality, scale, crop }) {
     let qCmd = '';
     let filterCmd = '';
 
@@ -82,11 +89,20 @@
       qCmd = `-q:v ${quality}`;
     }
 
+    const joinFilters = (...parts) => parts.filter(Boolean).join(',');
+
+    let cropFilter = '';
+    if (crop && crop.width && crop.height) {
+      cropFilter = `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`;
+    }
+
     let scaleFilter = '';
     if (scale < 100) {
       let scaleFactor = scale / 100;
       scaleFilter = `scale=trunc(iw*${scaleFactor}/2)*2:-2:flags=lanczos`;
     }
+
+    const cropAndScale = joinFilters(cropFilter, scaleFilter);
 
     if (format === '.ico') {
       // ffmpeg's ico muxer hard-caps output at 256x256 -- anything larger
@@ -94,18 +110,19 @@
       // the bundled binary). Always fit-within-256 regardless of the
       // scale slider, which is honored as an *additional* reduction
       // chained in front of the mandatory cap (unlike every other format,
-      // where the scale filter only applies when scale < 100).
-      const preScale = scaleFilter ? `${scaleFilter},` : '';
+      // where the scale filter only applies when scale < 100). Crop (if
+      // any) goes in front of both, same as everywhere else.
+      const preScale = cropAndScale ? `${cropAndScale},` : '';
       filterCmd = `-vf "${preScale}scale='min(256,iw)':'min(256,ih)':force_original_aspect_ratio=decrease"`;
     } else if (format === '.png' && quality < 100) {
       let colors = Math.max(2, Math.floor(256 * (quality / 100)));
-      if (scaleFilter) {
-        filterCmd = `-filter_complex "[0:v]${scaleFilter}[s];[s]split[a][b];[a]palettegen=max_colors=${colors}[p];[b][p]paletteuse"`;
+      if (cropAndScale) {
+        filterCmd = `-filter_complex "[0:v]${cropAndScale}[s];[s]split[a][b];[a]palettegen=max_colors=${colors}[p];[b][p]paletteuse"`;
       } else {
         filterCmd = `-filter_complex "[0:v]split[a][b];[a]palettegen=max_colors=${colors}[p];[b][p]paletteuse"`;
       }
-    } else if (scaleFilter) {
-      filterCmd = `-vf "${scaleFilter}"`;
+    } else if (cropAndScale) {
+      filterCmd = `-vf "${cropAndScale}"`;
     }
 
     return `"${binPath}\\binaries\\ffmpeg.exe" -y -i "${file}" ${filterCmd} ${qCmd} "${outPath}"`;

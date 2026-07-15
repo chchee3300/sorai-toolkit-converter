@@ -164,7 +164,7 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
           outPath = await window.EstellaLib.filenameCollision.getUniqueOutPath(resolvedOutputPath, nameWithoutExt, format)
           command = format === '.pdf'
             ? window.EstellaLib.img2pdfCommands.buildImageToPdfCommand({ binPath, file, outPath })
-            : window.EstellaLib.ffmpegCommands.buildImageCommand({ binPath, file, outPath, format, quality, scale })
+            : window.EstellaLib.ffmpegCommands.buildImageCommand({ binPath, file, outPath, format, quality, scale, crop: fileObj.crop })
         } else if (fileType === 'audio') {
           const { bitrate, speed, format } = settings.audio
           outPath = await window.EstellaLib.filenameCollision.getUniqueOutPath(resolvedOutputPath, nameWithoutExt, format)

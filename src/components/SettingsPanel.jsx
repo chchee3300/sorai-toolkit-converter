@@ -151,17 +151,70 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
   )
 }
 
+// Pure CSS boxes (no thumbnail/image asset) showing the last file's
+// original vs. scaled dimensions proportionally. Two SEPARATE same-aspect
+// boxes side by side (not one nested inside the other) — Scale is a
+// uniform proportional resize of the *whole* image, not a sub-region
+// selection, so a smaller box inset inside a corner of a bigger one would
+// misread as a crop preview instead. "Effective source" honors
+// lastFile.crop when set, matching resolutionPreview's own crop-then-scale
+// math below and buildImageCommand's filter order.
+function ScaleSizeDiagram({ lastFile, scale }) {
+  if (!lastFile || !lastFile.width || !lastFile.height) return null
+  const baseW = lastFile.crop ? lastFile.crop.width : lastFile.width
+  const baseH = lastFile.crop ? lastFile.crop.height : lastFile.height
+  if (!baseW || !baseH) return null
+
+  const MAX_PX = 56
+  const fit = MAX_PX / Math.max(baseW, baseH)
+  const outerW = Math.max(6, Math.round(baseW * fit))
+  const outerH = Math.max(6, Math.round(baseH * fit))
+  const scaledW = Math.round(baseW * (scale / 100))
+  const scaledH = Math.round(baseH * (scale / 100))
+  const resultW = Math.max(3, Math.round(outerW * (scale / 100)))
+  const resultH = Math.max(3, Math.round(outerH * (scale / 100)))
+
+  const boxStyle = {
+    background: 'var(--surface-3)',
+    border: '1px solid var(--glass-border-hi)',
+    borderRadius: 2,
+    flexShrink: 0,
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 8 }}>
+      <div style={{ ...boxStyle, width: outerW, height: outerH }} title={`${baseW} x ${baseH}`} />
+      <span aria-hidden="true" style={{ color: 'var(--text-muted)', fontSize: '0.8em', marginBottom: (outerH - 12) / 2 }}>
+        →
+      </span>
+      <div
+        style={{ ...boxStyle, width: resultW, height: resultH, borderColor: 'var(--accent)', background: 'var(--accent-dim)' }}
+        title={`${scaledW} x ${scaledH}`}
+      />
+      <span className="tabular-nums" style={{ fontSize: '0.75em', color: 'var(--text-muted)', lineHeight: 1.4, marginLeft: 2 }}>
+        {baseW} x {baseH}
+        <br />→ {scaledW} x {scaledH}
+      </span>
+    </div>
+  )
+}
+
 function ImageSettings({ visible, image, setImage, lastFile }) {
   const set = (patch) => setImage((v) => ({ ...v, ...patch }))
 
   // Matches the vanilla quirk exactly: updateEstimations() looped over
   // every file and overwrote the single #image-resolution-preview element
   // each time, so it only ever reflected the *last* file in the list
-  // (main.js:107-114 pre-extraction). Not "fixed" here — see FileList.jsx.
+  // (main.js:107-114 pre-extraction). Not "fixed" here (kept for
+  // tests/test_conversion.js's `I1` assertion on this exact id) — the
+  // per-file fix lives in FileList.jsx instead. Now crop-aware, same as
+  // that per-file version and ScaleSizeDiagram above.
   let resolutionPreview = ''
   if (lastFile && lastFile.width && lastFile.height) {
-    const w = Math.round(lastFile.width * (image.scale / 100))
-    const h = Math.round(lastFile.height * (image.scale / 100))
+    const baseW = lastFile.crop ? lastFile.crop.width : lastFile.width
+    const baseH = lastFile.crop ? lastFile.crop.height : lastFile.height
+    const w = Math.round(baseW * (image.scale / 100))
+    const h = Math.round(baseH * (image.scale / 100))
     resolutionPreview = `${w} x ${h}`
   }
 
@@ -218,6 +271,7 @@ function ImageSettings({ visible, image, setImage, lastFile }) {
             style={rangeFillStyle(image.scale, 10, 100)}
             onChange={(e) => set({ scale: parseFloat(e.target.value) })}
           />
+          <ScaleSizeDiagram lastFile={lastFile} scale={image.scale} />
         </div>
       </div>
     </div>

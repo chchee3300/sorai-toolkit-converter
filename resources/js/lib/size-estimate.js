@@ -44,9 +44,9 @@
     return estMB;
   }
 
-  function estimateImageMB({ currentSizeMB, format, quality, scale, sourcePath }) {
-    // img2pdf embeds losslessly — quality/scale don't apply to this path
-    // (ImageSettings hides those fields once .pdf is selected).
+  function estimateImageMB({ currentSizeMB, format, quality, scale, sourcePath, cropAreaRatio }) {
+    // img2pdf embeds losslessly — quality/scale/crop don't apply to this
+    // path (ImageSettings hides those fields once .pdf is selected).
     if (format === '.pdf') {
       return currentSizeMB + 0.05;
     }
@@ -60,7 +60,11 @@
     } else if (lowerPath.endsWith('.png')) {
       baseSize = currentSizeMB * 0.4;
     }
-    return baseSize * (quality / 100) * (scale / 100) * (scale / 100);
+    // cropAreaRatio: (crop.width * crop.height) / (source.width * source.height),
+    // 1 when no crop is set — pixel area removed by crop shrinks the estimate
+    // the same way the scale factor does, independently of it.
+    const areaRatio = cropAreaRatio != null ? cropAreaRatio : 1;
+    return baseSize * (quality / 100) * (scale / 100) * (scale / 100) * areaRatio;
   }
 
   function estimatePdfMB({ currentSizeMB, optimize }) {

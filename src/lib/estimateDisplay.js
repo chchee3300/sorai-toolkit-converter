@@ -45,12 +45,17 @@ export function computeEstimate(fileObj, fileType, settings) {
     })
   } else if (fileType === 'image') {
     const { format, quality, scale } = settings.image
+    let cropAreaRatio = 1
+    if (fileObj.crop && fileObj.width && fileObj.height) {
+      cropAreaRatio = (fileObj.crop.width * fileObj.crop.height) / (fileObj.width * fileObj.height)
+    }
     estMB = window.EstellaLib.sizeEstimate.estimateImageMB({
       currentSizeMB,
       format,
       quality,
       scale,
       sourcePath: fileObj.path,
+      cropAreaRatio,
     })
   } else if (fileType === 'pdf') {
     estMB = window.EstellaLib.sizeEstimate.estimatePdfMB({ currentSizeMB, optimize: settings.pdf.optimize })

@@ -8,6 +8,7 @@ import ToolIntro from './components/ToolIntro.jsx'
 import ProgressLog from './components/ProgressLog.jsx'
 import MixedTypeModal from './components/MixedTypeModal.jsx'
 import TrimModal from './components/TrimModal.jsx'
+import CropModal from './components/CropModal.jsx'
 import { useTheme } from './hooks/useTheme.js'
 import { useFileManager } from './hooks/useFileManager.js'
 import { useSettings } from './hooks/useSettings.js'
@@ -82,6 +83,16 @@ function App() {
     setFiles((prev) => prev.map((f, i) => (i === trimIndex ? { ...f, trimStart: start, trimEnd: end } : f)))
   }
 
+  // Mirrors trimIndex/trimFile/handleSaveTrim above — crop is per-file state
+  // stored the same way trim is, not a shared useSettings field.
+  const [cropIndex, setCropIndex] = useState(-1)
+  const cropFile = cropIndex >= 0 ? files[cropIndex] : null
+
+  const handleSaveCrop = (crop) => {
+    if (cropIndex < 0) return
+    setFiles((prev) => prev.map((f, i) => (i === cropIndex ? { ...f, crop } : f)))
+  }
+
   return (
     <div className="app-shell">
       <Header fileType={fileType} onToggleTheme={toggleTheme} />
@@ -113,7 +124,7 @@ function App() {
                   </button>
                 </div>
               </div>
-              <FileList files={files} fileType={fileType} settings={settings} onRemove={removeFile} onOpenTrim={setTrimIndex} />
+              <FileList files={files} fileType={fileType} settings={settings} onRemove={removeFile} onOpenTrim={setTrimIndex} onOpenCrop={setCropIndex} />
             </div>
             <ProgressLog visible={progressVisible} percent={progressPercent} text={progressText} log={terminalLog} />
           </section>
@@ -142,6 +153,12 @@ function App() {
         fileType={fileType}
         onClose={() => setTrimIndex(-1)}
         onSave={handleSaveTrim}
+      />
+      <CropModal
+        open={cropIndex >= 0}
+        file={cropFile}
+        onClose={() => setCropIndex(-1)}
+        onSave={handleSaveCrop}
       />
       <MixedTypeModal
         open={!!pendingMismatch}
