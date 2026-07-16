@@ -151,6 +151,16 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
   const [ratioKey, setRatioKey] = useState('free')
   const [dragMode, setDragMode] = useState(null) // 'move' | 'nw' | 'ne' | 'sw' | 'se' | null
   const [zoom, setZoom] = useState(1)
+  // Raw text the user is currently typing into the W/H inputs, decoupled
+  // from `rect` itself -- null means "not being edited, show rect's own
+  // value". Without this, a controlled input bound directly to
+  // Math.max(MIN_SIZE, ...)-clamped rect.width snaps back to MIN_SIZE the
+  // instant the field is cleared (Number('') is 0, which is < MIN_SIZE),
+  // before the user has typed a single new digit -- the min-size floor only
+  // makes sense as a constraint on the FINAL committed value, not on every
+  // intermediate keystroke while the field is briefly empty or small.
+  const [widthDraft, setWidthDraft] = useState(null)
+  const [heightDraft, setHeightDraft] = useState(null)
 
   const rectRef = useRef(rect)
   rectRef.current = rect
@@ -195,6 +205,8 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
     setRatioKey('free')
     ratioRef.current = null
     setZoom(1)
+    setWidthDraft(null)
+    setHeightDraft(null)
     if (viewportRef.current) {
       viewportRef.current.scrollLeft = 0
       viewportRef.current.scrollTop = 0
@@ -478,10 +490,17 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
     const anchor = mode === 'move' ? null : oppositeCorner(mode, rectRef.current)
     dragStartRef.current = { pointer, rect: { ...rectRef.current }, anchor }
     setDragMode(mode)
+    // A drag is the authoritative source of the rect while it's happening --
+    // drop any in-progress typed draft so the W/H inputs show the live
+    // dragged value instead of stale unsubmitted text.
+    setWidthDraft(null)
+    setHeightDraft(null)
   }
 
   const applyRatioPreset = (preset) => {
     setRatioKey(preset.key)
+    setWidthDraft(null)
+    setHeightDraft(null)
     if (preset.ratio === null) {
       ratioRef.current = null
       return
@@ -497,29 +516,64 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
     setRect({ x: 0, y: 0, width: naturalW, height: naturalH })
     setRatioKey('free')
     ratioRef.current = null
+    setWidthDraft(null)
+    setHeightDraft(null)
     if (onClear) onClear()
   }
 
-  // Manual width/height entry -- clamped against how much room is actually
-  // left from the rect's CURRENT x/y to the image edge (not the raw natural
-  // dimension), so typing a too-large value snaps to the largest size that
-  // still fits without silently moving the crop's position too. Breaks any
-  // active ratio preset (same as handleClear) rather than leaving a
-  // highlighted preset button that no longer matches the typed shape.
+  // Manual width/height entry -- the input's displayed text is the draft
+  // state (whatever the user literally typed, including empty), not rect
+  // itself, so clearing the field to type a fresh number never gets
+  // overwritten mid-edit. While a value parses to something usable, the
+  // rect's own width/height updates live (capped against how much room is
+  // left from the rect's CURRENT x/y to the image edge, so the crop can't
+  // visually exceed the source) -- but WITHOUT the MIN_SIZE floor, so
+  // typing "1" then "5" then "0" toward "150" never gets bumped to 10
+  // partway through. MIN_SIZE (and falling back to the prior value if left
+  // empty/invalid) is only enforced once the field is committed, in
+  // commitWidthDraft/commitHeightDraft below.
   const handleWidthInput = (e) => {
-    const raw = Number(e.target.value)
-    if (!Number.isFinite(raw)) return
-    setRatioKey('free')
-    ratioRef.current = null
-    setRect((r) => ({ ...r, width: Math.min(Math.max(MIN_SIZE, Math.round(raw)), naturalW - r.x) }))
+    const text = e.target.value
+    setWidthDraft(text)
+    const raw = Number(text)
+    if (text.trim() !== '' && Number.isFinite(raw) && raw > 0) {
+      setRatioKey('free')
+      ratioRef.current = null
+      setRect((r) => ({ ...r, width: Math.min(Math.round(raw), naturalW - r.x) }))
+    }
   }
 
   const handleHeightInput = (e) => {
-    const raw = Number(e.target.value)
-    if (!Number.isFinite(raw)) return
-    setRatioKey('free')
-    ratioRef.current = null
-    setRect((r) => ({ ...r, height: Math.min(Math.max(MIN_SIZE, Math.round(raw)), naturalH - r.y) }))
+    const text = e.target.value
+    setHeightDraft(text)
+    const raw = Number(text)
+    if (text.trim() !== '' && Number.isFinite(raw) && raw > 0) {
+      setRatioKey('free')
+      ratioRef.current = null
+      setRect((r) => ({ ...r, height: Math.min(Math.round(raw), naturalH - r.y) }))
+    }
+  }
+
+  // Commit on blur (or Enter, via the input's onKeyDown below): clamps the
+  // final value up to MIN_SIZE, and falls back to whatever rect already had
+  // if the field was left empty/invalid rather than forcing an arbitrary
+  // minimum crop out of nowhere.
+  const commitWidthDraft = () => {
+    if (widthDraft === null) return
+    const raw = Number(widthDraft)
+    if (Number.isFinite(raw) && raw > 0) {
+      setRect((r) => ({ ...r, width: Math.min(Math.max(MIN_SIZE, Math.round(raw)), naturalW - r.x) }))
+    }
+    setWidthDraft(null)
+  }
+
+  const commitHeightDraft = () => {
+    if (heightDraft === null) return
+    const raw = Number(heightDraft)
+    if (Number.isFinite(raw) && raw > 0) {
+      setRect((r) => ({ ...r, height: Math.min(Math.max(MIN_SIZE, Math.round(raw)), naturalH - r.y) }))
+    }
+    setHeightDraft(null)
   }
 
   const resetZoom = () => {
@@ -605,10 +659,13 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
 
           {/* Manual width/height entry -- defaults to the full natural
               image size (see the open effect's setRect), editable directly
-              instead of only via drag. Each clamps to how much room is left
-              from the rect's current x/y to that edge (handleWidthInput/
-              handleHeightInput), snapping back down rather than letting the
-              crop rect extend past the source image. */}
+              instead of only via drag. Displayed value is the draft text the
+              user is actively typing (widthDraft/heightDraft), not rect
+              itself -- see the state declarations above for why: a value
+              bound straight to a MIN_SIZE-clamped rect snaps back to 10 the
+              instant the field is cleared, before a new digit is typed.
+              MIN_SIZE and the image-edge clamp are enforced on commit
+              (blur, or Enter -- see commitWidthDraft/commitHeightDraft). */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
             <label htmlFor="crop-width-input" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75em', color: 'var(--text-muted)' }}>
               W
@@ -620,9 +677,11 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
                 min={MIN_SIZE}
                 max={naturalW - rect.x}
                 step={1}
-                value={Math.round(rect.width)}
+                value={widthDraft ?? Math.round(rect.width)}
                 disabled={!naturalW || !naturalH}
                 onChange={handleWidthInput}
+                onBlur={commitWidthDraft}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
               />
             </label>
             <label htmlFor="crop-height-input" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75em', color: 'var(--text-muted)' }}>
@@ -635,9 +694,11 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
                 min={MIN_SIZE}
                 max={naturalH - rect.y}
                 step={1}
-                value={Math.round(rect.height)}
+                value={heightDraft ?? Math.round(rect.height)}
                 disabled={!naturalW || !naturalH}
                 onChange={handleHeightInput}
+                onBlur={commitHeightDraft}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
               />
             </label>
           </div>
