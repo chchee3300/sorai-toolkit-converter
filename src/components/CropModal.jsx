@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useTranslation } from '../hooks/useTranslation.js'
 
 // New (no vanilla precedent) — modeled on TrimModal.jsx's interaction shape:
 // a preview mounted via Neutralino.server.mount, drag state mirrored into
@@ -27,13 +28,15 @@ const ZOOM_WHEEL_FACTOR = 1.15
 const VIEWPORT_MAX_W = 720
 const VIEWPORT_MAX_H = 440
 
+// `label` is either literal text (the numeric ratios, which no language
+// renames) or a dict key resolved through t() at render time (labelKey).
 const RATIO_PRESETS = [
-  { key: 'free', label: 'Free', ratio: null },
+  { key: 'free', labelKey: 'cropModal.ratio.free', ratio: null },
   { key: '1:1', label: '1:1', ratio: 1 },
   { key: '4:3', label: '4:3', ratio: 4 / 3 },
   { key: '16:9', label: '16:9', ratio: 16 / 9 },
   { key: '9:16', label: '9:16', ratio: 9 / 16 },
-  { key: 'original', label: 'Original', ratio: 'original' },
+  { key: 'original', labelKey: 'cropModal.ratio.original', ratio: 'original' },
 ]
 
 function centeredRectForRatio(ratio, imgW, imgH) {
@@ -139,6 +142,7 @@ function computeFit(natW, natH, zoomVal) {
 }
 
 export default function CropModal({ open, file, onClose, onSave, onClear }) {
+  const { t } = useTranslation()
   const imgRef = useRef(null)
   const dimImgRef = useRef(null)
   const containerRef = useRef(null)
@@ -620,11 +624,11 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
         tabIndex={-1}
       >
         <div className="modal-header">
-          <h3 className="modal-title" id="crop-modal-title">Crop Image</h3>
+          <h3 className="modal-title" id="crop-modal-title">{t('cropModal.title')}</h3>
           <span
             id="crop-zoom-label"
             className="tabular-nums"
-            title="Double-click the preview to reset zoom"
+            title={t('cropModal.resetZoomHint')}
             style={{ marginLeft: 'auto', fontSize: '0.8em', color: zoom > 1 ? 'var(--accent)' : 'var(--text-muted)' }}
           >
             {Math.round(zoom * 100)}%
@@ -649,11 +653,11 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
                 }
                 onClick={() => applyRatioPreset(preset)}
               >
-                {preset.label}
+                {preset.labelKey ? t(preset.labelKey) : preset.label}
               </button>
             ))}
             <span style={{ marginLeft: 'auto', fontSize: '0.75em', color: 'var(--text-muted)' }}>
-              Scroll to zoom &middot; middle-drag to pan &middot; double-click to reset
+              {t('cropModal.controlsHint')}
             </span>
           </div>
 
@@ -668,7 +672,7 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
               (blur, or Enter -- see commitWidthDraft/commitHeightDraft). */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
             <label htmlFor="crop-width-input" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75em', color: 'var(--text-muted)' }}>
-              W
+              {t('cropModal.width')}
               <input
                 id="crop-width-input"
                 type="number"
@@ -685,7 +689,7 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
               />
             </label>
             <label htmlFor="crop-height-input" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75em', color: 'var(--text-muted)' }}>
-              H
+              {t('cropModal.height')}
               <input
                 id="crop-height-input"
                 type="number"
@@ -706,7 +710,7 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
                 disconnected/floating; outline matches the ratio-preset
                 row's own button style directly above it. */}
             <button id="btn-clear-crop" className="btn btn-outline btn-xs" style={{ marginLeft: 'auto' }} onClick={handleClear}>
-              Clear Crop
+              {t('cropModal.clearCrop')}
             </button>
           </div>
 
@@ -806,8 +810,8 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
               with only Cancel/Save left it needs an explicit marginLeft:
               auto to stay pinned right instead of collapsing to the start. */}
           <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-            <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleSave}>Save</button>
+            <button className="btn btn-outline" onClick={onClose}>{t('cropModal.cancel')}</button>
+            <button className="btn btn-primary" onClick={handleSave}>{t('cropModal.save')}</button>
           </div>
         </div>
       </div>

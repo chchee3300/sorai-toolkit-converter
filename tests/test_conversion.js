@@ -160,7 +160,7 @@ async function main() {
         const page = await browser.newPage();
         page.on('pageerror', err => { pageErrors.push(err.message); console.log('PAGE ERROR:', err.message); });
         page.on('dialog', d => { console.log('PAGE DIALOG:', d.message()); d.dismiss().catch(() => {}); });
-        await page.addInitScript(t => { try { sessionStorage.setItem('NL_TOKEN', t); } catch (e) {} }, auth.nlToken);
+        await page.addInitScript(t => { try { sessionStorage.setItem('NL_TOKEN', t); localStorage.setItem('sorai-lang', 'en'); } catch (e) {} }, auth.nlToken); // sorai-lang pinned: this suite asserts English UI strings, and i18n auto-detects the OS locale (zh-TW on this dev machine) when no saved preference exists
         await page.goto(url);
         await page.waitForSelector('#input-panel');
         // React build has no window.importDroppedFiles global (it's an

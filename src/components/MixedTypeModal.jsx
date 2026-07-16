@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useTranslation } from '../hooks/useTranslation.js'
 
 // Confirm-before-clearing dialog: shown when an incoming batch's file type
 // (video/image/audio/pdf) differs from what's already loaded, instead of
@@ -11,6 +12,7 @@ import { useEffect, useRef } from 'react'
 // destructive/irreversible actions" rule now that there's an actual
 // destructive action (clearing the batch) to gate.
 export default function MixedTypeModal({ open, existingType, incomingType, existingCount, incomingCount, onConfirm, onCancel }) {
+  const { t } = useTranslation()
   const modalContentRef = useRef(null)
   const onCancelRef = useRef(onCancel)
   onCancelRef.current = onCancel
@@ -67,17 +69,15 @@ export default function MixedTypeModal({ open, existingType, incomingType, exist
         tabIndex={-1}
       >
         <div className="modal-header">
-          <h3 className="modal-title" id="mixed-type-modal-title">Different file type detected</h3>
+          <h3 className="modal-title" id="mixed-type-modal-title">{t('mixedType.title')}</h3>
         </div>
         <div className="modal-body">
-          <p>
-            You have {existingCount} {existingType} file{existingCount === 1 ? '' : 's'} loaded. These {incomingCount} file{incomingCount === 1 ? '' : 's'} {incomingCount === 1 ? 'is' : 'are'} {incomingType} — only one type can be converted per batch. Clear the current files and load the new ones instead?
-          </p>
+          <p>{t('mixedType.body', { existingCount, existingType, incomingCount, incomingType })}</p>
         </div>
         <div className="modal-footer" style={{ justifyContent: 'flex-end' }}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-outline" id="btn-mixed-type-cancel" onClick={onCancel}>Keep current files</button>
-            <button className="btn btn-outline-danger" id="btn-mixed-type-confirm" onClick={onConfirm}>Clear &amp; load {incomingType} files</button>
+            <button className="btn btn-outline" id="btn-mixed-type-cancel" onClick={onCancel}>{t('mixedType.keepCurrent')}</button>
+            <button className="btn btn-outline-danger" id="btn-mixed-type-confirm" onClick={onConfirm}>{t('mixedType.clearAndLoad', { incomingType })}</button>
           </div>
         </div>
       </div>

@@ -11,13 +11,15 @@ import CropModal from './components/CropModal.jsx'
 import { useFileManager } from './hooks/useFileManager.js'
 import { useSettings } from './hooks/useSettings.js'
 import { useExecute } from './hooks/useExecute.js'
+import { useTranslation } from './hooks/useTranslation.js'
 
 // Ported from resources/index.html:42-46 (loading overlay markup).
 function LoadingOverlay({ visible }) {
+  const { t } = useTranslation()
   return (
     <div id="file-loading-overlay" className={visible ? 'loading-overlay' : 'loading-overlay hidden'} role="status" aria-live="polite">
       <div className="spinner" aria-hidden="true"></div>
-      <p>Reading files…</p>
+      <p>{t('app.readingFiles')}</p>
     </div>
   )
 }
@@ -34,6 +36,7 @@ function LoadingOverlay({ visible }) {
 // component with no surrounding chrome -- fine for isolated dev/testing of
 // conversion behavior, which is what this dev harness is for.
 function App() {
+  const { t } = useTranslation()
   const settings = useSettings()
 
   const {
@@ -112,7 +115,7 @@ function App() {
             <div id="file-list-container" className={hasFiles ? '' : 'hidden'}>
               <div className="filelist-header">
                 <span className="mono-label tabular-nums" id="file-count-label">
-                  {files.length} file{files.length !== 1 ? 's' : ''} · {fileType ? fileType.toUpperCase() : ''}
+                  {t('app.fileCount', { count: files.length, type: fileType ? t(`fileType.${fileType}`) : '' })}
                 </span>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button className="btn btn-ghost-success btn-xs" id="btn-add-files" onClick={browseForFiles}>
@@ -120,14 +123,14 @@ function App() {
                       <line x1="8" y1="3" x2="8" y2="13" />
                       <line x1="3" y1="8" x2="13" y2="8" />
                     </svg>
-                    Add files
+                    {t('app.addFiles')}
                   </button>
                   <button className="btn btn-ghost btn-xs" id="btn-clear-files" onClick={clearFiles}>
                     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
                       <line x1="3" y1="3" x2="13" y2="13" />
                       <line x1="13" y1="3" x2="3" y2="13" />
                     </svg>
-                    Clear all
+                    {t('app.clearAll')}
                   </button>
                 </div>
               </div>
@@ -153,7 +156,10 @@ function App() {
           )}
         </div>
       </main>
-      <StatusBar text={status.text} state={status.state} />
+      {/* status carries a dict key + params (see useFileManager's setStatus),
+          translated here at render so the always-on status bar re-renders in
+          the new language immediately on a switch. */}
+      <StatusBar text={t(status.key, status.params)} state={status.state} />
       <TrimModal
         open={trimIndex >= 0}
         file={trimFile}

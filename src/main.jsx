@@ -12,7 +12,11 @@ import '../resources/js/liquid-glass.js'
 // Strangler-fig lib modules (Phase 0.4) — each attaches to
 // window.EstellaLib.* explicitly, same reasoning as liquid-glass.js.
 // platform.js must load first — the command-builder modules below call
-// into window.EstellaLib.platform.
+// into window.EstellaLib.platform. i18n.js has no such ordering
+// requirement but is loaded here too, same as the hub's own main.jsx, so
+// window.EstellaLib.i18n exists before first render in this standalone dev
+// harness (when consumed via the hub, the hub's own copy already did this).
+import '../resources/js/lib/i18n.js'
 import '../resources/js/lib/platform.js'
 import '../resources/js/lib/filename-collision.js'
 import '../resources/js/lib/ffmpeg-commands.js'

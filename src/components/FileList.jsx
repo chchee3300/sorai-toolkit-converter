@@ -1,4 +1,5 @@
 import { computeEstimate } from '../lib/estimateDisplay.js'
+import { useTranslation } from '../hooks/useTranslation.js'
 
 // Ported unchanged from resources/index.html:69-85 (container markup) and
 // main.js's renderFileList per-item template (main.js:195-231
@@ -9,15 +10,15 @@ import { computeEstimate } from '../lib/estimateDisplay.js'
 // a pre-existing vanilla-app quirk, not introduced by this port; logged in
 // design-system/MASTER.md rather than "fixed" here, since a faithful
 // structural port must reproduce it, not correct it.
-function formatFpsTrim(fileObj, fileType) {
+function formatFpsTrim(fileObj, fileType, t) {
   if (fileType !== 'video' && fileType !== 'audio') return { trimText: null, fpsText: null }
   let trimText = null
   if (fileObj.trimStart !== undefined && fileObj.trimEnd !== undefined) {
-    trimText = `[Trim: ${(fileObj.trimEnd - fileObj.trimStart).toFixed(2)}s]`
+    trimText = t('fileList.trimBadge', { seconds: (fileObj.trimEnd - fileObj.trimStart).toFixed(2) })
   }
   let fpsText = null
   if (fileType === 'video' && fileObj.fps) {
-    fpsText = `[${Math.round(fileObj.fps)} fps]`
+    fpsText = t('fileList.fpsBadge', { fps: Math.round(fileObj.fps) })
   }
   return { trimText, fpsText }
 }
@@ -38,16 +39,17 @@ function formatImageResolution(fileObj, fileType, settings) {
 }
 
 export default function FileList({ files, fileType, settings, onRemove, onOpenTrim, onOpenCrop }) {
+  const { t } = useTranslation()
   return (
     <div className="file-list" id="file-list">
       {files.map((fileObj, index) => {
         const filename = fileObj.path.split(/[\\/]/).pop()
         const sizeMB = (fileObj.size / (1024 * 1024)).toFixed(1)
-        const { trimText, fpsText } = formatFpsTrim(fileObj, fileType)
+        const { trimText, fpsText } = formatFpsTrim(fileObj, fileType, t)
         const estimate = computeEstimate(fileObj, fileType, settings)
         const showTrimBtn = fileType === 'video' || fileType === 'audio'
         const resolutionText = formatImageResolution(fileObj, fileType, settings)
-        const cropText = fileObj.crop ? `[Crop: ${fileObj.crop.width}x${fileObj.crop.height}]` : null
+        const cropText = fileObj.crop ? t('fileList.cropBadge', { width: fileObj.crop.width, height: fileObj.crop.height }) : null
         const showCropBtn = fileType === 'image' && settings.image.format !== '.pdf'
 
         return (
@@ -83,7 +85,7 @@ export default function FileList({ files, fileType, settings, onRemove, onOpenTr
                   <>
                     {' '}
                     <span style={{ color: estimate.warn ? 'var(--danger)' : 'var(--accent)' }}>
-                      &rarr; ~{estimate.estMB.toFixed(1)} MB{estimate.warn ? ' ⚠ inflates' : ''}
+                      &rarr; ~{estimate.estMB.toFixed(1)} MB{estimate.warn ? t('fileList.estimateInflates') : ''}
                     </span>
                     {estimate.targetFpsLabel && (
                       <span style={{ color: 'var(--muted)', marginLeft: 5, fontSize: '0.8em' }}>
@@ -96,7 +98,7 @@ export default function FileList({ files, fileType, settings, onRemove, onOpenTr
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               {showTrimBtn && (
-                <button className="btn-trim" title="Trim Media" aria-label="Trim Media" onClick={() => onOpenTrim && onOpenTrim(index)}>
+                <button className="btn-trim" title={t('fileList.trimMedia')} aria-label={t('fileList.trimMedia')} onClick={() => onOpenTrim && onOpenTrim(index)}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <circle cx="6" cy="6" r="3"></circle>
                     <circle cx="6" cy="18" r="3"></circle>
@@ -107,7 +109,7 @@ export default function FileList({ files, fileType, settings, onRemove, onOpenTr
                 </button>
               )}
               {showCropBtn && (
-                <button id={`btn-crop-${index}`} className="btn-trim" title="Crop Image" aria-label="Crop Image" onClick={() => onOpenCrop && onOpenCrop(index)}>
+                <button id={`btn-crop-${index}`} className="btn-trim" title={t('fileList.cropImage')} aria-label={t('fileList.cropImage')} onClick={() => onOpenCrop && onOpenCrop(index)}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M6 2v14a2 2 0 0 0 2 2h14"></path>
                     <path d="M18 22V8a2 2 0 0 0-2-2H2"></path>
@@ -117,7 +119,7 @@ export default function FileList({ files, fileType, settings, onRemove, onOpenTr
               <button
                 type="button"
                 className="remove"
-                aria-label="Remove file"
+                aria-label={t('fileList.removeFile')}
                 onClick={() => onRemove(index)}
                 style={{ background: 'none', border: 'none', font: 'inherit', cursor: 'pointer' }}
               >

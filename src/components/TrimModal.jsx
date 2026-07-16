@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { rangeFillStyle } from '../lib/rangeFill.js'
+import { useTranslation } from '../hooks/useTranslation.js'
 
 // Ported unchanged from resources/index.html:253-312 (markup) and main.js's
 // Trim Modal Logic (main.js:538-867 pre-extraction) — the most complex
@@ -26,6 +27,7 @@ function formatTrimLabel(seconds) {
 }
 
 export default function TrimModal({ open, file, fileType, onClose, onSave, onClear }) {
+  const { t } = useTranslation()
   const vidRef = useRef(null)
   const audRef = useRef(null)
   const activePlayerRef = useRef(null)
@@ -337,7 +339,7 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
         tabIndex={-1}
       >
         <div className="modal-header">
-          <h3 className="modal-title" id="trim-modal-title">Trim Media</h3>
+          <h3 className="modal-title" id="trim-modal-title">{t('trimModal.title')}</h3>
         </div>
         <div className="modal-body trim-vidcord-body">
           <div className="player-container" id="trim-player-container">
@@ -358,16 +360,16 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
               <div className="trim-top-bar">
                 <div className="trim-title">
                   <span className="trim-title-info tabular-nums" id="trim-duration-info">
-                    {selDuration.toFixed(2)}s selected ({selPct.toFixed(1)}%)
+                    {t('trimModal.selected', { duration: selDuration.toFixed(2), percent: selPct.toFixed(1) })}
                   </span>
                 </div>
                 <div className="trim-actions">
-                  <button className="btn-icon" id="btn-trim-play-pause" title="Play/Pause" aria-label="Play/Pause" onClick={togglePlayPause}>
+                  <button className="btn-icon" id="btn-trim-play-pause" title={t('trimModal.playPause')} aria-label={t('trimModal.playPause')} onClick={togglePlayPause}>
                     <svg className={isPlaying ? 'icon-play hidden' : 'icon-play'} viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                     <svg className={isPlaying ? 'icon-pause' : 'icon-pause hidden'} viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
                   </button>
                   <div className="trim-volume-control" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <button className="btn-icon" id="btn-trim-mute" title="Mute" aria-label={showVolOff ? 'Unmute' : 'Mute'} onClick={handleToggleMute}>
+                    <button className="btn-icon" id="btn-trim-mute" title={t('trimModal.mute')} aria-label={showVolOff ? t('trimModal.unmute') : t('trimModal.mute')} onClick={handleToggleMute}>
                       <svg className={showVolOff ? 'icon-vol-on hidden' : 'icon-vol-on'} viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
                       <svg className={showVolOff ? 'icon-vol-off' : 'icon-vol-off hidden'} viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="1" x2="1" y2="23"></line></svg>
                     </button>
@@ -384,16 +386,16 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
                     />
                   </div>
                   <div className="trim-actions-divider" aria-hidden="true"></div>
-                  <button className="btn btn-outline btn-xs" id="btn-set-start" onClick={handleSetStart}>In</button>
-                  <button className="btn btn-outline btn-xs" id="btn-set-end" onClick={handleSetEnd}>Out</button>
+                  <button className="btn btn-outline btn-xs" id="btn-set-start" onClick={handleSetStart}>{t('trimModal.setStart')}</button>
+                  <button className="btn btn-outline btn-xs" id="btn-set-end" onClick={handleSetEnd}>{t('trimModal.setEnd')}</button>
                   <button
                     className={isLooping ? 'btn btn-outline btn-xs' : 'btn btn-outline btn-xs btn-loop-off'}
                     id="btn-trim-loop"
                     style={{ marginLeft: 4, position: 'relative', overflow: 'hidden' }}
-                    title="Toggle Loop"
+                    title={t('trimModal.toggleLoop')}
                     onClick={() => setIsLooping((v) => !v)}
                   >
-                    Loop
+                    {t('trimModal.loop')}
                   </button>
                 </div>
               </div>
@@ -432,10 +434,10 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-ghost" id="btn-clear-trim" onClick={handleClear}>Clear Trim</button>
+          <button className="btn btn-ghost" id="btn-clear-trim" onClick={handleClear}>{t('trimModal.clearTrim')}</button>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-outline" id="btn-cancel-trim" onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary" id="btn-save-trim" onClick={handleSave}>Save</button>
+            <button className="btn btn-outline" id="btn-cancel-trim" onClick={onClose}>{t('trimModal.cancel')}</button>
+            <button className="btn btn-primary" id="btn-save-trim" onClick={handleSave}>{t('trimModal.save')}</button>
           </div>
         </div>
       </div>

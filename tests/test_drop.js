@@ -84,7 +84,7 @@ async function main() {
         // The one-time token is consumed by the system browser that `neu run`
         // auto-opens; the client library falls back to sessionStorage.NL_TOKEN,
         // so seed it there before any page script runs.
-        await page.addInitScript(t => { try { sessionStorage.setItem('NL_TOKEN', t); } catch (e) {} }, auth.nlToken);
+        await page.addInitScript(t => { try { sessionStorage.setItem('NL_TOKEN', t); localStorage.setItem('sorai-lang', 'en'); } catch (e) {} }, auth.nlToken); // sorai-lang pinned: this suite asserts English UI strings, and i18n auto-detects the OS locale (zh-TW on this dev machine) when no saved preference exists
         await page.goto(url);
         await page.waitForSelector('#input-panel');
         // React build has no window.importDroppedFiles global (it's an

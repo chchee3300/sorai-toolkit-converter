@@ -1,5 +1,6 @@
 import GlassSelect from './GlassSelect.jsx'
 import { rangeFillStyle } from '../lib/rangeFill.js'
+import { useTranslation } from '../hooks/useTranslation.js'
 
 // Ported unchanged from resources/index.html:88-241 + main.js's settings
 // event-listener wiring (main.js:896-1019 pre-extraction: value-chip
@@ -9,23 +10,24 @@ import { rangeFillStyle } from '../lib/rangeFill.js'
 // same visible result, no separate "update" step needed.
 
 function OutputPathRow({ outputPath, onBrowse }) {
+  const { t } = useTranslation()
   return (
     <div className="settings-block">
-      <label className="field-label" htmlFor="output-path">Output folder</label>
+      <label className="field-label" htmlFor="output-path">{t('settings.outputFolder')}</label>
       <div className="path-row">
         <input
           type="text"
           className="input"
           id="output-path"
           readOnly
-          placeholder="Same as source directory"
+          placeholder={t('settings.outputPlaceholder')}
           value={outputPath}
         />
         <button className="btn btn-outline btn-sm" id="btn-select-output" onClick={onBrowse}>
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M2 4.5c0-.55.45-1 1-1h3.2l1 1.3H13c.55 0 1 .45 1 1v6.2c0 .55-.45 1-1 1H3c-.55 0-1-.45-1-1V4.5z" />
           </svg>
-          Browse
+          {t('settings.browse')}
         </button>
       </div>
     </div>
@@ -33,6 +35,7 @@ function OutputPathRow({ outputPath, onBrowse }) {
 }
 
 function VideoSettings({ visible, video, setVideo, lastFile }) {
+  const { t } = useTranslation()
   const set = (patch) => setVideo((v) => ({ ...v, ...patch }))
   const qualityMax = video.upscale ? 200 : 100
 
@@ -50,20 +53,20 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
 
   return (
     <div id="video-settings" className={visible ? 'settings-block' : 'settings-block hidden'}>
-      <p className="settings-subtitle" id="settings-subtitle">Video conversion</p>
+      <p className="settings-subtitle" id="settings-subtitle">{t('settings.video.subtitle')}</p>
       <div className="settings-grid">
         <div className="field">
-          <label className="field-label" htmlFor="video-format">Format</label>
+          <label className="field-label" htmlFor="video-format">{t('settings.format')}</label>
           <GlassSelect id="video-format" value={video.format} onChange={(e) => set({ format: e.target.value })}>
             <option value=".mp4">MP4</option>
             <option value=".mkv">MKV</option>
             <option value=".webm">WEBM</option>
             <option value=".avi">AVI</option>
-            <option value=".gif">GIF (Animated)</option>
+            <option value=".gif">{t('settings.video.formatGif')}</option>
           </GlassSelect>
         </div>
         <div className="field" id="video-codec-group" style={{ display: video.format === '.gif' ? 'none' : 'block' }}>
-          <label className="field-label" htmlFor="video-codec">Codec</label>
+          <label className="field-label" htmlFor="video-codec">{t('settings.codec')}</label>
           <GlassSelect id="video-codec" value={video.codec} onChange={(e) => set({ codec: e.target.value })}>
             <option value="libx264">H.264 (avc1)</option>
             <option value="libx265">H.265 (hevc)</option>
@@ -74,7 +77,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
         <div className="field span-2">
           <div className="field-label-row">
             <label className="field-label" htmlFor="video-quality">
-              Quality — <span className="val-chip tabular-nums" id="video-quality-val">{video.quality}</span>%
+              {t('settings.quality')} — <span className="val-chip tabular-nums" id="video-quality-val">{video.quality}</span>%
             </label>
             <label className="toggle-check">
               <input
@@ -86,7 +89,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
                   set({ upscale, quality: !upscale && video.quality > 100 ? 100 : video.quality })
                 }}
               />
-              Upscale
+              {t('settings.upscale')}
             </label>
           </div>
           <input
@@ -103,7 +106,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
         <div className="field">
           <div className="field-label-row">
             <label className="field-label" htmlFor="video-fps">
-              FPS — <span className="val-chip tabular-nums" id="video-fps-val">{Math.round(fpsValue)}</span>
+              {t('settings.fps')} — <span className="val-chip tabular-nums" id="video-fps-val">{Math.round(fpsValue)}</span>
             </label>
             <label className="toggle-check">
               <input
@@ -115,7 +118,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
                   set({ fpsUpscale, fps: !fpsUpscale && video.fps > referenceFps ? referenceFps : video.fps })
                 }}
               />
-              Upscale
+              {t('settings.upscale')}
             </label>
           </div>
           <input
@@ -132,7 +135,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
         </div>
         <div className="field">
           <label className="field-label" htmlFor="video-speed">
-            Speed — <span className="val-chip tabular-nums" id="video-speed-val">{Number(video.speed).toFixed(2)}</span>×
+            {t('settings.speed')} — <span className="val-chip tabular-nums" id="video-speed-val">{Number(video.speed).toFixed(2)}</span>×
           </label>
           <input
             type="range"
@@ -200,6 +203,7 @@ function ScaleSizeDiagram({ lastFile, scale }) {
 }
 
 function ImageSettings({ visible, image, setImage, lastFile }) {
+  const { t } = useTranslation()
   const set = (patch) => setImage((v) => ({ ...v, ...patch }))
 
   // Matches the vanilla quirk exactly: updateEstimations() looped over
@@ -225,10 +229,10 @@ function ImageSettings({ visible, image, setImage, lastFile }) {
 
   return (
     <div id="image-settings" className={visible ? 'settings-block' : 'settings-block hidden'}>
-      <p className="settings-subtitle" id="settings-subtitle">Image conversion</p>
+      <p className="settings-subtitle" id="settings-subtitle">{t('settings.image.subtitle')}</p>
       <div className="settings-grid">
         <div className="field">
-          <label className="field-label" htmlFor="image-format">Format</label>
+          <label className="field-label" htmlFor="image-format">{t('settings.format')}</label>
           <GlassSelect id="image-format" value={image.format} onChange={(e) => set({ format: e.target.value })}>
             <option value=".jpg">JPG</option>
             <option value=".png">PNG</option>
@@ -240,7 +244,7 @@ function ImageSettings({ visible, image, setImage, lastFile }) {
         </div>
         <div className="field" id="image-quality-group" style={{ display: isPdfOutput ? 'none' : 'block' }}>
           <label className="field-label" htmlFor="image-quality">
-            Quality — <span className="val-chip tabular-nums" id="image-quality-val">{image.quality}</span>%
+            {t('settings.quality')} — <span className="val-chip tabular-nums" id="image-quality-val">{image.quality}</span>%
           </label>
           <input
             type="range"
@@ -256,7 +260,7 @@ function ImageSettings({ visible, image, setImage, lastFile }) {
         <div className="field span-2" id="image-scale-group" style={{ display: isPdfOutput ? 'none' : 'block' }}>
           <div className="field-label-row">
             <label className="field-label" htmlFor="image-scale">
-              Scale — <span className="val-chip tabular-nums" id="image-scale-val">{image.scale}</span>%
+              {t('settings.scale')} — <span className="val-chip tabular-nums" id="image-scale-val">{image.scale}</span>%
             </label>
             <span className="val-chip secondary tabular-nums" id="image-resolution-preview">{resolutionPreview}</span>
           </div>
@@ -279,15 +283,16 @@ function ImageSettings({ visible, image, setImage, lastFile }) {
 }
 
 function AudioSettings({ visible, audio, setAudio }) {
+  const { t } = useTranslation()
   const set = (patch) => setAudio((v) => ({ ...v, ...patch }))
   const bitrateDisabled = audio.format === '.flac' || audio.format === '.wav'
 
   return (
     <div id="audio-settings" className={visible ? 'settings-block' : 'settings-block hidden'}>
-      <p className="settings-subtitle">Audio conversion</p>
+      <p className="settings-subtitle">{t('settings.audio.subtitle')}</p>
       <div className="settings-grid">
         <div className="field">
-          <label className="field-label" htmlFor="audio-format">Format</label>
+          <label className="field-label" htmlFor="audio-format">{t('settings.format')}</label>
           <GlassSelect id="audio-format" value={audio.format} onChange={(e) => set({ format: e.target.value })}>
             <option value=".mp3">MP3</option>
             <option value=".wav">WAV</option>
@@ -297,18 +302,18 @@ function AudioSettings({ visible, audio, setAudio }) {
           </GlassSelect>
         </div>
         <div className="field">
-          <label className="field-label" htmlFor="audio-bitrate">Bitrate</label>
+          <label className="field-label" htmlFor="audio-bitrate">{t('settings.bitrate')}</label>
           <GlassSelect id="audio-bitrate" value={audio.bitrate} disabled={bitrateDisabled} onChange={(e) => set({ bitrate: e.target.value })}>
-            <option value="320k">320 kbps — Studio Quality</option>
-            <option value="256k">256 kbps — High Quality</option>
-            <option value="192k">192 kbps — Standard</option>
-            <option value="128k">128 kbps — Compact</option>
-            <option value="64k">64 kbps — Voice / Podcast</option>
+            <option value="320k">{t('settings.audio.bitrate320')}</option>
+            <option value="256k">{t('settings.audio.bitrate256')}</option>
+            <option value="192k">{t('settings.audio.bitrate192')}</option>
+            <option value="128k">{t('settings.audio.bitrate128')}</option>
+            <option value="64k">{t('settings.audio.bitrate64')}</option>
           </GlassSelect>
         </div>
         <div className="field span-2">
           <label className="field-label" htmlFor="audio-speed">
-            Speed — <span className="val-chip tabular-nums" id="audio-speed-val">{Number(audio.speed).toFixed(2)}</span>×
+            {t('settings.speed')} — <span className="val-chip tabular-nums" id="audio-speed-val">{Number(audio.speed).toFixed(2)}</span>×
           </label>
           <input
             type="range"
@@ -328,6 +333,7 @@ function AudioSettings({ visible, audio, setAudio }) {
 }
 
 function PdfSettings({ visible, pdf, setPdf }) {
+  const { t } = useTranslation()
   // Was setPdf({ optimize: e.target.value }) — a raw replacement object,
   // not a merge patch. Harmless with a single field, but switched to the
   // same set()-merge helper every other settings component already uses,
@@ -336,13 +342,13 @@ function PdfSettings({ visible, pdf, setPdf }) {
 
   return (
     <div id="pdf-settings" className={visible ? 'settings-block' : 'settings-block hidden'}>
-      <p className="settings-subtitle">PDF optimization</p>
+      <p className="settings-subtitle">{t('settings.pdf.subtitle')}</p>
       <div className="settings-grid">
         <div className="field span-2">
-          <label className="field-label" htmlFor="pdf-optimize">Optimization mode</label>
+          <label className="field-label" htmlFor="pdf-optimize">{t('settings.pdf.optimizeLabel')}</label>
           <GlassSelect id="pdf-optimize" value={pdf.optimize} onChange={(e) => set({ optimize: e.target.value })}>
-            <option value="linearize">Linearize — Fast Web View</option>
-            <option value="compress">Maximum Compression</option>
+            <option value="linearize">{t('settings.pdf.linearize')}</option>
+            <option value="compress">{t('settings.pdf.compress')}</option>
           </GlassSelect>
         </div>
       </div>
@@ -361,6 +367,7 @@ export default function SettingsPanel({
   onExecute,
   onCancel,
 }) {
+  const { t } = useTranslation()
   const { video, setVideo, image, setImage, audio, setAudio, pdf, setPdf } = settings
 
   return (
@@ -385,12 +392,12 @@ export default function SettingsPanel({
             onClick={onCancel}
           >
             <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="4" y="4" width="8" height="8" /></svg>
-            {cancelling ? 'Cancelling…' : 'Cancel'}
+            {cancelling ? t('settings.cancelling') : t('settings.cancel')}
           </button>
         ) : (
           <button className="btn btn-primary btn-execute" id="btn-execute" disabled={executing} onClick={onExecute}>
             <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 2.5l10 5.5-10 5.5V2.5z" /></svg>
-            Start Processing
+            {t('settings.startProcessing')}
           </button>
         )}
       </div>

@@ -5,13 +5,16 @@
 // so no single area is visually marked as "the" drop target; the file list
 // updating is the only feedback a drop needs. Only the icon/CTA get a small
 // hover shift, the same treatment any other clickable control gets.
+import { useTranslation } from '../hooks/useTranslation.js'
+
 export default function DropZone({ onClick }) {
+  const { t } = useTranslation()
   return (
     <div
       className="drop-zone-message"
       role="button"
       tabIndex={0}
-      aria-label="Drop files here, or click to browse"
+      aria-label={t('dropZone.ariaLabel')}
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -29,10 +32,10 @@ export default function DropZone({ onClick }) {
         </svg>
       </div>
       <div className="drop-zone-body">
-        <p className="drop-zone-title">Drop files here</p>
-        <p className="drop-zone-hint">Video · Image · Audio · PDF &mdash; same type per batch</p>
+        <p className="drop-zone-title">{t('dropZone.title')}</p>
+        <p className="drop-zone-hint">{t('dropZone.hint')}</p>
       </div>
-      <span className="drop-zone-cta">Click to browse</span>
+      <span className="drop-zone-cta">{t('dropZone.cta')}</span>
     </div>
   )
 }

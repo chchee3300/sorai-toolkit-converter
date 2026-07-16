@@ -63,7 +63,12 @@ export function useFileManager({ onFirstFileType }) {
   const [fileType, setFileType] = useState(null)
   const [outputPath, setOutputPathState] = useState('')
   const [loading, setLoading] = useState(false)
-  const [status, setStatusState] = useState({ text: 'Ready', state: 'ready' })
+  // Status is stored as a dict KEY + params, not resolved text -- App.jsx
+  // translates it at render time (t(status.key, status.params)), so the
+  // always-visible status bar re-renders in the new language the moment the
+  // user switches, instead of freezing whatever language was active when
+  // the status was last set.
+  const [status, setStatusState] = useState({ key: 'status.ready', params: undefined, state: 'ready' })
   // { paths, incomingType, existingType, existingCount } | null — set when
   // an incoming batch's type differs from what's already loaded, so the UI
   // can ask before silently rejecting (see handleFiles/confirmClearAndLoad
@@ -89,8 +94,8 @@ export function useFileManager({ onFirstFileType }) {
     setOutputPathState(value)
   }, [])
 
-  const setStatus = useCallback((text, state = 'ready') => {
-    setStatusState({ text, state })
+  const setStatus = useCallback((key, state = 'ready', params = undefined) => {
+    setStatusState({ key, params, state })
   }, [])
 
   // Ported unchanged from the original handleFiles body — now parameterized
@@ -214,7 +219,7 @@ export function useFileManager({ onFirstFileType }) {
       for (const file of dropped) {
         if (!getFileType(file.name)) {
           console.warn('Skipping unsupported drop entry:', file.name)
-          setStatus(`Skipped unsupported file: ${file.name}`, 'error')
+          setStatus('status.skippedUnsupported', 'error', { name: file.name })
           continue
         }
         if (file.size === 0) {
@@ -249,12 +254,12 @@ export function useFileManager({ onFirstFileType }) {
           try {
             tempPaths.push(
               await copyDroppedFileToTemp(file, dropDir, (pct) => {
-                setStatus(`Copying dropped file ${i + 1}/${accepted.length} — ${pct}%`, 'busy')
+                setStatus('status.copyingDropped', 'busy', { index: i + 1, total: accepted.length, percent: pct })
               }),
             )
           } catch (err) {
             console.error('Failed to import dropped file: ' + file.name, err)
-            setStatus(`Failed to import ${file.name}`, 'error')
+            setStatus('status.failedImport', 'error', { name: file.name })
             try {
               await window.Neutralino.filesystem.remove(window.EstellaLib.platform.joinPath(dropDir, file.name))
             } catch (e) {
@@ -288,7 +293,7 @@ export function useFileManager({ onFirstFileType }) {
         const next = prev.filter((_, i) => i !== index)
         if (next.length === 0) {
           setFileType(null)
-          setStatus('Ready', 'ready')
+          setStatus('status.ready', 'ready')
         }
         return next
       })
@@ -299,7 +304,7 @@ export function useFileManager({ onFirstFileType }) {
   const clearFiles = useCallback(() => {
     setFiles([])
     setFileType(null)
-    setStatus('Ready', 'ready')
+    setStatus('status.ready', 'ready')
   }, [setStatus])
 
   const confirmClearAndLoad = useCallback(async () => {
@@ -377,7 +382,7 @@ export function useFileManager({ onFirstFileType }) {
         handleFiles(paths)
       } else if (detail != null && !Array.isArray(detail)) {
         console.error('Unrecognized filesDropped payload:', detail)
-        setStatus('Drop failed — unrecognized payload', 'error')
+        setStatus('status.dropFailed', 'error')
       }
     }
     window.Neutralino.events.on('filesDropped', handler)

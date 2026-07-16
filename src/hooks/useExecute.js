@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import { tNow } from '../i18n/dict.js'
 
 // Ported unchanged from main.js's runCommandWithLogs (main.js:492-518
 // pre-extraction), decoupled from direct DOM writes: the caller supplies
@@ -92,7 +93,11 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
   const [cancelling, setCancelling] = useState(false)
   const [progressVisible, setProgressVisible] = useState(false)
   const [progressPercent, setProgressPercent] = useState(0)
-  const [progressText, setProgressText] = useState('Processing...')
+  // Progress text is stored as already-translated snapshots (tNow, not a
+  // live key) -- it refreshes constantly while visible and auto-hides after
+  // completion, so it doesn't need to retroactively re-translate on a
+  // language switch the way the status bar does (see useFileManager).
+  const [progressText, setProgressText] = useState(() => tNow('progress.idle'))
   const [terminalLog, setTerminalLog] = useState('')
 
   const cancelRequestedRef = useRef(false)
@@ -102,7 +107,7 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
     if (!executing || cancelRequestedRef.current) return
     cancelRequestedRef.current = true
     setCancelling(true)
-    setStatus('Cancelling…', 'busy')
+    setStatus('status.cancelling', 'busy')
     if (spawnedIdRef.current != null) {
       window.Neutralino.os.updateSpawnedProcess(spawnedIdRef.current, 'exit').catch(() => {})
     }
@@ -134,7 +139,7 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
             ? "Install it via 'brew install qpdf' (macOS) or 'sudo apt install qpdf' (Linux)"
             : "Install it via 'pip install img2pdf' (macOS/Linux)"
           alert(`${tool} not found. ${hint}, then restart the app.`)
-          setStatus(`Error: ${tool} not found`, 'error')
+          setStatus('status.errorToolNotFound', 'error', { tool })
           return
         }
       }
@@ -142,7 +147,7 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
 
     setExecuting(true)
     setProgressVisible(true)
-    setStatus('Processing…', 'busy')
+    setStatus('status.processing', 'busy')
 
     let completed = 0
     const binPath = platform.resolveBinPath()
@@ -156,7 +161,7 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
         const filename = file.split(/[\\/]/).pop()
         const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.'))
 
-        setProgressText(`Processing: ${filename} (${i + 1}/${files.length})`)
+        setProgressText(tNow('progress.processingFile', { name: filename, index: i + 1, total: files.length }))
         setProgressPercent((i / files.length) * 100)
 
         let command = ''
@@ -209,7 +214,7 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
                   const percent = window.EstellaLib.progressParser.parseProgress(chunk, fileObj.duration, speedForProgress)
                   if (percent !== null) {
                     setProgressPercent(percent)
-                    setProgressText(`Processing: ${filename} (${i + 1}/${files.length}) - ${Math.round(percent)}%`)
+                    setProgressText(tNow('progress.processingFilePercent', { name: filename, index: i + 1, total: files.length, percent: Math.round(percent) }))
                   }
                 },
                 spawnedIdRef,
@@ -219,7 +224,7 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
             )
 
             setProgressPercent(100)
-            setProgressText(`Processing: ${filename} (${i + 1}/${files.length}) - 100%`)
+            setProgressText(tNow('progress.processingFileDone', { name: filename, index: i + 1, total: files.length }))
             completed++
 
             try {
@@ -241,14 +246,14 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
               await window.Neutralino.filesystem.remove(outPath).catch(() => {})
             } else {
               alert(`Failed to process ${filename}:\n${err.message || err}`)
-              setStatus(`Error: ${filename}`, 'error')
+              setStatus('status.errorFile', 'error', { name: filename })
             }
           }
         }
       }
     } catch (fatalErr) {
       alert('FATAL ERROR inside loop:\n' + (fatalErr.message || fatalErr) + '\n' + fatalErr.stack)
-      setStatus('Fatal error', 'error')
+      setStatus('status.fatalError', 'error')
     }
 
     const wasCancelled = cancelRequestedRef.current
@@ -257,17 +262,17 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
     setCancelling(false)
 
     if (wasCancelled) {
-      setProgressText(`Cancelled ${completed} of ${files.length}`)
-      setStatus(`Cancelled — ${completed} of ${files.length} converted`, 'ready')
+      setProgressText(tNow('progress.cancelledCount', { completed, total: files.length }))
+      setStatus('status.cancelledCount', 'ready', { completed, total: files.length })
     } else {
       setProgressPercent(100)
-      setProgressText(`Completed ${completed} of ${files.length}!`)
-      setStatus(`Done — ${completed} of ${files.length} converted`, 'ready')
+      setProgressText(tNow('progress.completedCount', { completed, total: files.length }))
+      setStatus('status.doneCount', 'ready', { completed, total: files.length })
     }
     setExecuting(false)
     setTimeout(() => {
       setProgressVisible(false)
-      setProgressText('Processing...')
+      setProgressText(tNow('progress.idle'))
       setProgressPercent(0)
     }, 5000)
   }, [files, setFiles, fileType, settings, outputPath, setOutputPath, setStatus])
