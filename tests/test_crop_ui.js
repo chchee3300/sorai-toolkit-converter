@@ -119,7 +119,7 @@ async function main() {
         // ratio without touching the rect) resets to the full frame so the
         // SE handle is at the container's true bottom-right corner, matching
         // this test's coordinate math below.
-        await page.click('#crop-modal .btn-ghost');
+        await page.click('#btn-clear-crop');
         const containerBox = await page.$eval('#crop-container', el => {
             const r = el.getBoundingClientRect();
             return { left: r.left, top: r.top, width: r.width, height: r.height };
@@ -208,7 +208,7 @@ async function main() {
         // ---------- Clear Crop round-trips to "no crop" ----------
         await page.click('#btn-crop-0');
         await page.waitForSelector('#crop-modal:not(.hidden)');
-        await page.click('#crop-modal .btn-ghost'); // Clear Crop
+        await page.click('#btn-clear-crop'); // Clear Crop
         await page.click('#crop-modal .btn-primary'); // Save
         // The modal element stays mounted (just CSS visibility:hidden), so
         // waitForSelector's default state:'visible' would time out here --

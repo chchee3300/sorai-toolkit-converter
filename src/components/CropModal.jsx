@@ -701,6 +701,13 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
                 onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
               />
             </label>
+            {/* btn-outline (bordered), not btn-ghost -- sitting inline next
+                to bordered W/H inputs, a borderless ghost button read as
+                disconnected/floating; outline matches the ratio-preset
+                row's own button style directly above it. */}
+            <button id="btn-clear-crop" className="btn btn-outline btn-xs" style={{ marginLeft: 'auto' }} onClick={handleClear}>
+              Clear Crop
+            </button>
           </div>
 
           {/* Viewport: a genuinely fixed-size window (VIEWPORT_MAX_W x
@@ -794,8 +801,11 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={handleClear}>Clear Crop</button>
-          <div style={{ display: 'flex', gap: 8 }}>
+          {/* Clear Crop moved up next to the W/H inputs -- .modal-footer's
+              own justify-content:space-between assumed two children, so
+              with only Cancel/Save left it needs an explicit marginLeft:
+              auto to stay pinned right instead of collapsing to the start. */}
+          <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
             <button className="btn btn-outline" onClick={onClose}>Cancel</button>
             <button className="btn btn-primary" onClick={handleSave}>Save</button>
           </div>
