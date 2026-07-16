@@ -500,6 +500,28 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
     if (onClear) onClear()
   }
 
+  // Manual width/height entry -- clamped against how much room is actually
+  // left from the rect's CURRENT x/y to the image edge (not the raw natural
+  // dimension), so typing a too-large value snaps to the largest size that
+  // still fits without silently moving the crop's position too. Breaks any
+  // active ratio preset (same as handleClear) rather than leaving a
+  // highlighted preset button that no longer matches the typed shape.
+  const handleWidthInput = (e) => {
+    const raw = Number(e.target.value)
+    if (!Number.isFinite(raw)) return
+    setRatioKey('free')
+    ratioRef.current = null
+    setRect((r) => ({ ...r, width: Math.min(Math.max(MIN_SIZE, Math.round(raw)), naturalW - r.x) }))
+  }
+
+  const handleHeightInput = (e) => {
+    const raw = Number(e.target.value)
+    if (!Number.isFinite(raw)) return
+    setRatioKey('free')
+    ratioRef.current = null
+    setRect((r) => ({ ...r, height: Math.min(Math.max(MIN_SIZE, Math.round(raw)), naturalH - r.y) }))
+  }
+
   const resetZoom = () => {
     setZoom(1)
     if (viewportRef.current) {
@@ -579,6 +601,45 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
             <span style={{ marginLeft: 'auto', fontSize: '0.75em', color: 'var(--text-muted)' }}>
               Scroll to zoom &middot; middle-drag to pan &middot; double-click to reset
             </span>
+          </div>
+
+          {/* Manual width/height entry -- defaults to the full natural
+              image size (see the open effect's setRect), editable directly
+              instead of only via drag. Each clamps to how much room is left
+              from the rect's current x/y to that edge (handleWidthInput/
+              handleHeightInput), snapping back down rather than letting the
+              crop rect extend past the source image. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <label htmlFor="crop-width-input" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75em', color: 'var(--text-muted)' }}>
+              W
+              <input
+                id="crop-width-input"
+                type="number"
+                className="input tabular-nums"
+                style={{ width: 76 }}
+                min={MIN_SIZE}
+                max={naturalW - rect.x}
+                step={1}
+                value={Math.round(rect.width)}
+                disabled={!naturalW || !naturalH}
+                onChange={handleWidthInput}
+              />
+            </label>
+            <label htmlFor="crop-height-input" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75em', color: 'var(--text-muted)' }}>
+              H
+              <input
+                id="crop-height-input"
+                type="number"
+                className="input tabular-nums"
+                style={{ width: 76 }}
+                min={MIN_SIZE}
+                max={naturalH - rect.y}
+                step={1}
+                value={Math.round(rect.height)}
+                disabled={!naturalW || !naturalH}
+                onChange={handleHeightInput}
+              />
+            </label>
           </div>
 
           {/* Viewport: a genuinely fixed-size window (VIEWPORT_MAX_W x
