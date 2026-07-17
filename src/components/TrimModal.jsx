@@ -83,13 +83,6 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
   // anchor, not re-read live during the drag. null when no target is
   // armed (drag didn't start from a thumb, or there's no active player).
   const snapTargetRef = useRef(null)
-  // The playhead stays put while a thumb drag approaches/snaps onto it --
-  // only once the thumb is dragged PAST the anchor (sec has crossed to
-  // the far side of snapTargetRef, i.e. the snap has released) does the
-  // playhead get "picked up" and start tracking the thumb for the rest
-  // of the drag, even if the drag reverses back across the anchor
-  // afterward. Reset false at every thumb mousedown.
-  const playheadAttachedRef = useRef(false)
 
   // Open (or switch to a different file while open): reset players, reset
   // trim range from the file's own saved trimStart/trimEnd (or full range),
@@ -209,7 +202,15 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
           p.play().catch(() => {})
         }
       }
-      if (durationRef.current > 0 && playheadRef.current) {
+      // Dragging a left/right trim thumb still seeks this element (so the
+      // preview frame follows the thumb) but must NOT drag the playhead
+      // marker along with it -- the marker stays put at wherever it was
+      // when the drag started, only catching up once the drag ends (see
+      // onMouseUp below). Frozen here specifically, not just left alone
+      // in onMouseMove, because this handler fires from the seek itself
+      // and would otherwise immediately undo that.
+      const dragging = draggingThumbRef.current
+      if (durationRef.current > 0 && playheadRef.current && dragging !== 'left' && dragging !== 'right') {
         const pct = (p.currentTime / durationRef.current) * 100
         playheadRef.current.style.left = pct + '%'
       }
@@ -243,13 +244,13 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
       return pct * durationRef.current
     }
 
-    // The playhead's normal position updates come from the video's own
-    // 'timeupdate' event (onTimeUpdate below), which is async and can lag
-    // or coalesce behind a fast run of programmatic currentTime writes --
-    // exactly what a drag gesture is. Called with the drag's *final* sec
-    // (after clamping/snapping) on every mousemove so the playhead marker
-    // is always in the same tick as whatever's being dragged, never a
-    // frame behind it -- true whether or not they're currently coincident.
+    // Only used for an actual playhead drag (dragging === 'playhead'
+    // below) -- the marker's normal position updates come from the
+    // video's own 'timeupdate' event (onTimeUpdate below), which is async
+    // and can lag or coalesce behind a fast run of programmatic
+    // currentTime writes, so this writes the marker directly, in the same
+    // tick, instead of waiting on that. Left/right thumb drags
+    // deliberately do NOT call this -- see the comment further down.
     const syncPlayheadVisual = (sec) => {
       if (durationRef.current > 0 && playheadRef.current) {
         playheadRef.current.style.left = (sec / durationRef.current) * 100 + '%'
@@ -280,26 +281,28 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
       if (dragging === 'left') {
         if (sec > trimEndRef.current) sec = trimEndRef.current
         setTrimStart(sec)
-        // Left thumb travels rightward toward/past the anchor -- "past"
-        // means sec has overtaken it. Equal (snapped) doesn't count.
-        if (snapTargetRef.current !== null && sec > snapTargetRef.current) playheadAttachedRef.current = true
       } else if (dragging === 'right') {
         if (sec < trimStartRef.current) sec = trimStartRef.current
         setTrimEnd(sec)
-        // Right thumb travels leftward toward/past the anchor.
-        if (snapTargetRef.current !== null && sec < snapTargetRef.current) playheadAttachedRef.current = true
       }
 
-      if (playheadAttachedRef.current) {
-        if (activePlayerRef.current) activePlayerRef.current.currentTime = sec
-        syncPlayheadVisual(sec)
-      }
+      // Preview follows the thumb (so you can see the exact frame you're
+      // setting as the boundary), but the playhead marker deliberately
+      // does NOT -- onTimeUpdate above skips its own marker write while
+      // dragging left/right for the same reason, since this currentTime
+      // assignment is what triggers it.
+      if (activePlayerRef.current) activePlayerRef.current.currentTime = sec
     }
 
     const onMouseUp = () => {
       if (draggingThumbRef.current) setDraggingThumb(null)
       snapTargetRef.current = null
-      playheadAttachedRef.current = false
+      // Marker catches up to wherever the preview actually ended up the
+      // instant the drag ends, rather than waiting on the next natural
+      // timeupdate (which won't fire again on its own once paused).
+      if (activePlayerRef.current && durationRef.current > 0 && playheadRef.current) {
+        playheadRef.current.style.left = (activePlayerRef.current.currentTime / durationRef.current) * 100 + '%'
+      }
     }
 
     window.addEventListener('mousemove', onMouseMove)
@@ -489,7 +492,6 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
                       onMouseDown={(e) => {
                         setDraggingThumb('left')
                         snapTargetRef.current = activePlayerRef.current ? activePlayerRef.current.currentTime : null
-                        playheadAttachedRef.current = false
                         e.preventDefault()
                       }}
                     >
@@ -503,7 +505,6 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
                       onMouseDown={(e) => {
                         setDraggingThumb('right')
                         snapTargetRef.current = activePlayerRef.current ? activePlayerRef.current.currentTime : null
-                        playheadAttachedRef.current = false
                         e.preventDefault()
                       }}
                     >
