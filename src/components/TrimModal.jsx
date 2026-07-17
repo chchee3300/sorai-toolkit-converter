@@ -80,12 +80,16 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
   const suppressLoopRef = useRef(false)
   // Premiere-style magnet snap: wherever the playhead sits when a trim
   // thumb drag starts is captured once (thumb mousedown) as a fixed
-  // target, not re-read live during the drag -- dragging a thumb also
-  // seeks the preview to follow it (see the bottom of onMouseMove below),
-  // so a live read would just always equal the thumb's own position and
-  // never actually snap to anything. null when no target is armed (drag
-  // didn't start from a thumb, or there's no active player yet).
+  // anchor, not re-read live during the drag. null when no target is
+  // armed (drag didn't start from a thumb, or there's no active player).
   const snapTargetRef = useRef(null)
+  // The playhead stays put while a thumb drag approaches/snaps onto it --
+  // only once the thumb is dragged PAST the anchor (sec has crossed to
+  // the far side of snapTargetRef, i.e. the snap has released) does the
+  // playhead get "picked up" and start tracking the thumb for the rest
+  // of the drag, even if the drag reverses back across the anchor
+  // afterward. Reset false at every thumb mousedown.
+  const playheadAttachedRef = useRef(false)
 
   // Open (or switch to a different file while open): reset players, reset
   // trim range from the file's own saved trimStart/trimEnd (or full range),
@@ -276,18 +280,26 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
       if (dragging === 'left') {
         if (sec > trimEndRef.current) sec = trimEndRef.current
         setTrimStart(sec)
+        // Left thumb travels rightward toward/past the anchor -- "past"
+        // means sec has overtaken it. Equal (snapped) doesn't count.
+        if (snapTargetRef.current !== null && sec > snapTargetRef.current) playheadAttachedRef.current = true
       } else if (dragging === 'right') {
         if (sec < trimStartRef.current) sec = trimStartRef.current
         setTrimEnd(sec)
+        // Right thumb travels leftward toward/past the anchor.
+        if (snapTargetRef.current !== null && sec < snapTargetRef.current) playheadAttachedRef.current = true
       }
 
-      if (activePlayerRef.current) activePlayerRef.current.currentTime = sec
-      syncPlayheadVisual(sec)
+      if (playheadAttachedRef.current) {
+        if (activePlayerRef.current) activePlayerRef.current.currentTime = sec
+        syncPlayheadVisual(sec)
+      }
     }
 
     const onMouseUp = () => {
       if (draggingThumbRef.current) setDraggingThumb(null)
       snapTargetRef.current = null
+      playheadAttachedRef.current = false
     }
 
     window.addEventListener('mousemove', onMouseMove)
@@ -477,6 +489,7 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
                       onMouseDown={(e) => {
                         setDraggingThumb('left')
                         snapTargetRef.current = activePlayerRef.current ? activePlayerRef.current.currentTime : null
+                        playheadAttachedRef.current = false
                         e.preventDefault()
                       }}
                     >
@@ -490,6 +503,7 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
                       onMouseDown={(e) => {
                         setDraggingThumb('right')
                         snapTargetRef.current = activePlayerRef.current ? activePlayerRef.current.currentTime : null
+                        playheadAttachedRef.current = false
                         e.preventDefault()
                       }}
                     >
