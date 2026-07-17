@@ -299,7 +299,16 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
   }, [])
 
   const handleSliderMouseDown = (e) => {
-    if (e.target === thumbLeftRef.current || e.target === thumbRightRef.current) return
+    // .contains(), not === -- a click that lands on .thumb-grip (a CHILD
+    // of the thumb, and the visually obvious part to grab) has e.target
+    // set to the grip, which never strictly-equals the thumb ref itself.
+    // That let the click bubble past this bail-out and ALSO fire as a
+    // playhead seek here (the thumb's own onMouseDown, fired first via
+    // bubbling, would already have started a thumb drag -- React just
+    // applied whichever setDraggingThumb() call landed last in the same
+    // batched event, silently overwriting the thumb drag with a
+    // playhead one).
+    if (thumbLeftRef.current?.contains(e.target) || thumbRightRef.current?.contains(e.target)) return
     setDraggingThumb('playhead')
     const rect = sliderContainerRef.current.getBoundingClientRect()
     let pct = (e.clientX - rect.left) / rect.width
