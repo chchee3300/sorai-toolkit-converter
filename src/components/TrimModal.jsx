@@ -239,6 +239,19 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
       return pct * durationRef.current
     }
 
+    // The playhead's normal position updates come from the video's own
+    // 'timeupdate' event (onTimeUpdate below), which is async and can lag
+    // or coalesce behind a fast run of programmatic currentTime writes --
+    // exactly what a drag gesture is. Called with the drag's *final* sec
+    // (after clamping/snapping) on every mousemove so the playhead marker
+    // is always in the same tick as whatever's being dragged, never a
+    // frame behind it -- true whether or not they're currently coincident.
+    const syncPlayheadVisual = (sec) => {
+      if (durationRef.current > 0 && playheadRef.current) {
+        playheadRef.current.style.left = (sec / durationRef.current) * 100 + '%'
+      }
+    }
+
     const onMouseMove = (e) => {
       const dragging = draggingThumbRef.current
       if (!dragging) return
@@ -248,6 +261,7 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
       if (dragging === 'playhead') {
         suppressLoopRef.current = sec > trimEndRef.current
         if (activePlayerRef.current) activePlayerRef.current.currentTime = sec
+        syncPlayheadVisual(sec)
         return
       }
 
@@ -268,6 +282,7 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
       }
 
       if (activePlayerRef.current) activePlayerRef.current.currentTime = sec
+      syncPlayheadVisual(sec)
     }
 
     const onMouseUp = () => {
