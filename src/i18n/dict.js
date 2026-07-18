@@ -40,6 +40,7 @@ export const dict = {
     // FileList.jsx
     'fileList.trimBadge': ({ seconds }) => `[Trim: ${seconds}s]`,
     'fileList.fpsBadge': ({ fps }) => `[${fps} fps]`,
+    'fileList.codecBadge': ({ codec }) => `[${codec}]`,
     'fileList.cropBadge': ({ width, height }) => `[Crop: ${width}x${height}]`,
     'fileList.estimateInflates': ' ⚠ inflates',
     'fileList.trimMedia': 'Trim Media',
@@ -163,6 +164,7 @@ export const dict = {
 
     'fileList.trimBadge': ({ seconds }) => `[剪輯：${seconds}秒]`,
     'fileList.fpsBadge': ({ fps }) => `[${fps} fps]`,
+    'fileList.codecBadge': ({ codec }) => `[${codec}]`,
     'fileList.cropBadge': ({ width, height }) => `[裁切：${width}x${height}]`,
     'fileList.estimateInflates': '　⚠ 檔案會變大',
     'fileList.trimMedia': '剪輯媒體',

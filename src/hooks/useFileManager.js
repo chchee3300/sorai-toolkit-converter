@@ -16,6 +16,35 @@ function getFileType(filename) {
   return null
 }
 
+// Generates a small preview thumbnail (video mid-frame / audio embedded
+// cover art / downscaled image) into the shared thumbDir and returns a
+// localhost URL served through the '/thumbs' mount (see ensureThumbDir in
+// useFileManager below) -- or null if ffmpeg produced nothing (most
+// commonly: an audio file with no embedded cover art). fileName is unique
+// per call (thumbSeqRef), not derived from the source path, so files from
+// different directories that happen to share a basename never collide.
+async function getThumbnail(path, type, duration, thumbDir, seq) {
+  try {
+    const platform = window.EstellaLib.platform
+    const binPath = platform.resolveBinPath()
+    const fileName = `thumb-${seq}.jpg`
+    const outPath = platform.joinPath(thumbDir, fileName)
+    const command = window.EstellaLib.ffmpegCommands.buildThumbnailCommand({
+      binPath,
+      file: path,
+      outPath,
+      fileType: type,
+      duration,
+    })
+    await window.Neutralino.os.execCommand(command)
+    const stats = await window.Neutralino.filesystem.getStats(outPath).catch(() => null)
+    if (!stats || stats.size === 0) return null
+    return `http://localhost:${window.NL_PORT}/thumbs/${encodeURIComponent(fileName)}`
+  } catch (e) {
+    return null
+  }
+}
+
 // Ported unchanged from main.js's getMediaInfo (main.js:20-50 pre-extraction).
 async function getMediaInfo(path) {
   try {
@@ -27,11 +56,17 @@ async function getMediaInfo(path) {
     const match = output.match(/Duration:\s+(\d+):(\d+):(\d+\.\d+)/)
     const fpsMatch = output.match(/(\d+(?:\.\d+)?)\s+fps/)
     const dimMatch = output.match(/(?:,\s+)(\d+)x(\d+)(?:[,\s]|$)/)
+    // ffmpeg -i's own stream line, e.g. "Stream #0:0: Video: h264 (High) ...
+    // 320x240 ...". Only ever present for video streams -- an audio-only
+    // file's "Stream #0:0: Audio: ..." line never matches, so this comes
+    // back empty for audio/PDF without any type check needed here.
+    const codecMatch = output.match(/Video:\s+(\w+)/)
 
     let duration = 0
     const fps = fpsMatch ? parseFloat(fpsMatch[1]) : 0
     let width = 0
     let height = 0
+    const codec = codecMatch ? codecMatch[1] : ''
 
     if (match) {
       const hours = parseInt(match[1])
@@ -43,7 +78,7 @@ async function getMediaInfo(path) {
       width = parseInt(dimMatch[1])
       height = parseInt(dimMatch[2])
     }
-    return { duration, fps, width, height }
+    return { duration, fps, width, height, codec }
   } catch (e) {
     console.error('Failed to parse info from ffmpeg', e)
   }
@@ -88,6 +123,40 @@ export function useFileManager({ onFirstFileType }) {
   filesRef.current = files
   const outputPathRef = useRef(outputPath)
   outputPathRef.current = outputPath
+  // Thumbnail generation state: thumbDirRef caches the resolved temp dir
+  // once created+mounted (lazy, first file that needs a thumbnail triggers
+  // it) so every subsequent file reuses the same mount instead of racing to
+  // create/mount it again; thumbSeqRef gives each generated file a unique
+  // name (see getThumbnail above).
+  const thumbDirRef = useRef(null)
+  const thumbSeqRef = useRef(0)
+
+  // Mirrors TrimModal's '/preview' mount (same Neutralino.server.mount +
+  // localhost:NL_PORT idiom), except this one is long-lived for the whole
+  // Converter session and points at a generated-thumbnails cache dir instead
+  // of a source file's own directory -- see getThumbnail's file-per-thumb
+  // naming, which is what makes one shared mount safe for files pulled from
+  // many different source directories.
+  const ensureThumbDir = useCallback(async () => {
+    if (thumbDirRef.current) return thumbDirRef.current
+    const tempBase = await window.Neutralino.os.getPath('temp')
+    const dir = window.EstellaLib.platform.joinPath(tempBase, 'FileConverterApp', 'thumbnails')
+    await window.Neutralino.filesystem.createDirectory(dir).catch(() => {})
+    const mounts = await window.Neutralino.server.getMounts().catch(() => ({}))
+    if (!mounts['/thumbs']) {
+      await window.Neutralino.server.mount('/thumbs', dir).catch(() => {})
+    }
+    thumbDirRef.current = dir
+    return dir
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (thumbDirRef.current) {
+        window.Neutralino.server.unmount('/thumbs').catch(() => {})
+      }
+    }
+  }, [])
 
   const setOutputPathBoth = useCallback((value) => {
     outputPathRef.current = value
@@ -141,6 +210,8 @@ export function useFileManager({ onFirstFileType }) {
               let fps = 0
               let width = 0
               let height = 0
+              let videoCodec = ''
+              let thumbnail = null
               if (type === 'video' || type === 'audio' || type === 'image') {
                 const info = await getMediaInfo(path)
                 if (info) {
@@ -148,9 +219,12 @@ export function useFileManager({ onFirstFileType }) {
                   fps = info.fps || 0
                   width = info.width || 0
                   height = info.height || 0
+                  videoCodec = info.codec || ''
                 }
+                const thumbDir = await ensureThumbDir()
+                thumbnail = await getThumbnail(path, type, duration, thumbDir, thumbSeqRef.current++)
               }
-              additions.push({ path, size: stats.size, duration, fps, width, height })
+              additions.push({ path, size: stats.size, duration, fps, width, height, videoCodec, thumbnail })
             }
           } catch (err) {
             console.error('Error processing file path: ' + path, err)
@@ -173,7 +247,7 @@ export function useFileManager({ onFirstFileType }) {
         setLoading(false)
       }
     },
-    [fileType, onFirstFileType, setOutputPathBoth],
+    [fileType, onFirstFileType, setOutputPathBoth, ensureThumbDir],
   )
 
   // Public entry point every caller (native filesDropped, browser-mode
