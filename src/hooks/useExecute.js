@@ -168,7 +168,7 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
         let outPath = ''
 
         if (fileType === 'video') {
-          const { format, codec, quality: qualityPercent, speed, fps } = settings.video
+          const { format, codec, quality: qualityPercent, speed, fps, targetSizeMode, targetSizeMB } = settings.video
           const targetFpsStr = fps != null ? String(fps) : 'original'
           outPath = await window.EstellaLib.filenameCollision.getUniqueOutPath(resolvedOutputPath, nameWithoutExt, format)
           command = window.EstellaLib.ffmpegCommands.buildVideoCommand({
@@ -176,11 +176,19 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
             file,
             outPath,
             format,
-            codec,
+            // Forced regardless of whatever's stored in settings.video.codec
+            // -- SettingsPanel.jsx only overrides the dropdown's *display*
+            // while targetSizeMode is on, disabled but still bound to
+            // whatever the user picked before enabling it. The actual
+            // "stay under target" guarantee only holds for libx264's VBV
+            // enforcement (see ffmpeg-commands.js's buildVideoCommand
+            // comment), so this is where that gets actually enforced.
+            codec: targetSizeMode ? 'libx264' : codec,
             qualityPercent,
             speed,
             targetFpsStr,
             fileObj,
+            targetSizeMB: targetSizeMode ? targetSizeMB : null,
           })
         } else if (fileType === 'image') {
           const { format, quality, scale } = settings.image

@@ -5,6 +5,12 @@ export const VIDEO_FORMATS = ['.mp4', '.mkv', '.webm', '.avi', '.gif']
 export const IMAGE_FORMATS = ['.jpg', '.png', '.webp', '.avif', '.ico', '.pdf']
 export const AUDIO_FORMATS = ['.mp3', '.wav', '.aac', '.flac', '.ogg']
 
+// Preset "compress to under N MB" targets -- decimal MB (1,000,000 bytes),
+// not MiB, deliberately stricter for extra safety margin against
+// overshoot. See ffmpeg-commands.js's computeTargetSizeBitrates for the
+// actual bitrate math this feeds.
+export const TARGET_SIZE_PRESETS_MB = [5, 25, 50]
+
 const DEFAULT_VIDEO = {
   format: '.mp4',
   codec: 'libx264',
@@ -13,6 +19,8 @@ const DEFAULT_VIDEO = {
   fps: null, // null = use the source's original fps (no explicit -vf fps= filter)
   fpsUpscale: false, // extends the FPS slider's max to 4x the source's original fps
   speed: 1.0,
+  targetSizeMode: false, // true = drive bitrate from targetSizeMB instead of quality
+  targetSizeMB: null,
 }
 const DEFAULT_IMAGE = { format: '.jpg', quality: 85, scale: 100 }
 const DEFAULT_AUDIO = { format: '.mp3', bitrate: '320k', speed: 1.0 }

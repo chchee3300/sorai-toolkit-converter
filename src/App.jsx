@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import StatusBar from './components/StatusBar.jsx'
 import DropZone from './components/DropZone.jsx'
 import FileList from './components/FileList.jsx'
@@ -35,9 +35,49 @@ function LoadingOverlay({ visible }) {
 // (`neu run` in this repo directly, via src/main.jsx) it's the same
 // component with no surrounding chrome -- fine for isolated dev/testing of
 // conversion behavior, which is what this dev harness is for.
-function App() {
+// pendingLaunch (hub-provided, see sorai-toolkit's useSingleInstance.js):
+// { seq, files, format, quickAction } | null -- an Explorer/Finder/Files
+// right-click launch, either from this process's own cold start or
+// forwarded from a second instance while this one was already running.
+// A single seq-keyed object rather than separate initialFiles/
+// initialFormat/initialQuickAction props: arrays have no stable
+// reference equality, so "already open, a second launch just got
+// forwarded in" needs something that reliably changes to re-trigger off
+// of -- seq is that.
+function App({ pendingLaunch }) {
   const { t } = useTranslation()
   const settings = useSettings()
+
+  // Consumed by handleFirstFileType below, at the exact point
+  // useFileManager already calls back into useSettings for its own
+  // extension-derived default -- overriding that default (or diverting
+  // into quick-compress) rather than duplicating loadFiles' "first file
+  // in a fresh queue" logic here.
+  const pendingFormatRef = useRef(null)
+  const pendingQuickActionRef = useRef(null)
+  const lastLaunchSeqRef = useRef(0)
+
+  const handleFirstFileType = useCallback((type, ext) => {
+    const quickAction = pendingQuickActionRef.current
+    if (quickAction && type === 'video' && quickAction.type === 'compress-under') {
+      settings.setVideo((v) => ({ ...v, targetSizeMode: true, targetSizeMB: quickAction.targetMB }))
+      pendingQuickActionRef.current = null
+      pendingFormatRef.current = null
+      return
+    }
+    if (quickAction && type === 'pdf' && quickAction.type === 'compress-pdf') {
+      settings.setPdf((v) => ({ ...v, optimize: 'compress' }))
+      pendingQuickActionRef.current = null
+      pendingFormatRef.current = null
+      return
+    }
+    if (pendingFormatRef.current) {
+      settings.setFormatForType(type, pendingFormatRef.current)
+      pendingFormatRef.current = null
+      return
+    }
+    settings.setFormatForType(type, ext)
+  }, [settings])
 
   const {
     files,
@@ -56,7 +96,20 @@ function App() {
     pendingMismatch,
     confirmClearAndLoad,
     cancelPendingMismatch,
-  } = useFileManager({ onFirstFileType: settings.setFormatForType })
+  } = useFileManager({ onFirstFileType: handleFirstFileType })
+
+  // Same seq -> re-trigger reasoning as the prop comment above. Naturally
+  // routes through the existing pendingMismatch/MixedTypeModal confirm
+  // flow via handleFiles when the queue already holds a different file
+  // type -- the refs above just sit unconsumed until the user confirms.
+  useEffect(() => {
+    if (!pendingLaunch || pendingLaunch.seq === lastLaunchSeqRef.current) return
+    lastLaunchSeqRef.current = pendingLaunch.seq
+    if (pendingLaunch.format) pendingFormatRef.current = pendingLaunch.format
+    if (pendingLaunch.quickAction) pendingQuickActionRef.current = pendingLaunch.quickAction
+    handleFiles(pendingLaunch.files)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingLaunch])
 
   const {
     execute,

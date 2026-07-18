@@ -419,6 +419,20 @@ body.drag-active::after {
 /* ════════════════════════════════════════════════════════════
    FILE LIST
    ════════════════════════════════════════════════════════════ */
+/* Flex item within .panel--ghost's column -- needs its own flex:1 so it
+   (and .file-list below, its own flex child) actually grow to fill
+   whatever height .panel--ghost has available, instead of both sizing to
+   content and leaving dead space under a short queue (see .file-list's
+   own comment -- this is the other half of that same fix). Kept in sync
+   with the hub's own resources/styles.css copy, same as every other
+   shared class in this file. */
+#file-list-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .filelist-header {
   display: flex;
   align-items: center;
@@ -435,10 +449,18 @@ body.drag-active::after {
   color: var(--text-muted);
 }
 
+/* max-height:148px was sized for the old compact single-line .file-item
+   rows -- left stale after rows switched to taller .queue-item thumbnail
+   cards (see FileList.jsx), which cut the list off after ~2 rows and
+   left a large empty gap below it inside .panel--ghost regardless of how
+   much vertical space was actually available. flex:1 + overflow-y:auto
+   matches .queue-list's (Downloader's own file queue) already-correct
+   fill-and-scroll behavior below. */
 .file-list {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  max-height: 148px;
   overflow-y: auto;
 }
 
@@ -558,6 +580,55 @@ body.drag-active::after {
   background: transparent;
   padding: 0;
   font-size: 0.67rem;
+}
+
+/* Quick-compress preset chips (SettingsPanel.jsx's VideoSettings
+   target-size row) -- pill buttons, not a slider, since presets only need
+   to land under their target, not hit an exact value. Kept in sync with
+   the hub's own resources/styles.css copy, same as every other shared
+   class in this file -- see that file's identical block. */
+.target-size-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip {
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.13s, border-color 0.13s, color 0.13s;
+}
+
+.chip:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+.chip--active {
+  background: var(--accent);
+  border-color: rgba(91, 127, 255, 0.5);
+  color: #fff;
+}
+
+.chip--active:hover {
+  background: #4a6bf5;
+}
+
+.chip--ghost {
+  background: transparent;
+  border-style: dashed;
+}
+
+.settings-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin: 0.2rem 0 0;
 }
 
 /* ════════════════════════════════════════════════════════════

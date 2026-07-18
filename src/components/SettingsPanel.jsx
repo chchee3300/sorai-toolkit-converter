@@ -1,6 +1,17 @@
 import GlassSelect from './GlassSelect.jsx'
-import { rangeFillStyle } from '../lib/rangeFill.js'
 import { useTranslation } from '../hooks/useTranslation.js'
+import { TARGET_SIZE_PRESETS_MB } from '../hooks/useSettings.js'
+
+// rangeFillStyle used to be this repo's own src/lib/rangeFill.js -- moved
+// into the hub's window.EstellaLib runtime globals (resources/js/lib/
+// range-fill.js) since it was byte-identical to Downloader's own copy with
+// zero per-repo divergence, unlike e.g. useTranslation.js which needs
+// `react` and can't live in a vanilla global the same way. Accessed inline
+// at each call site below (not destructured at module scope) -- every
+// other window.EstellaLib.* consumer in this codebase does the same,
+// since this module's own import graph resolves before main.jsx's later
+// side-effect imports attach these runtime globals to window.
+const rangeFillStyle = (value, min, max) => window.EstellaLib.rangeFill.rangeFillStyle(value, min, max)
 
 // Ported unchanged from resources/index.html:88-241 + main.js's settings
 // event-listener wiring (main.js:896-1019 pre-extraction: value-chip
@@ -62,18 +73,53 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
             <option value=".mkv">MKV</option>
             <option value=".webm">WEBM</option>
             <option value=".avi">AVI</option>
-            <option value=".gif">{t('settings.video.formatGif')}</option>
+            {/* GIF has no bitrate concept the target-size math can drive --
+                excluded from the picker entirely while targetSizeMode is
+                on, same idiom as forcing codec below. */}
+            {!video.targetSizeMode && <option value=".gif">{t('settings.video.formatGif')}</option>}
           </GlassSelect>
         </div>
         <div className="field" id="video-codec-group" style={{ display: video.format === '.gif' ? 'none' : 'block' }}>
           <label className="field-label" htmlFor="video-codec">{t('settings.codec')}</label>
-          <GlassSelect id="video-codec" value={video.codec} onChange={(e) => set({ codec: e.target.value })}>
+          <GlassSelect id="video-codec" value={video.targetSizeMode ? 'libx264' : video.codec} disabled={video.targetSizeMode} onChange={(e) => set({ codec: e.target.value })}>
             <option value="libx264">H.264 (avc1)</option>
             <option value="libx265">H.265 (hevc)</option>
             <option value="libvpx-vp9">VP9 (vp09)</option>
             <option value="libsvtav1">AV1 (av01)</option>
           </GlassSelect>
+          {video.targetSizeMode && <p className="settings-hint">{t('settings.video.targetSizeCodecLocked')}</p>}
         </div>
+        {/* Quick compress -- switches bitrate off the relative Quality
+            slider entirely and derives it from a target output size
+            instead (see ffmpeg-commands.js's computeTargetSizeBitrates).
+            "Under 50MB" only needs to stay under the cap, not hit it
+            exactly, so this is presented as discrete presets rather than
+            a slider. */}
+        <div className="field span-2">
+          <label className="field-label">{t('settings.video.targetSize')}</label>
+          <div className="target-size-chips">
+            {TARGET_SIZE_PRESETS_MB.map((mb) => (
+              <button
+                key={mb}
+                type="button"
+                className={`chip ${video.targetSizeMode && video.targetSizeMB === mb ? 'chip--active' : ''}`}
+                onClick={() => set({
+                  targetSizeMode: true,
+                  targetSizeMB: mb,
+                  format: video.format === '.gif' ? '.mp4' : video.format,
+                })}
+              >
+                {mb} MB
+              </button>
+            ))}
+            {video.targetSizeMode && (
+              <button type="button" className="chip chip--ghost" onClick={() => set({ targetSizeMode: false, targetSizeMB: null })}>
+                {t('settings.video.targetSizeOff')}
+              </button>
+            )}
+          </div>
+        </div>
+        {!video.targetSizeMode && (
         <div className="field span-2">
           <div className="field-label-row">
             <label className="field-label" htmlFor="video-quality">
@@ -103,6 +149,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
             onChange={(e) => set({ quality: parseFloat(e.target.value) })}
           />
         </div>
+        )}
         <div className="field">
           <div className="field-label-row">
             <label className="field-label" htmlFor="video-fps">

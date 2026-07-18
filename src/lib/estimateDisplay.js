@@ -18,20 +18,30 @@ export function computeEstimate(fileObj, fileType, settings) {
   let targetFpsLabel = null
 
   if (fileType === 'video') {
-    const { quality: qualityPercent, speed, fps, format, codec } = settings.video
+    const { quality: qualityPercent, speed, fps, format, codec, targetSizeMode, targetSizeMB } = settings.video
     const targetFpsStr = fps != null ? String(fps) : 'original'
     const targetFps = targetFpsStr === 'original' ? fileObj.fps : parseFloat(targetFpsStr)
     if (targetFpsStr !== 'original') targetFpsLabel = targetFpsStr
-    estMB = window.EstellaLib.sizeEstimate.estimateVideoMB({
-      currentSizeMB,
-      durationRatio,
-      qualityPercent,
-      speed,
-      format,
-      targetFps,
-      fileFps: fileObj.fps,
-      codec,
-    })
+    if (targetSizeMode && targetSizeMB) {
+      // Quick-compress mode drives bitrate from the target size, not the
+      // relative-quality formula estimateVideoMB uses -- showing that
+      // formula's result here would be actively misleading. The target
+      // only needs to land UNDER the cap (see ffmpeg-commands.js's
+      // TARGET_SIZE_SAFETY_MARGIN), so this preview shows a hair under it
+      // rather than promising an exact hit.
+      estMB = targetSizeMB * 0.95
+    } else {
+      estMB = window.EstellaLib.sizeEstimate.estimateVideoMB({
+        currentSizeMB,
+        durationRatio,
+        qualityPercent,
+        speed,
+        format,
+        targetFps,
+        fileFps: fileObj.fps,
+        codec,
+      })
+    }
   } else if (fileType === 'audio') {
     const { format, bitrate: bitrateStr, speed } = settings.audio
     estMB = window.EstellaLib.sizeEstimate.estimateAudioMB({
