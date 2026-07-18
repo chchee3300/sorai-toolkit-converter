@@ -1,6 +1,7 @@
 {
   "name": "sorai-toolkit-converter",
   "version": "0.0.0",
+  "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "exports": {

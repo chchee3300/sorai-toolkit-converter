@@ -9,6 +9,7 @@ The **Converter tool** for [SORAI Toolkit](https://github.com/chchee3300/sorai-t
 - **Audio** — convert between MP3 / WAV / AAC / FLAC / OGG, with bitrate control, trimming, and speed change (`atempo`).
 - **PDF** — optimize with linearize or compress modes.
 - Live file-size estimation before you convert, batch conversion with a progress log, and automatic filename collision avoidance (`_converted`, `_converted_converted`, …) so re-running a conversion never overwrites the previous output.
+- Each file in the list gets a thumbnail preview (video: a mid-point frame; image: the image itself; audio: its embedded cover art, when present) plus its source resolution/duration and codec, so a batch is recognizable at a glance instead of just a row of filenames.
 
 ## How it works
 
@@ -112,4 +113,4 @@ This repo has no independent release pipeline — no semantic-release, no CHANGE
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) for this repo's own code. Bundled/invoked third-party tools (ffmpeg, qpdf, img2pdf) keep their own licenses — see the hub repo's [`THIRD-PARTY-LICENSES.md`](https://github.com/chchee3300/sorai-toolkit/blob/master/THIRD-PARTY-LICENSES.md) for details, since the hub is what actually bundles and ships them.
