@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { rangeFillStyle } from '../lib/rangeFill.js'
 import { useTranslation } from '../hooks/useTranslation.js'
+
+// Moved into the hub's window.EstellaLib runtime globals (resources/js/lib/
+// range-fill.js) -- see SettingsPanel.jsx's own comment on this same move
+// for why (byte-identical to Downloader's copy, and why it's a lazy
+// wrapper rather than a module-scope destructure).
+const rangeFillStyle = (value, min, max) => window.EstellaLib.rangeFill.rangeFillStyle(value, min, max)
 
 // Ported unchanged from resources/index.html:253-312 (markup) and main.js's
 // Trim Modal Logic (main.js:538-867 pre-extraction) — the most complex
