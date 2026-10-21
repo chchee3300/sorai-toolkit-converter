@@ -307,10 +307,22 @@
           "markdownDescription": "Denies the ping command without any pre-configured scope."
         },
         {
-          "description": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`",
+          "description": "Enables the probe_source command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-probe-source",
+          "markdownDescription": "Enables the probe_source command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the probe_source command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-probe-source",
+          "markdownDescription": "Denies the probe_source command without any pre-configured scope."
+        },
+        {
+          "description": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`"
+          "markdownDescription": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`"
         }
       ]
     }

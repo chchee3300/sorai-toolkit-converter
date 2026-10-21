@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { convertFileSrc } from '@tauri-apps/api/core'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
+import { probeSource } from '../plugin.js'
 
 // Ported unchanged from resources/js/main.js's getFileType (main.js:6-18
 // pre-extraction).
@@ -16,79 +19,12 @@ function getFileType(filename) {
   return null
 }
 
-// Generates a small preview thumbnail (video mid-frame / audio embedded
-// cover art / downscaled image) into the shared thumbDir and returns a
-// localhost URL served through the '/thumbs' mount (see ensureThumbDir in
-// useFileManager below) -- or null if ffmpeg produced nothing (most
-// commonly: an audio file with no embedded cover art). fileName is unique
-// per call (thumbSeqRef), not derived from the source path, so files from
-// different directories that happen to share a basename never collide.
-async function getThumbnail(path, type, duration, thumbDir, seq) {
-  try {
-    const platform = window.EstellaLib.platform
-    const binPath = platform.resolveBinPath()
-    const fileName = `thumb-${seq}.jpg`
-    const outPath = platform.joinPath(thumbDir, fileName)
-    const command = window.EstellaLib.ffmpegCommands.buildThumbnailCommand({
-      binPath,
-      file: path,
-      outPath,
-      fileType: type,
-      duration,
-    })
-    await window.Neutralino.os.execCommand(command)
-    const stats = await window.Neutralino.filesystem.getStats(outPath).catch(() => null)
-    if (!stats || stats.size === 0) return null
-    return `http://localhost:${window.NL_PORT}/thumbs/${encodeURIComponent(fileName)}`
-  } catch (e) {
-    return null
-  }
-}
-
-// Ported unchanged from main.js's getMediaInfo (main.js:20-50 pre-extraction).
-async function getMediaInfo(path) {
-  try {
-    const platform = window.EstellaLib.platform
-    const binPath = platform.resolveBinPath()
-    const command = `"${platform.ffmpegPath(binPath)}" -i "${path}"`
-    const res = await window.Neutralino.os.execCommand(command)
-    const output = res.stdErr
-    const match = output.match(/Duration:\s+(\d+):(\d+):(\d+\.\d+)/)
-    const fpsMatch = output.match(/(\d+(?:\.\d+)?)\s+fps/)
-    const dimMatch = output.match(/(?:,\s+)(\d+)x(\d+)(?:[,\s]|$)/)
-    // ffmpeg -i's own stream line, e.g. "Stream #0:0: Video: h264 (High) ...
-    // 320x240 ...". Only ever present for video streams -- an audio-only
-    // file's "Stream #0:0: Audio: ..." line never matches, so this comes
-    // back empty for audio/PDF without any type check needed here.
-    const codecMatch = output.match(/Video:\s+(\w+)/)
-
-    let duration = 0
-    const fps = fpsMatch ? parseFloat(fpsMatch[1]) : 0
-    let width = 0
-    let height = 0
-    const codec = codecMatch ? codecMatch[1] : ''
-
-    if (match) {
-      const hours = parseInt(match[1])
-      const mins = parseInt(match[2])
-      const secs = parseFloat(match[3])
-      duration = hours * 3600 + mins * 60 + secs
-    }
-    if (dimMatch) {
-      width = parseInt(dimMatch[1])
-      height = parseInt(dimMatch[2])
-    }
-    return { duration, fps, width, height, codec }
-  } catch (e) {
-    console.error('Failed to parse info from ffmpeg', e)
-  }
-  return null
-}
+const baseName = (path) => path.split(/[\\/]/).pop()
 
 // Owns files/fileType/outputPath/loading/status — the same state that was
 // module-level `let` globals in main.js, now lifted into React. Ported
-// behaviorally unchanged from handleFiles/importDroppedFiles/
-// copyDroppedFileToTemp/removeFile/renderFileList's empty-list reset
+// behaviorally unchanged from handleFiles/removeFile/renderFileList's
+// empty-list reset
 // (main.js, pre-extraction). `onFirstFileType(type, ext)` is called exactly
 // where vanilla's handleFiles directly poked
 // document.getElementById('video-format').value = ext — the DropZone/
@@ -115,49 +51,11 @@ export function useFileManager({ onFirstFileType }) {
   // races the vanilla code's plain synchronous globals never had. Writes
   // go through the ref *and* the state setter together (see
   // setOutputPathBoth) wherever a handler needs to read-its-own-write
-  // before the next render commits — outputPath is the one case where
-  // vanilla's importDroppedFiles relies on exactly that (see its comment
-  // in main.js: "default the output dir to Downloads so handleFiles never
-  // picks the temp dir").
+  // before the next render commits.
   const filesRef = useRef(files)
   filesRef.current = files
   const outputPathRef = useRef(outputPath)
   outputPathRef.current = outputPath
-  // Thumbnail generation state: thumbDirRef caches the resolved temp dir
-  // once created+mounted (lazy, first file that needs a thumbnail triggers
-  // it) so every subsequent file reuses the same mount instead of racing to
-  // create/mount it again; thumbSeqRef gives each generated file a unique
-  // name (see getThumbnail above).
-  const thumbDirRef = useRef(null)
-  const thumbSeqRef = useRef(0)
-
-  // Mirrors TrimModal's '/preview' mount (same Neutralino.server.mount +
-  // localhost:NL_PORT idiom), except this one is long-lived for the whole
-  // Converter session and points at a generated-thumbnails cache dir instead
-  // of a source file's own directory -- see getThumbnail's file-per-thumb
-  // naming, which is what makes one shared mount safe for files pulled from
-  // many different source directories.
-  const ensureThumbDir = useCallback(async () => {
-    if (thumbDirRef.current) return thumbDirRef.current
-    const tempBase = await window.Neutralino.os.getPath('temp')
-    const dir = window.EstellaLib.platform.joinPath(tempBase, 'FileConverterApp', 'thumbnails')
-    await window.Neutralino.filesystem.createDirectory(dir).catch(() => {})
-    const mounts = await window.Neutralino.server.getMounts().catch(() => ({}))
-    if (!mounts['/thumbs']) {
-      await window.Neutralino.server.mount('/thumbs', dir).catch(() => {})
-    }
-    thumbDirRef.current = dir
-    return dir
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      if (thumbDirRef.current) {
-        window.Neutralino.server.unmount('/thumbs').catch(() => {})
-      }
-    }
-  }, [])
-
   const setOutputPathBoth = useCallback((value) => {
     outputPathRef.current = value
     setOutputPathState(value)
@@ -183,7 +81,8 @@ export function useFileManager({ onFirstFileType }) {
           try {
             const type = getFileType(path)
             if (!type) {
-              alert(`Unsupported file type: ${path}`)
+              // Also how a dropped folder ends up here (no media extension).
+              setStatus('status.skippedUnsupported', 'error', { name: baseName(path) })
               continue
             }
 
@@ -205,30 +104,17 @@ export function useFileManager({ onFirstFileType }) {
             const alreadyPresent =
               filesRef.current.some((f) => f.path === path) || additions.some((f) => f.path === path)
             if (!alreadyPresent) {
-              const stats = await window.Neutralino.filesystem.getStats(path)
-              let duration = 0
-              let fps = 0
-              let width = 0
-              let height = 0
-              let videoCodec = ''
-              let thumbnail = null
-              if (type === 'video' || type === 'audio' || type === 'image') {
-                const info = await getMediaInfo(path)
-                if (info) {
-                  duration = info.duration || 0
-                  fps = info.fps || 0
-                  width = info.width || 0
-                  height = info.height || 0
-                  videoCodec = info.codec || ''
-                }
-                const thumbDir = await ensureThumbDir()
-                thumbnail = await getThumbnail(path, type, duration, thumbDir, thumbSeqRef.current++)
-              }
-              additions.push({ path, size: stats.size, duration, fps, width, height, videoCodec, thumbnail })
+              // Size + ffmpeg info + thumbnail, all in the plugin (Rust). A
+              // directory or vanished file rejects -> caught below, skipped.
+              const info = await probeSource(path, type)
+              const thumbnail = info.thumbnail ? convertFileSrc(info.thumbnail) : null
+              const { size, duration, fps, width, height } = info
+              const videoCodec = info.codec
+              additions.push({ path, size, duration, fps, width, height, videoCodec, thumbnail })
             }
           } catch (err) {
             console.error('Error processing file path: ' + path, err)
-            alert('Error reading file info: ' + path + '\n' + err)
+            setStatus('status.failedImport', 'error', { name: baseName(path) })
           }
         }
 
@@ -247,11 +133,11 @@ export function useFileManager({ onFirstFileType }) {
         setLoading(false)
       }
     },
-    [fileType, onFirstFileType, setOutputPathBoth, ensureThumbDir],
+    [fileType, onFirstFileType, setOutputPathBoth, setStatus],
   )
 
-  // Public entry point every caller (native filesDropped, browser-mode
-  // drop, and the Browse dialog) already funnels through. If files are
+  // Public entry point every caller (native Tauri drop, pendingLaunch,
+  // and the Browse dialog) already funnels through. If files are
   // already loaded and this batch resolves to a *different* category, park
   // it in pendingMismatch and ask instead of silently rejecting (matches
   // getFileType/localType's own per-file mismatch check further up the
@@ -266,99 +152,6 @@ export function useFileManager({ onFirstFileType }) {
       await loadFiles(paths, fileType)
     },
     [fileType, loadFiles],
-  )
-
-  const dropSeqRef = useRef(0)
-
-  const copyDroppedFileToTemp = useCallback(async (file, dropDir, onProgress) => {
-    const CHUNK = window.__DROP_CHUNK_SIZE || 8 * 1024 * 1024
-    const destPath = window.EstellaLib.platform.joinPath(dropDir, file.name)
-    let offset = 0
-    while (offset < file.size) {
-      const buf = await file.slice(offset, offset + CHUNK).arrayBuffer()
-      if (offset === 0) {
-        await window.Neutralino.filesystem.writeBinaryFile(destPath, buf)
-      } else {
-        await window.Neutralino.filesystem.appendBinaryFile(destPath, buf)
-      }
-      offset += CHUNK
-      if (onProgress) onProgress(Math.min(100, Math.round((offset / file.size) * 100)))
-    }
-    return destPath
-  }, [])
-
-  const importDroppedFiles = useCallback(
-    async (dropped) => {
-      const accepted = []
-      for (const file of dropped) {
-        if (!getFileType(file.name)) {
-          console.warn('Skipping unsupported drop entry:', file.name)
-          setStatus('status.skippedUnsupported', 'error', { name: file.name })
-          continue
-        }
-        if (file.size === 0) {
-          console.warn('Skipping empty/folder drop entry:', file.name)
-          continue
-        }
-        const dup = filesRef.current.find(
-          (f) => f.path.split(/[\\/]/).pop() === file.name && f.size === file.size,
-        )
-        if (dup) {
-          console.warn('Skipping already-added drop entry:', file.name)
-          continue
-        }
-        accepted.push(file)
-      }
-      if (accepted.length === 0) return
-
-      setLoading(true)
-      try {
-        const tempBase = await window.Neutralino.os.getPath('temp')
-        const dropDir = window.EstellaLib.platform.joinPath(
-          tempBase,
-          'FileConverterApp',
-          'dropped',
-          `${Date.now()}_${dropSeqRef.current++}`,
-        )
-        await window.Neutralino.filesystem.createDirectory(dropDir)
-
-        const tempPaths = []
-        for (let i = 0; i < accepted.length; i++) {
-          const file = accepted[i]
-          try {
-            tempPaths.push(
-              await copyDroppedFileToTemp(file, dropDir, (pct) => {
-                setStatus('status.copyingDropped', 'busy', { index: i + 1, total: accepted.length, percent: pct })
-              }),
-            )
-          } catch (err) {
-            console.error('Failed to import dropped file: ' + file.name, err)
-            setStatus('status.failedImport', 'error', { name: file.name })
-            try {
-              await window.Neutralino.filesystem.remove(window.EstellaLib.platform.joinPath(dropDir, file.name))
-            } catch (e) {
-              /* partial file may not exist */
-            }
-          }
-        }
-        if (tempPaths.length === 0) return
-
-        // The originals' directory is unknowable in browser mode; default
-        // the output dir to Downloads so handleFiles never picks the temp
-        // dir. Must go through setOutputPathBoth (not the raw state
-        // setter) so handleFiles' own `!outputPathRef.current` check below
-        // sees this write immediately, before React re-renders.
-        if (!outputPathRef.current) {
-          const downloads = await window.Neutralino.os.getPath('downloads')
-          setOutputPathBoth(downloads)
-        }
-
-        await handleFiles(tempPaths)
-      } finally {
-        setLoading(false)
-      }
-    },
-    [copyDroppedFileToTemp, handleFiles, setOutputPathBoth, setStatus],
   )
 
   const removeFile = useCallback(
@@ -392,86 +185,39 @@ export function useFileManager({ onFirstFileType }) {
 
   const cancelPendingMismatch = useCallback(() => setPendingMismatch(null), [])
 
-  // Native drag/drop handling — document-level dragenter/dragleave/
-  // dragover/drop listeners plus the Neutralino 'filesDropped' event
-  // (window mode's real native drop path). body.drag-active only drives
-  // the whole-window overlay (styles.css) — files are droppable anywhere
-  // on the page, so no single panel gets its own highlight; the file list
-  // updating is the feedback a drop needs.
-  const dragCounterRef = useRef(0)
+  // Native drag/drop: Tauri's webview drag-drop events carry the dropped
+  // files' real absolute paths (used in place, never copied). enter/leave/
+  // drop drive body.drag-active, the whole-window overlay (styles.css);
+  // files are droppable anywhere. handleFiles changes identity with
+  // fileType, so the listener reads it through a ref and subscribes once.
+  const handleFilesRef = useRef(handleFiles)
+  handleFilesRef.current = handleFiles
 
   useEffect(() => {
-    const onDragEnter = (e) => {
-      e.preventDefault()
-      dragCounterRef.current++
-      document.body.classList.add('drag-active')
-    }
-    const onDragLeave = (e) => {
-      e.preventDefault()
-      dragCounterRef.current--
-      if (dragCounterRef.current === 0) {
-        document.body.classList.remove('drag-active')
+    const overlay = (on) => document.body.classList.toggle('drag-active', on)
+    const unlisten = getCurrentWebview().onDragDropEvent(({ payload }) => {
+      if (payload.type === 'enter') overlay(true)
+      else if (payload.type === 'leave') overlay(false)
+      else if (payload.type === 'drop') {
+        overlay(false)
+        if (payload.paths.length > 0) handleFilesRef.current(payload.paths)
       }
-    }
-    const onDragOver = (e) => e.preventDefault()
-    const onDrop = (e) => {
-      e.preventDefault()
-      dragCounterRef.current = 0
-      document.body.classList.remove('drag-active')
-
-      // Window mode gets real paths via the native filesDropped event;
-      // reading dataTransfer here as well would double-add the files.
-      if (window.NL_MODE === 'window') return
-      const dropped = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : []
-      if (dropped.length > 0) importDroppedFiles(dropped)
-    }
-
-    document.addEventListener('dragenter', onDragEnter)
-    document.addEventListener('dragleave', onDragLeave)
-    document.addEventListener('dragover', onDragOver)
-    document.addEventListener('drop', onDrop)
+    })
     return () => {
-      document.removeEventListener('dragenter', onDragEnter)
-      document.removeEventListener('dragleave', onDragLeave)
-      document.removeEventListener('dragover', onDragOver)
-      document.removeEventListener('drop', onDrop)
+      overlay(false)
+      unlisten.then((f) => f())
     }
-  }, [importDroppedFiles])
-
-  useEffect(() => {
-    if (!window.Neutralino) return undefined
-    const handler = (event) => {
-      dragCounterRef.current = 0
-      document.body.classList.remove('drag-active')
-
-      const detail = event.detail
-      let paths = []
-      if (Array.isArray(detail)) {
-        paths = detail.map((f) => (typeof f === 'string' ? f : f && f.path)).filter(Boolean)
-      } else if (typeof detail === 'string') {
-        paths = [detail]
-      }
-
-      if (paths.length > 0) {
-        handleFiles(paths)
-      } else if (detail != null && !Array.isArray(detail)) {
-        console.error('Unrecognized filesDropped payload:', detail)
-        setStatus('status.dropFailed', 'error')
-      }
-    }
-    window.Neutralino.events.on('filesDropped', handler)
-    return () => {
-      window.Neutralino.events.off('filesDropped', handler)
-    }
-  }, [handleFiles, setStatus])
+  }, [])
 
   const browseForFiles = useCallback(async () => {
-    const entries = await window.Neutralino.os.showOpenDialog('Select files', { multiSelections: true })
+    // window.SoraiDialogs is the hub's dialog module, looked up at call time
+    // so E2E can stub it.
+    const entries = await window.SoraiDialogs.openFiles({ title: 'Select files' })
     if (entries && entries.length > 0) handleFiles(entries)
   }, [handleFiles])
 
   const browseForOutputFolder = useCallback(async () => {
-    const entry = await window.Neutralino.os.showFolderDialog('Select Output Folder')
+    const entry = await window.SoraiDialogs.openFolder({ title: 'Select Output Folder' })
     if (entry) setOutputPathBoth(entry)
   }, [setOutputPathBoth])
 

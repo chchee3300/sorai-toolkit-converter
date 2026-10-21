@@ -9,6 +9,10 @@ links = "tauri-plugin-sorai-converter"
 
 [dependencies]
 tauri = "2.12"
+# Runs the host app's `ffmpeg` sidecar (the hub declares and bundles it).
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+regex = "1"
 
 [build-dependencies]
 tauri-plugin = { version = "2.7", features = ["build"] }

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-probe-source"
+description = "Enables the probe_source command without any pre-configured scope."
+commands.allow = ["probe_source"]
+
+[[permission]]
+identifier = "deny-probe-source"
+description = "Denies the probe_source command without any pre-configured scope."
+commands.deny = ["probe_source"]
