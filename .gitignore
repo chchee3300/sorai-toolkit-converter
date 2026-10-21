@@ -29,3 +29,7 @@ neutralino.js
 # Neutralinojs related files
 .storage
 *.log
+
+# Tauri plugin crate build output
+/plugin/target
+/plugin/Cargo.lock

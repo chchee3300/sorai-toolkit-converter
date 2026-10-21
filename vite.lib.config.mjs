@@ -25,7 +25,7 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       // Peer, not bundled -- the hub provides its own React instance.
-      external: ['react', 'react-dom', 'react/jsx-runtime'],
+      external: ['react', 'react-dom', 'react/jsx-runtime', /^@tauri-apps\//],
     },
   },
 })

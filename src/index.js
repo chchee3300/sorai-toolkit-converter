@@ -11,3 +11,6 @@
 // host app is responsible for loading before mounting this component,
 // exactly like window.Neutralino itself.
 export { default as ConverterApp } from './App.jsx'
+
+// Tauri plugin guest bindings (invoke wrappers for plugin/'s commands).
+export * from './plugin.js'

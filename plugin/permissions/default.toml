@@ -1,0 +1,5 @@
+# The hub grants this set wholesale (src-tauri/capabilities/default.json).
+# Add every new command's allow-<command> here.
+[default]
+description = "Allows every command this plugin exposes."
+permissions = ["allow-ping"]

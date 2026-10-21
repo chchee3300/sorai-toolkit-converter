@@ -1,0 +1,14 @@
+[package]
+name = "tauri-plugin-sorai-converter"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "SORAI Toolkit converter as a Tauri v2 plugin (consumed by the sorai-toolkit hub)"
+# Required by tauri-plugin's build script so the host app sees our permissions.
+links = "tauri-plugin-sorai-converter"
+
+[dependencies]
+tauri = "2.12"
+
+[build-dependencies]
+tauri-plugin = { version = "2.7", features = ["build"] }
