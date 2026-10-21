@@ -58,7 +58,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
   const fpsMax = video.fpsUpscale ? referenceFps * 4 : referenceFps
   // video.fps stays null until the user actually drags the slider — that's
   // what lets the command builder skip the -vf fps= filter entirely for
-  // "untouched" (see ffmpeg-commands.js's 'original' sentinel), rather than
+  // "untouched" (fps: null = no fps filter, plugin/src/convert.rs), rather than
   // emitting a same-value filter that would force CFR on a VFR source.
   const fpsValue = video.fps != null ? Math.min(video.fps, fpsMax) : referenceFps
 
@@ -91,7 +91,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
         </div>
         {/* Quick compress -- switches bitrate off the relative Quality
             slider entirely and derives it from a target output size
-            instead (see ffmpeg-commands.js's computeTargetSizeBitrates).
+            instead (see plugin/src/convert.rs's target_size_bitrates).
             "Under 50MB" only needs to stay under the cap, not hit it
             exactly, so this is presented as discrete presets rather than
             a slider. */}

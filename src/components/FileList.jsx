@@ -1,4 +1,4 @@
-import { computeEstimate } from '../lib/estimateDisplay.js'
+import { useEstimates } from '../hooks/useEstimates.js'
 import { useTranslation } from '../hooks/useTranslation.js'
 
 function formatDuration(seconds) {
@@ -68,13 +68,14 @@ function formatImageResolution(fileObj, fileType, settings) {
 
 export default function FileList({ files, fileType, settings, onRemove, onOpenTrim, onOpenCrop }) {
   const { t } = useTranslation()
+  const estimates = useEstimates(files, fileType, settings)
   return (
     <div className="file-list" id="file-list">
       {files.map((fileObj, index) => {
         const filename = fileObj.path.split(/[\\/]/).pop()
         const sizeMB = (fileObj.size / (1024 * 1024)).toFixed(1)
         const { trimText, fpsText, codecText } = formatFpsTrim(fileObj, fileType, t)
-        const estimate = computeEstimate(fileObj, fileType, settings)
+        const estimate = estimates[index]
         const showTrimBtn = fileType === 'video' || fileType === 'audio'
         const resolutionText = formatImageResolution(fileObj, fileType, settings)
         const cropText = fileObj.crop ? t('fileList.cropBadge', { width: fileObj.crop.width, height: fileObj.crop.height }) : null

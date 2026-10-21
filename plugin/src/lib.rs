@@ -10,6 +10,9 @@ use tauri::{
 };
 use tauri_plugin_shell::ShellExt;
 
+pub mod convert;
+pub mod runner;
+
 /// Plugin name: JS calls commands as `plugin:sorai-converter|<command>`,
 /// the hub grants `sorai-converter:default`.
 pub const NAME: &str = "sorai-converter";
@@ -149,10 +152,47 @@ async fn probe_source<R: Runtime>(app: AppHandle<R>, path: String, file_type: St
   Ok(SourceInfo { size, media, thumbnail })
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Started {
+  job_id: u64,
+  out_path: String,
+}
+
+/// Starts converting one file into `outDir` (never overwriting: picks a
+/// free `<name>_converted...` name). Returns at once; progress / log /
+/// finished arrive as `sorai-converter://*` events (see runner.rs).
+#[tauri::command]
+fn start_convert<R: Runtime>(app: AppHandle<R>, job: convert::Job, out_dir: String) -> Result<Started, String> {
+  let src = Path::new(&job.source.path);
+  let stem = src.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+  let out = convert::unique_out_path(Path::new(&out_dir), &stem, job.out_ext(), |p| p.exists());
+  let out_path = out.to_string_lossy().into_owned();
+  let args = convert::build_args(&job, &out_path)?;
+  let (duration, speed) = (job.source.duration, job.speed());
+  let job_id = runner::start(&app, "ffmpeg", args, out, move |line| convert::parse_progress(line, duration, speed))?;
+  Ok(Started { job_id, out_path })
+}
+
+#[tauri::command]
+fn cancel_job<R: Runtime>(app: AppHandle<R>, job_id: u64) {
+  runner::cancel(&app, job_id)
+}
+
+/// Output-size preview per queued file, same order as `jobs`.
+#[tauri::command]
+fn estimate_sizes(jobs: Vec<convert::Job>) -> Vec<convert::Estimate> {
+  jobs.iter().map(convert::estimate).collect()
+}
+
 /// Registered by the hub: `.plugin(tauri_plugin_sorai_converter::init())`.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new(NAME)
-    .invoke_handler(tauri::generate_handler![ping, probe_source])
+    .invoke_handler(tauri::generate_handler![ping, probe_source, start_convert, cancel_job, estimate_sizes])
+    .setup(|app, _| {
+      app.manage(runner::Jobs::default());
+      Ok(())
+    })
     .build()
 }
 

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-estimate-sizes"
+description = "Enables the estimate_sizes command without any pre-configured scope."
+commands.allow = ["estimate_sizes"]
+
+[[permission]]
+identifier = "deny-estimate-sizes"
+description = "Denies the estimate_sizes command without any pre-configured scope."
+commands.deny = ["estimate_sizes"]

@@ -18,12 +18,8 @@ import '../resources/js/liquid-glass.js'
 // harness (when consumed via the hub, the hub's own copy already did this).
 import '../resources/js/lib/i18n.js'
 import '../resources/js/lib/platform.js'
-import '../resources/js/lib/filename-collision.js'
-import '../resources/js/lib/ffmpeg-commands.js'
 import '../resources/js/lib/qpdf-commands.js'
 import '../resources/js/lib/img2pdf-commands.js'
-import '../resources/js/lib/progress-parser.js'
-import '../resources/js/lib/size-estimate.js'
 
 // Neutralino.init() only functions when this app is actually served by a
 // running `neu` process (window.NL_PORT/NL_TOKEN injected by neu's dev

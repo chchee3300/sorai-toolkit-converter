@@ -7,7 +7,7 @@ export const AUDIO_FORMATS = ['.mp3', '.wav', '.aac', '.flac', '.ogg']
 
 // Preset "compress to under N MB" targets -- decimal MB (1,000,000 bytes),
 // not MiB, deliberately stricter for extra safety margin against
-// overshoot. See ffmpeg-commands.js's computeTargetSizeBitrates for the
+// overshoot. See plugin/src/convert.rs's target_size_bitrates for the
 // actual bitrate math this feeds.
 export const TARGET_SIZE_PRESETS_MB = [5, 25, 50]
 
