@@ -1,0 +1,3 @@
+# build.rs regenerates these with LF on every build; pin LF so Windows
+# checkouts (core.autocrlf) do not show them as modified.
+plugin/permissions/** text eol=lf
