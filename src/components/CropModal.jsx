@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import { useTranslation } from '../hooks/useTranslation.js'
 
 // New (no vanilla precedent) — modeled on TrimModal.jsx's interaction shape:
-// a preview mounted via Neutralino.server.mount, drag state mirrored into
+// a preview loaded through Tauri's asset protocol, drag state mirrored into
 // refs for stable window-level mousemove/mouseup listeners, and the same
 // focus-trap/Escape accessibility block. Where TrimModal drags a 1D
 // dual-thumb range, this drags a 2D rectangle (move + 4 corner handles).
@@ -192,14 +193,10 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
   // starts out on top of the crop rect or a handle.
   const panStartRef = useRef(null)
 
-  // Open (or switch to a different file while open): mount the preview and
+  // Open (or switch to a different file while open): load the preview and
   // reset the rect from the file's own saved crop (or the full frame).
-  // Ported-pattern from TrimModal.jsx's open/close effect, own mount path
-  // ('/crop-preview' vs. Trim's '/preview') so the two modals never race
-  // over the same Neutralino mount point.
   useEffect(() => {
     if (!open || !file) return undefined
-    let cancelled = false
 
     const w = file.width || 0
     const h = file.height || 0
@@ -216,28 +213,11 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
       viewportRef.current.scrollTop = 0
     }
 
-    const filename = file.path.split(/[\\/]/).pop()
-    let lastSlash = file.path.lastIndexOf('\\')
-    if (lastSlash === -1) lastSlash = file.path.lastIndexOf('/')
-    const dirPath = file.path.substring(0, lastSlash)
-
-    ;(async () => {
-      try {
-        await window.Neutralino.server.mount('/crop-preview', dirPath)
-        if (cancelled) return
-        const fileUrl = `http://localhost:${window.NL_PORT}/crop-preview/${encodeURIComponent(filename)}`
-        if (imgRef.current) imgRef.current.src = fileUrl
-        if (dimImgRef.current) dimImgRef.current.src = fileUrl
-      } catch (e) {
-        console.error('Failed to mount for crop preview:', e)
-        alert('Could not load preview. Is local server disabled?')
-      }
-    })()
-
-    return () => {
-      cancelled = true
-      window.Neutralino.server.unmount('/crop-preview').catch(() => {})
-    }
+    // Asset-protocol URL: probe_source added the file to the asset scope.
+    const fileUrl = convertFileSrc(file.path)
+    if (imgRef.current) imgRef.current.src = fileUrl
+    if (dimImgRef.current) dimImgRef.current.src = fileUrl
+    return undefined
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, file?.path])
 

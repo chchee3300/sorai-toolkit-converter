@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import { useTranslation } from '../hooks/useTranslation.js'
 
 // Moved into the hub's window.EstellaLib runtime globals (resources/js/lib/
@@ -10,7 +11,7 @@ const rangeFillStyle = (value, min, max) => window.EstellaLib.rangeFill.rangeFil
 // Ported unchanged from resources/index.html:253-312 (markup) and main.js's
 // Trim Modal Logic (main.js:538-867 pre-extraction) — the most complex
 // interactive widget in the app: a custom dual-thumb drag slider + video/
-// audio preview player mounted via Neutralino.server.mount. Kept as one
+// audio preview player fed through Tauri's asset protocol. Kept as one
 // component (matches the vanilla code's single cohesive-widget structure)
 // rather than split further. `formatTrimTime`/`parseTrimTime` were dead
 // code in main.js (defined, never called anywhere) — not ported, no
@@ -91,12 +92,9 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
 
   // Open (or switch to a different file while open): reset players, reset
   // trim range from the file's own saved trimStart/trimEnd (or full range),
-  // mount the preview server, set player src. Cleanup (close, switch file,
-  // or unmount): pause + unmount. Ported unchanged from main.js's
-  // openTrimModal/closeTrimModal (main.js:595-655 pre-extraction).
+  // set player src. Cleanup (close, switch file, or unmount): pause.
   useEffect(() => {
     if (!open || !file) return undefined
-    let cancelled = false
 
     const vid = vidRef.current
     const aud = audRef.current
@@ -113,35 +111,20 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
     setTrimEnd(file.trimEnd !== undefined ? file.trimEnd : fileDuration)
     suppressLoopRef.current = false
 
-    const filename = file.path.split(/[\\/]/).pop()
-    let lastSlash = file.path.lastIndexOf('\\')
-    if (lastSlash === -1) lastSlash = file.path.lastIndexOf('/')
-    const dirPath = file.path.substring(0, lastSlash)
-
-    ;(async () => {
-      try {
-        await window.Neutralino.server.mount('/preview', dirPath)
-        if (cancelled) return
-        const fileUrl = `http://localhost:${window.NL_PORT}/preview/${encodeURIComponent(filename)}`
-        const player = fileType === 'video' ? vid : aud
-        activePlayerRef.current = player
-        player.classList.remove('hidden')
-        player.src = fileUrl
-        player.load()
-        player.volume = volume
-      } catch (e) {
-        console.error('Failed to mount for preview:', e)
-        alert('Could not load preview. Is local server disabled?')
-      }
-    })()
+    // Asset-protocol URL: probe_source added this file to the asset scope
+    // when it was queued (plugin/src/lib.rs).
+    const player = fileType === 'video' ? vid : aud
+    activePlayerRef.current = player
+    player.classList.remove('hidden')
+    player.src = convertFileSrc(file.path)
+    player.load()
+    player.volume = volume
 
     return () => {
-      cancelled = true
       if (activePlayerRef.current) {
         activePlayerRef.current.pause()
         activePlayerRef.current = null
       }
-      window.Neutralino.server.unmount('/preview').catch(() => {})
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, file?.path, fileType])

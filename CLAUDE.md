@@ -51,4 +51,4 @@ Neutralino 打包/CI 相關的完整踩坑清單（`resourcesPath`/`documentRoot
   - 跟舊版刻意不同：`speed == 1` 時不再加 `setpts=1*PTS`/`atempo=1`（舊版拿數字跟字串 `'1.0'` 比，永遠成立）；失敗的檔案也會刪掉殘檔。
   - PDF 與圖片轉 PDF（ticket 08）：`build_args` 對這兩種直接回錯誤，UI 顯示成該檔案失敗；`Kind::Pdf`、`ImageSettings.format == ".pdf"` 的分支留著給 08 接 qpdf/img2pdf。目標大小模式選 `.webm` 會因為 webm 裝不了 h264 而失敗（舊版就這樣，沒改）。
   - E2E：hub `tests/e2e/converter-convert.test.mjs`（影片/音訊/圖片各一次並用 ffmpeg 檢查輸出、壞檔不影響下一個、檔名不覆蓋、5MB 目標真的低於 5,000,000 bytes 且有中間百分比、取消在 2.5 秒內結束且無殘留 ffmpeg 與殘檔）。
-- Trim/Crop 預覽目前仍呼叫 `window.Neutralino.server.mount`（ticket 07）。
+- **Trim/Crop 預覽（ticket 07）**：`TrimModal.jsx`/`CropModal.jsx` 不再用 `Neutralino.server.mount`，直接 `convertFileSrc(file.path)`。權限來自 `probe_source`：video/audio/image 檔加入佇列時呼叫 `app.asset_protocol_scope().allow_file(path)`（只開那一個檔案；`plugin/Cargo.toml` 的 `tauri` 因此開 `protocol-asset` feature，宿主也要開 `app.security.assetProtocol`）。PDF 不加。裁切/剪輯參數本來就在 `convert::build_args`，這次補了 PNG palettegen 只裁切、ICO 裁切＋縮放兩個 cargo test 案例。E2E：hub `tests/e2e/converter-trim-crop.test.mjs`。
