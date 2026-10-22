@@ -7,8 +7,8 @@ import { cancelJob, startConvert } from '../plugin.js'
 // name, parses progress, removes partial output on failure/cancel, and
 // always reports `finished` (a cancel backstop means no stuck
 // "Cancelling..."). This hook only sequences files and mirrors events into
-// the progress bar / log. PDF + image->PDF jobs are rejected by the plugin
-// until ticket 08 ports qpdf/img2pdf (surfaces as a per-file error).
+// the progress bar / log. PDF (qpdf) and image->PDF (img2pdf) are plugin
+// jobs too; a missing system qpdf/img2pdf (macOS/Linux) is a per-file error.
 export function useExecute({ files, setFiles, fileType, settings, outputPath, setOutputPath, setStatus }) {
   const [executing, setExecuting] = useState(false)
   const [cancelling, setCancelling] = useState(false)

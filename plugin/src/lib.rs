@@ -170,7 +170,7 @@ fn start_convert<R: Runtime>(app: AppHandle<R>, job: convert::Job, out_dir: Stri
   let out_path = out.to_string_lossy().into_owned();
   let args = convert::build_args(&job, &out_path)?;
   let (duration, speed) = (job.source.duration, job.speed());
-  let job_id = runner::start(&app, "ffmpeg", args, out, move |line| convert::parse_progress(line, duration, speed))?;
+  let job_id = runner::start(&app, convert::program(&job), args, out, move |line| convert::parse_progress(line, duration, speed))?;
   Ok(Started { job_id, out_path })
 }
 

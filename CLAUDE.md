@@ -49,6 +49,8 @@ Neutralino 打包/CI 相關的完整踩坑清單（`resourcesPath`/`documentRoot
   - 執行器：sidecar 用 `set_raw_out(true)`（ffmpeg 的進度行只用 `\r` 換行，預設的逐行讀取要等到結束才拿得到）＋自己的 `LineSplitter`（以 byte 切行，不會把中文檔名切壞）；`set_process_group(true)` 讓 Windows 用 job object、POSIX 用 process group，cancel 殺整棵樹。每個 job 在 `Jobs` 表裡，**誰把它從表裡拿掉誰就送 `finished`**，所以只會送一次；cancel 後 3 秒還沒結束就由保險直接送 `cancelled`（UI 不會卡在 Cancelling…）。失敗或取消都刪掉輸出檔（名字開始前一定是空的），成功才回 `outSize`。
   - 目標大小（快速壓縮）：十進位 MB、8% 邊際照舊，**另外改了兩點**：(1) `-bufsize` 從 2 倍碼率改成 0.5 秒（`VBV_BUFFER_SECS`），而且視訊預算預先扣掉一個 buffer——實測 8 秒高雜訊 640x360 片段目標 5MB，舊算法輸出 5.04MB（超標），2 秒 720p 雜訊片段舊算法 6.5MB；新算法分別 4.43MB/3.66MB；(2) 用**輸出長度**（剪輯範圍 ÷ 速度）算預算，舊版用原始長度，慢動作會超標。codec 仍在 Rust 端強制 `libx264`。
   - 跟舊版刻意不同：`speed == 1` 時不再加 `setpts=1*PTS`/`atempo=1`（舊版拿數字跟字串 `'1.0'` 比，永遠成立）；失敗的檔案也會刪掉殘檔。
-  - PDF 與圖片轉 PDF（ticket 08）：`build_args` 對這兩種直接回錯誤，UI 顯示成該檔案失敗；`Kind::Pdf`、`ImageSettings.format == ".pdf"` 的分支留著給 08 接 qpdf/img2pdf。目標大小模式選 `.webm` 會因為 webm 裝不了 h264 而失敗（舊版就這樣，沒改）。
-  - E2E：hub `tests/e2e/converter-convert.test.mjs`（影片/音訊/圖片各一次並用 ffmpeg 檢查輸出、壞檔不影響下一個、檔名不覆蓋、5MB 目標真的低於 5,000,000 bytes 且有中間百分比、取消在 2.5 秒內結束且無殘留 ffmpeg 與殘檔）。
+  - 目標大小模式選 `.webm` 會因為 webm 裝不了 h264 而失敗（舊版就這樣，沒改）。
+  - **PDF 與圖片轉 PDF（ticket 08）**：`convert::program(job)` 決定 sidecar（PDF→`qpdf`、圖片且格式 `.pdf`→`img2pdf`、其他→`ffmpeg`），`build_args` 產生 `qpdf --stream-data=compress|--linearize <in> <out>`、`img2pdf <in> -o <out>`（跟舊 `qpdf-commands`/`img2pdf-commands` 一樣；圖片轉 PDF 一張圖一份 PDF，跟舊版一致，不合併）。qpdf/img2pdf 沒有進度輸出，進度條只在檔案之間跳。
+  - **宿主契約**：`runner::command` 先找 app exe 旁邊的 sidecar（`qpdf[.exe]`），有就 `sidecar()`，沒有就從 PATH 跑同名指令——hub 只在 Windows 打包 qpdf/img2pdf，macOS/Linux 照舊靠系統安裝（`brew`/`apt`/`pip`）；找不到時 spawn 失敗訊息會附上跟舊版一樣的安裝提示（該檔案失敗，不再是批次前的 alert）。qpdf.exe 的 DLL 由 hub 以 resources 放在 exe 同目錄，Windows 的 DLL 搜尋會先找那裡（已實測 sidecar 方式可用，不需要改成 resource+完整路徑）。
+  - E2E：hub `tests/e2e/converter-convert.test.mjs`（影片/音訊/圖片各一次並用 ffmpeg 檢查輸出、PDF 壓縮後 `qpdf --check` 通過且變小、兩張圖各轉成 1 頁 PDF、壞檔不影響下一個、檔名不覆蓋、5MB 目標真的低於 5,000,000 bytes 且有中間百分比、取消在 2.5 秒內結束且無殘留 ffmpeg 與殘檔）。
 - Trim/Crop 預覽目前仍呼叫 `window.Neutralino.server.mount`（ticket 07）。

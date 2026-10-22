@@ -99,6 +99,30 @@ fn finish<R: Runtime>(app: &AppHandle<R>, job_id: u64, status: &'static str, mes
   let _ = app.emit("sorai-converter://finished", Finished { job_id, status, message, out_size });
 }
 
+/// The host's bundled sidecar when it ships one next to the app exe;
+/// otherwise `program` from PATH. The hub bundles qpdf / img2pdf on Windows
+/// only -- on macOS / Linux they're system installs (setup.mjs, as before).
+fn command<R: Runtime>(app: &AppHandle<R>, program: &str) -> Result<tauri_plugin_shell::process::Command, String> {
+  let bundled = std::env::current_exe()
+    .ok()
+    .and_then(|exe| Some(exe.parent()?.join(format!("{program}{}", std::env::consts::EXE_SUFFIX))))
+    .is_some_and(|p| p.is_file());
+  if bundled {
+    app.shell().sidecar(program).map_err(|e| e.to_string())
+  } else {
+    Ok(app.shell().command(program))
+  }
+}
+
+/// Same wording as the Neutralino-era pre-flight check.
+fn install_hint(program: &str) -> &'static str {
+  match program {
+    "qpdf" => ". qpdf not found: install it via 'brew install qpdf' (macOS) or 'sudo apt install qpdf' (Linux), then restart the app.",
+    "img2pdf" => ". img2pdf not found: install it via 'pip install img2pdf' (macOS/Linux), then restart the app.",
+    _ => "",
+  }
+}
+
 /// Spawns sidecar `program` and returns its job id right away. `progress`
 /// maps an output line to a 0..=100 percent. `out` is the file the job
 /// writes (sized on success, removed on failure / cancel).
@@ -111,16 +135,13 @@ pub fn start<R: Runtime>(
 ) -> Result<u64, String> {
   let job_id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
   let header = format!("> Executing: {}", crate::convert::display_command(program, &args));
-  let (mut rx, child) = app
-    .shell()
-    .sidecar(program)
-    .map_err(|e| e.to_string())?
+  let (mut rx, child) = command(app, program)?
     .args(args)
     .set_raw_out(true)
     // Job object (Windows) / process group (POSIX): kill takes the whole tree.
     .set_process_group(true)
     .spawn()
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| format!("{program}: {e}{}", install_hint(program)))?;
   app.state::<Jobs>().0.lock().unwrap().insert(job_id, Running { child: Some(child), cancelled: false, out });
   let _ = app.emit("sorai-converter://log", Log { job_id, line: &header });
 

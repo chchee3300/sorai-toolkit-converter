@@ -150,10 +150,27 @@ pub fn target_size_bitrates(target_mb: f64, seconds: f64) -> (u64, u64, u64) {
   (video as u64, (video * VBV_BUFFER_SECS).floor() as u64, audio as u64)
 }
 
-/// ffmpeg args (without the program) to convert `src` into `out`.
-/// Err for PDF / image->PDF: qpdf / img2pdf jobs are ticket 08.
+/// Sidecar that runs `job`: qpdf for PDFs, img2pdf for image -> PDF
+/// (lossless embed: quality / scale / crop don't apply), ffmpeg otherwise.
+pub fn program(job: &Job) -> &'static str {
+  match &job.kind {
+    Kind::Pdf(_) => "qpdf",
+    Kind::Image(i) if i.format == ".pdf" => "img2pdf",
+    _ => "ffmpeg",
+  }
+}
+
+/// Args (without the program, see `program`) to convert `src` into `out`.
 pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
   let src = &job.source;
+  match &job.kind {
+    Kind::Pdf(p) => {
+      let flag = if p.optimize == "linearize" { "--linearize" } else { "--stream-data=compress" };
+      return Ok(vec![flag.into(), src.path.clone(), out.into()]);
+    }
+    Kind::Image(i) if i.format == ".pdf" => return Ok(vec![src.path.clone(), "-o".into(), out.into()]),
+    _ => {}
+  }
   let mut a: Vec<String> = vec!["-y".into()];
   let s = |x: &str| x.to_string();
   match &job.kind {
@@ -221,9 +238,6 @@ pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
       }
     }
     Kind::Image(i) => {
-      if i.format == ".pdf" {
-        return Err("Image to PDF is not available in this build yet".into());
-      }
       a.extend([s("-i"), src.path.clone()]);
       let crop = src
         .crop
@@ -262,7 +276,7 @@ pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
       }
       a.extend([s("-b:a"), au.bitrate.clone()]);
     }
-    Kind::Pdf(_) => return Err("PDF jobs are not available in this build yet".into()),
+    Kind::Pdf(_) => unreachable!("handled above"),
   }
   a.push(out.into());
   Ok(a)
@@ -523,10 +537,31 @@ mod tests {
     assert_eq!(joined(src("a.mp3"), audio(".ogg", "192k", 1.0)), "-y -i a.mp3 -c:a libvorbis -b:a 192k o.x");
   }
 
+  fn pdf(optimize: &str) -> Kind {
+    Kind::Pdf(PdfSettings { optimize: optimize.into() })
+  }
+
   #[test]
-  fn pdf_jobs_are_not_ported_yet() {
-    assert!(build_args(&Job { source: src("a.pdf"), kind: Kind::Pdf(PdfSettings { optimize: "compress".into() }) }, "o").is_err());
-    assert!(build_args(&Job { source: src("a.png"), kind: image(".pdf", 100.0, 100.0) }, "o").is_err());
+  fn pdf_compress_and_linearize_run_qpdf() {
+    let j = Job { source: src(r"C:\a b\文件.pdf"), kind: pdf("compress") };
+    assert_eq!(program(&j), "qpdf");
+    assert_eq!(build_args(&j, "o.pdf").unwrap(), ["--stream-data=compress", r"C:\a b\文件.pdf", "o.pdf"]);
+    assert_eq!(args(src("a.pdf"), pdf("linearize")), ["--linearize", "a.pdf", "o.x"]);
+  }
+
+  #[test]
+  fn image_to_pdf_runs_img2pdf_ignoring_quality_scale_crop() {
+    let s = Source { crop: Some(Crop { x: 1.0, y: 1.0, width: 9.0, height: 9.0 }), ..src("圖 片.png") };
+    let j = Job { source: s, kind: image(".pdf", 40.0, 50.0) };
+    assert_eq!(program(&j), "img2pdf");
+    assert_eq!(build_args(&j, "o.pdf").unwrap(), ["圖 片.png", "-o", "o.pdf"]);
+  }
+
+  #[test]
+  fn everything_else_runs_ffmpeg() {
+    assert_eq!(program(&Job { source: src("a.png"), kind: image(".jpg", 85.0, 100.0) }), "ffmpeg");
+    assert_eq!(program(&Job { source: src("a.mp4"), kind: video(|_| {}) }), "ffmpeg");
+    assert_eq!(program(&Job { source: src("a.mp3"), kind: audio(".aac", "128k", 1.0) }), "ffmpeg");
   }
 
   #[test]
