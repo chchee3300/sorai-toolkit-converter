@@ -471,34 +471,40 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
                     <div className="trim-dim-overlay left" id="trim-dim-left" style={{ width: `${pctStart}%` }}></div>
                     <div className="trim-slider-range" id="trim-slider-range" style={{ left: `${pctStart}%`, width: `${pctEnd - pctStart}%` }}></div>
                     <div className="trim-dim-overlay right" id="trim-dim-right" style={{ width: `${100 - pctEnd}%` }}></div>
-                    <div
-                      className={draggingThumb === 'left' ? 'trim-slider-thumb left active' : 'trim-slider-thumb left'}
-                      id="trim-thumb-left"
-                      ref={thumbLeftRef}
-                      style={{ left: `${pctStart}%` }}
-                      onMouseDown={(e) => {
-                        setDraggingThumb('left')
-                        snapTargetRef.current = activePlayerRef.current ? activePlayerRef.current.currentTime : null
-                        e.preventDefault()
-                      }}
-                    >
-                      <div className="thumb-grip"></div>
-                    </div>
-                    <div
-                      className={draggingThumb === 'right' ? 'trim-slider-thumb right active' : 'trim-slider-thumb right'}
-                      id="trim-thumb-right"
-                      ref={thumbRightRef}
-                      style={{ left: `${pctEnd}%` }}
-                      onMouseDown={(e) => {
-                        setDraggingThumb('right')
-                        snapTargetRef.current = activePlayerRef.current ? activePlayerRef.current.currentTime : null
-                        e.preventDefault()
-                      }}
-                    >
-                      <div className="thumb-grip"></div>
-                    </div>
-                    <div className="trim-playhead" id="trim-playhead" ref={playheadRef}></div>
                   </div>
+                  {/* Thumbs and playhead sit beside .trim-slider-track, not inside it: the
+                     track has overflow:hidden (to clip the dim overlays to its rounded
+                     corners), which cut away the outer half of a thumb at 0% / 100% -- so an
+                     aimed mousedown hit the track and seeked instead of starting a drag
+                     ("the handles won't move"). The container is the same box as the track
+                     (position:relative, same width), so `left: %` is unchanged. */}
+                  <div
+                    className={draggingThumb === 'left' ? 'trim-slider-thumb left active' : 'trim-slider-thumb left'}
+                    id="trim-thumb-left"
+                    ref={thumbLeftRef}
+                    style={{ left: `${pctStart}%` }}
+                    onMouseDown={(e) => {
+                      setDraggingThumb('left')
+                      snapTargetRef.current = activePlayerRef.current ? activePlayerRef.current.currentTime : null
+                      e.preventDefault()
+                    }}
+                  >
+                    <div className="thumb-grip"></div>
+                  </div>
+                  <div
+                    className={draggingThumb === 'right' ? 'trim-slider-thumb right active' : 'trim-slider-thumb right'}
+                    id="trim-thumb-right"
+                    ref={thumbRightRef}
+                    style={{ left: `${pctEnd}%` }}
+                    onMouseDown={(e) => {
+                      setDraggingThumb('right')
+                      snapTargetRef.current = activePlayerRef.current ? activePlayerRef.current.currentTime : null
+                      e.preventDefault()
+                    }}
+                  >
+                    <div className="thumb-grip"></div>
+                  </div>
+                  <div className="trim-playhead" id="trim-playhead" ref={playheadRef}></div>
                 </div>
                 <div className="trim-time-label right tabular-nums" id="trim-label-end">{formatTrimLabel(trimEnd)}</div>
               </div>
