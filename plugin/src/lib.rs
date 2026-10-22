@@ -138,6 +138,9 @@ async fn probe_source<R: Runtime>(app: AppHandle<R>, path: String, file_type: St
   if !matches!(file_type.as_str(), "video" | "audio" | "image") {
     return Ok(SourceInfo { size, media: MediaInfo::default(), thumbnail: None });
   }
+  // Trim/Crop preview it with convertFileSrc(path): queueing a file is what
+  // grants the webview read access to exactly that file, nothing wider.
+  app.asset_protocol_scope().allow_file(&path).map_err(|e| e.to_string())?;
   let media = parse_media_info(&ffmpeg(&app, vec!["-hide_banner".into(), "-i".into(), path.clone()]).await?);
 
   let dir: PathBuf = app.path().temp_dir().map_err(|e| e.to_string())?.join(THUMBNAIL_SUBDIR);

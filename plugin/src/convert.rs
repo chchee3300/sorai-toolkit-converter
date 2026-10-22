@@ -522,6 +522,9 @@ mod tests {
     assert!(joined(s(), image(".png", 40.0, 50.0)).contains("[0:v]crop=300:200:10:20,scale=trunc(iw*0.5/2)*2:-2:flags=lanczos[s];[s]split[a][b];"));
     let ico = joined(s(), image(".ico", 40.0, 100.0));
     assert!(ico.contains("-vf crop=300:200:10:20,scale='min(256,iw)'") && !ico.contains("palettegen"), "{ico}");
+    assert!(joined(s(), image(".png", 40.0, 100.0)).contains("-filter_complex [0:v]crop=300:200:10:20[s];[s]split[a][b];"));
+    assert!(joined(s(), image(".ico", 100.0, 50.0))
+      .starts_with("-y -i a.png -vf crop=300:200:10:20,scale=trunc(iw*0.5/2)*2:-2:flags=lanczos,scale='min(256,iw)'"));
     let zero = Source { crop: Some(Crop { width: 0.0, ..Default::default() }), ..src("a.png") };
     assert!(!joined(zero, image(".jpg", 85.0, 100.0)).contains("crop="));
   }

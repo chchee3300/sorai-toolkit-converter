@@ -8,7 +8,9 @@ description = "SORAI Toolkit converter as a Tauri v2 plugin (consumed by the sor
 links = "tauri-plugin-sorai-converter"
 
 [dependencies]
-tauri = "2.12"
+# protocol-asset: probe_source adds queued files to the asset scope (host
+# must enable app.security.assetProtocol too).
+tauri = { version = "2.12", features = ["protocol-asset"] }
 # Runs the host app's `ffmpeg` sidecar (the hub declares and bundles it).
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
