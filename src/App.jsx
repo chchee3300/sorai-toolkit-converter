@@ -31,10 +31,8 @@ function LoadingOverlay({ visible }) {
 // navigation + theme toggle) around whichever tool is active, and self-
 // update-checking is a shell-level concern, not per-tool. When this repo
 // is consumed as a library by the hub (src/index.js), `App` is exported
-// as `ConverterApp` and rendered inside the hub's own layout. Standalone
-// (`neu run` in this repo directly, via src/main.jsx) it's the same
-// component with no surrounding chrome -- fine for isolated dev/testing of
-// conversion behavior, which is what this dev harness is for.
+// as `ConverterApp` and rendered inside the hub's own layout (this repo has
+// no standalone app: the plugin commands need the hub's Tauri runtime).
 // pendingLaunch (hub-provided, see sorai-toolkit's useSingleInstance.js):
 // { seq, files, format, quickAction } | null -- an Explorer/Finder/Files
 // right-click launch, either from this process's own cold start or

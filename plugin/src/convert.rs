@@ -1,6 +1,6 @@
 //! Pure conversion logic: ffmpeg args, target-size bitrates, progress
 //! parsing, size estimates, collision-free output names. Ported from the
-//! hub's Neutralino-era resources/js/lib/{ffmpeg-commands,progress-parser,
+//! hub's old JS resources/js/lib/{ffmpeg-commands,progress-parser,
 //! size-estimate,filename-collision}.js + the converter's estimateDisplay.js.
 //! Args are a Vec handed straight to the process (no shell string), so no
 //! quoting anywhere -- Chinese / space paths just work.
@@ -406,7 +406,7 @@ mod tests {
   use super::*;
 
   fn src(path: &str) -> Source {
-    // tests/fixtures/test_fixture_video.mp4-ish: 1 MiB, 10 s, 30 fps
+    // hub tests/fixtures/test_fixture_video.mp4-ish: 1 MiB, 10 s, 30 fps
     Source { path: path.into(), size: 1024 * 1024, duration: 10.0, fps: 30.0, width: 320, height: 240, ..Default::default() }
   }
   fn video(f: impl FnOnce(&mut VideoSettings)) -> Kind {

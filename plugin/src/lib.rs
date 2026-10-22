@@ -21,6 +21,22 @@ pub const NAME: &str = "sorai-converter";
 /// (hub: `$TEMP/sorai-toolkit/thumbnails/*`), or `<img>` can't load them.
 pub const THUMBNAIL_SUBDIR: &str = "sorai-toolkit/thumbnails";
 
+/// Thumbnails older than this are deleted at plugin setup. Age-based, not
+/// "everything": several instances (dev worktrees) share the temp dir, and a
+/// running one may still show its thumbnails.
+const THUMBNAIL_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+
+/// Deletes files in `dir` last modified more than `max_age` ago. Best effort.
+pub fn prune_old_files(dir: &Path, max_age: std::time::Duration) {
+  let Ok(entries) = std::fs::read_dir(dir) else { return };
+  for e in entries.flatten() {
+    let old = e.metadata().ok().filter(|m| m.is_file()).and_then(|m| m.modified().ok()).and_then(|t| t.elapsed().ok()).is_some_and(|age| age > max_age);
+    if old {
+      let _ = std::fs::remove_file(e.path());
+    }
+  }
+}
+
 /// Liveness reply; the hub's E2E smoke test checks it end to end.
 pub fn pong(value: &str) -> String {
   format!("{NAME} pong: {value}")
@@ -47,7 +63,7 @@ static FPS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d+(?:\.\d+)?)\s+fp
 static DIMS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r",\s+(\d+)x(\d+)(?:[,\s]|$)").unwrap());
 static CODEC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"Video:\s+(\w+)").unwrap());
 
-/// Parses ffmpeg's `-i` banner (stderr). Same patterns the Neutralino-era
+/// Parses ffmpeg's `-i` banner (stderr). Same patterns the old JS
 /// getMediaInfo used.
 pub fn parse_media_info(stderr: &str) -> MediaInfo {
   let mut info = MediaInfo::default();
@@ -190,6 +206,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
     .invoke_handler(tauri::generate_handler![ping, probe_source, start_convert, cancel_job, estimate_sizes])
     .setup(|app, _| {
       app.manage(runner::Jobs::default());
+      if let Ok(tmp) = app.path().temp_dir() {
+        std::thread::spawn(move || prune_old_files(&tmp.join(THUMBNAIL_SUBDIR), THUMBNAIL_MAX_AGE));
+      }
       Ok(())
     })
     .build()
@@ -200,11 +219,27 @@ mod tests {
   use super::*;
 
   #[test]
+  fn prune_deletes_only_files_older_than_max_age() {
+    let dir = std::env::temp_dir().join(format!("sorai-prune-test-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("sub")).unwrap();
+    let (old, new) = (dir.join("old.jpg"), dir.join("new.jpg"));
+    std::fs::write(&old, b"x").unwrap();
+    std::fs::write(&new, b"x").unwrap();
+    let two_days_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(2 * 24 * 60 * 60);
+    std::fs::File::options().write(true).open(&old).unwrap().set_modified(two_days_ago).unwrap();
+    prune_old_files(&dir, THUMBNAIL_MAX_AGE);
+    let left = (old.exists(), new.exists(), dir.join("sub").exists());
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(left, (false, true, true));
+    prune_old_files(&dir, THUMBNAIL_MAX_AGE); // missing dir: no panic
+  }
+
+  #[test]
   fn pong_echoes_value_with_plugin_name() {
     assert_eq!(pong("hi"), "sorai-converter pong: hi");
   }
 
-  // Real `ffmpeg -hide_banner -i` output for tests/fixtures/*.
+  // Real `ffmpeg -hide_banner -i` output for the hub's tests/fixtures/*.
   const MP4: &str = "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'test_fps.mp4':\n  Duration: 00:00:02.00, start: 0.000000, bitrate: 13 kb/s\n  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 320x240 [SAR 1:1 DAR 4:3], 7 kb/s, 30 fps, 30 tbr, 15360 tbn (default)\nAt least one output file must be specified\n";
   const WEBM: &str = "  Duration: 01:02:03.50, start: 0.000000, bitrate: 7 kb/s\n  Stream #0:0: Video: vp9 (Profile 0), yuv420p(tv, progressive), 1920x1080, SAR 1:1 DAR 16:9, 29.97 fps, 25 tbr, 1k tbn (default)\n";
   const MP3: &str = "Input #0, mp3, from 'a.mp3':\n  Duration: 00:00:02.00, start: 0.025057, bitrate: 66 kb/s\n  Stream #0:0: Audio: mp3 (mp3float), 44100 Hz, mono, fltp, 64 kb/s, start 0.025057\n";

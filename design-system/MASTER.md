@@ -1,5 +1,7 @@
 # MASTER — Estella Converter design-system record
 
+> **Historical record (vanilla → React migration, 2026-07, Neutralino era).** File paths and test scripts below (`resources/`, `neutralino.js`, `tests/test_*.js`, `main.jsx`) no longer exist; the app is now a Tauri plugin (see `CLAUDE.md`). Keep for the reasoning behind past decisions only.
+
 > Read this top-to-bottom in under a few minutes to resume the migration cold. Full narrative plan lives at `usage-skills-implenment-happy-shamir.md` and its addendum `taste-skills-https-github-com-emilkowal-wondrous-shannon.md` in `~/.claude/plans/` — this file is the fast-reference companion, not a replacement.
 
 > For visual/style decisions on **new or changed UI** (not migration history), see `design-system/UI_STYLE_REFERENCE.md` — a Liquid Glass × Digital style guide adapted specifically for this project, cross-checked against the actual current tokens below (not a generic copy).

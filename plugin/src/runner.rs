@@ -98,7 +98,7 @@ fn finish<R: Runtime>(app: &AppHandle<R>, job_id: u64, status: &'static str, mes
   let _ = app.emit("sorai-converter://finished", Finished { job_id, status, message, out_size });
 }
 
-/// Same wording as the Neutralino-era pre-flight check.
+/// Same wording as the old JS pre-flight check.
 fn install_hint(program: &str) -> &'static str {
   match program {
     "qpdf" => ". qpdf not found: install it via 'brew install qpdf' (macOS) or 'sudo apt install qpdf' (Linux), then restart the app.",

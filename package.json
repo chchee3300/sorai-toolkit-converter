@@ -15,12 +15,8 @@
     "plugin/permissions"
   ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
     "build:lib": "vite build --config vite.lib.config.mjs",
-    "prepare": "npm run build:lib",
-    "preview": "vite preview",
-    "setup": "npm install -g @neutralinojs/neu@11.7.1 && neu update && node scripts/copy-neutralino-client.mjs && node setup.mjs"
+    "prepare": "npm run build:lib"
   },
   "peerDependencies": {
     "react": "^19",
@@ -32,10 +28,7 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.2",
     "@vitejs/plugin-react": "^4.7.0",
-    "playwright": "^1.61.1",
-    "tailwindcss": "^4.3.2",
     "vite": "^6.4.3"
   }
 }

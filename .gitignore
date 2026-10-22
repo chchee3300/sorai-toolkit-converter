@@ -1,33 +1,12 @@
-# Developer tools' files
-.lite_workspace.lua
-
 # Node dependencies
 /node_modules
-
-# Neutralino runtime auth/session info (contains tokens)
-/.tmp
 
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
 
-# Neutralinojs binaries and builds
-/bin
+# Library build output (vite.lib.config.mjs, rebuilt by "prepare")
 /dist
 
-# Vite build output (Phase 1 scaffold — distinct from Neutralino's own /dist)
-/web-dist
-
-# Third-party executables fetched by setup.mjs (ffmpeg, qpdf, etc.) — too large for GitHub
-/binaries
-
-# CI packaging output (packaging/*/build.sh, packaging/windows/build.ps1)
-/release-assets
-
-# Neutralinojs client (minified)
-neutralino.js
-
-# Neutralinojs related files
-.storage
 *.log
 
 # Tauri plugin crate build output
