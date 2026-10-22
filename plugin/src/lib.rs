@@ -8,10 +8,9 @@ use tauri::{
   plugin::{Builder, TauriPlugin},
   AppHandle, Manager, Runtime,
 };
-use tauri_plugin_shell::ShellExt;
-
 pub mod convert;
 pub mod runner;
+pub mod sidecar;
 
 /// Plugin name: JS calls commands as `plugin:sorai-converter|<command>`,
 /// the hub grants `sorai-converter:default`.
@@ -119,10 +118,7 @@ pub fn file_size(path: &Path) -> Result<u64, String> {
 static THUMB_SEQ: AtomicU64 = AtomicU64::new(0);
 
 async fn ffmpeg<R: Runtime>(app: &AppHandle<R>, args: Vec<String>) -> Result<String, String> {
-  let out = app
-    .shell()
-    .sidecar("ffmpeg")
-    .map_err(|e| e.to_string())?
+  let out = sidecar::command(app, "ffmpeg")
     .args(args)
     .output()
     .await

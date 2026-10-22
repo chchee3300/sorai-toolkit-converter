@@ -18,7 +18,6 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
-use tauri_plugin_shell::ShellExt;
 
 /// After a cancel, report `cancelled` this long later even if the process
 /// never signals exit -- the UI can't get stuck in "Cancelling...".
@@ -99,21 +98,6 @@ fn finish<R: Runtime>(app: &AppHandle<R>, job_id: u64, status: &'static str, mes
   let _ = app.emit("sorai-converter://finished", Finished { job_id, status, message, out_size });
 }
 
-/// The host's bundled sidecar when it ships one next to the app exe;
-/// otherwise `program` from PATH. The hub bundles qpdf / img2pdf on Windows
-/// only -- on macOS / Linux they're system installs (setup.mjs, as before).
-fn command<R: Runtime>(app: &AppHandle<R>, program: &str) -> Result<tauri_plugin_shell::process::Command, String> {
-  let bundled = std::env::current_exe()
-    .ok()
-    .and_then(|exe| Some(exe.parent()?.join(format!("{program}{}", std::env::consts::EXE_SUFFIX))))
-    .is_some_and(|p| p.is_file());
-  if bundled {
-    app.shell().sidecar(program).map_err(|e| e.to_string())
-  } else {
-    Ok(app.shell().command(program))
-  }
-}
-
 /// Same wording as the Neutralino-era pre-flight check.
 fn install_hint(program: &str) -> &'static str {
   match program {
@@ -135,7 +119,9 @@ pub fn start<R: Runtime>(
 ) -> Result<u64, String> {
   let job_id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
   let header = format!("> Executing: {}", crate::convert::display_command(program, &args));
-  let (mut rx, child) = command(app, program)?
+  // Bundled copy (see sidecar.rs), else PATH: the hub bundles qpdf / img2pdf
+  // on Windows only -- on macOS / Linux they're system installs.
+  let (mut rx, child) = crate::sidecar::command(app, program)
     .args(args)
     .set_raw_out(true)
     // Job object (Windows) / process group (POSIX): kill takes the whole tree.
