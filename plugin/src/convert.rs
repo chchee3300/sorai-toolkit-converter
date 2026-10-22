@@ -196,6 +196,10 @@ pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
         // reliably caps the size there.
         let target = v.target_size_mode.then_some(v.target_size_mb).flatten();
         let codec = if target.is_some() { "libx264" } else { v.codec.as_str() };
+        // The WebM muxer takes only VP8/VP9/AV1 + Vorbis/Opus: H.264/H.265
+        // (the default codec, and target-size mode's) would fail at the header.
+        let webm = v.format == ".webm";
+        let codec = if webm && !matches!(codec, "libvpx-vp9" | "libsvtav1") { "libvpx-vp9" } else { codec };
         a.extend([s("-c:v"), s(codec)]);
         let mut vf = vec![];
         let mut af = vec![];
@@ -218,7 +222,7 @@ pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
             let (vk, buf, ak) = target_size_bitrates(mb, out_secs);
             a.extend([
               s("-b:v"), format!("{vk}k"), s("-maxrate"), format!("{vk}k"), s("-bufsize"), format!("{buf}k"),
-              s("-c:a"), s("aac"), s("-b:a"), format!("{ak}k"),
+              s("-c:a"), s(if webm { "libopus" } else { "aac" }), s("-b:a"), format!("{ak}k"),
             ]);
           }
           _ if src.duration > 0.0 => {
@@ -272,14 +276,25 @@ pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
         a.extend([s("-af"), format!("atempo={}", au.speed)]);
       }
       if au.format == ".ogg" {
-        a.extend([s("-c:a"), s("libvorbis")]);
+        // libvorbis ABR (-b:a) rejects bitrates above its per-channel/rate
+        // ceiling ("encoder setup failed": 320k on a mono 44.1k source);
+        // VBR quality works for any layout, so map the kbps onto -q:a.
+        a.extend([s("-c:a"), s("libvorbis"), s("-q:a"), vorbis_quality(&au.bitrate).to_string()]);
+      } else {
+        a.extend([s("-b:a"), au.bitrate.clone()]);
       }
-      a.extend([s("-b:a"), au.bitrate.clone()]);
     }
     Kind::Pdf(_) => unreachable!("handled above"),
   }
   a.push(out.into());
   Ok(a)
+}
+
+/// Highest libvorbis -q:a whose nominal stereo 44.1k bitrate fits `bitrate`.
+fn vorbis_quality(bitrate: &str) -> u8 {
+  const NOMINAL: [f64; 11] = [64.0, 80.0, 96.0, 112.0, 128.0, 160.0, 192.0, 224.0, 256.0, 320.0, 500.0];
+  let kbps: f64 = bitrate.trim_end_matches('k').parse().unwrap_or(128.0);
+  NOMINAL.iter().rposition(|&n| n <= kbps).unwrap_or(0) as u8
 }
 
 /// For the log line: args joined, quoting the ones with spaces.
@@ -446,6 +461,24 @@ mod tests {
   }
 
   #[test]
+  fn webm_only_gets_webm_codecs() {
+    let c = |codec: &str, target: bool| {
+      let a = args(src("in.mp4"), video(|v| {
+        v.format = ".webm".into();
+        v.codec = codec.into();
+        v.target_size_mode = target;
+        v.target_size_mb = Some(5.0);
+      }));
+      let at = |flag: &str| a[a.iter().position(|x| x == flag).unwrap() + 1].clone();
+      (at("-c:v"), target.then(|| at("-c:a")))
+    };
+    assert_eq!(c("libx264", false), ("libvpx-vp9".into(), None));
+    assert_eq!(c("libx265", false), ("libvpx-vp9".into(), None));
+    assert_eq!(c("libsvtav1", false), ("libsvtav1".into(), None));
+    assert_eq!(c("libvpx-vp9", true), ("libvpx-vp9".into(), Some("libopus".into())));
+  }
+
+  #[test]
   fn video_quality_fps_and_speed() {
     let a = joined(src("in.mp4"), video(|v| { v.quality = 50.0; v.speed = 1.5; v.fps = Some(15.0); v.codec = "libx265".into(); }));
     assert_eq!(a, "-y -i in.mp4 -c:v libx265 -vf fps=15,setpts=0.6666666666666666*PTS -af atempo=1.5 -b:v 204k -bufsize 408k o.x");
@@ -537,7 +570,17 @@ mod tests {
   #[test]
   fn audio_bitrate_speed_and_ogg_encoder() {
     assert_eq!(joined(src("a.mp3"), audio(".aac", "128k", 2.0)), "-y -i a.mp3 -af atempo=2 -b:a 128k o.x");
-    assert_eq!(joined(src("a.mp3"), audio(".ogg", "192k", 1.0)), "-y -i a.mp3 -c:a libvorbis -b:a 192k o.x");
+    assert_eq!(joined(src("a.mp3"), audio(".ogg", "192k", 1.0)), "-y -i a.mp3 -c:a libvorbis -q:a 6 o.x");
+  }
+
+  #[test]
+  fn ogg_uses_vbr_quality_so_mono_sources_encode() {
+    let q = |b| joined(src("a.mp3"), audio(".ogg", b, 1.0));
+    assert_eq!(q("320k"), "-y -i a.mp3 -c:a libvorbis -q:a 9 o.x");
+    assert_eq!(q("256k"), "-y -i a.mp3 -c:a libvorbis -q:a 8 o.x");
+    assert_eq!(q("128k"), "-y -i a.mp3 -c:a libvorbis -q:a 4 o.x");
+    assert_eq!(q("64k"), "-y -i a.mp3 -c:a libvorbis -q:a 0 o.x");
+    assert_eq!(q("32k"), "-y -i a.mp3 -c:a libvorbis -q:a 0 o.x");
   }
 
   fn pdf(optimize: &str) -> Kind {
