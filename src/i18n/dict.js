@@ -96,6 +96,8 @@ export const dict = {
     'preset.save': 'Save',
     'preset.cancel': 'Cancel',
     'preset.saved': ({ name }) => `Saved "${name}" to the right-click menu`,
+    'preset.editing': ({ name }) => `Editing preset: ${name}`,
+    'preset.savePreset': 'Save preset',
 
     // MixedTypeModal.jsx -- EN reproduces today's exact interpolation (raw
     // fileType keys, lowercase) since test_drop.js's D2 check requires the
@@ -224,6 +226,8 @@ export const dict = {
     'preset.save': '儲存',
     'preset.cancel': '取消',
     'preset.saved': ({ name }) => `已將「${name}」加入右鍵選單`,
+    'preset.editing': ({ name }) => `正在編輯預設：${name}`,
+    'preset.savePreset': '儲存預設',
 
     'mixedType.title': '偵測到不同的檔案類型',
     'mixedType.body': ({ existingCount, existingType, incomingCount, incomingType }) => {

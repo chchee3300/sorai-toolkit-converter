@@ -31,11 +31,13 @@ const DEFAULT_PDF = { optimize: 'linearize' }
 // onFirstFileType) — ported from handleFiles' isFirstValidFile block
 // (main.js:266-283 pre-extraction), same validity check (only set if the
 // extension is actually one of that category's dropdown options).
-export function useSettings() {
-  const [video, setVideo] = useState(DEFAULT_VIDEO)
-  const [image, setImage] = useState(DEFAULT_IMAGE)
-  const [audio, setAudio] = useState(DEFAULT_AUDIO)
-  const [pdf, setPdf] = useState(DEFAULT_PDF)
+// `initial` ({ [fileType]: settings }) seeds blocks over the defaults -- the
+// preset editor's own instance starts from the preset being edited.
+export function useSettings(initial = {}) {
+  const [video, setVideo] = useState(() => ({ ...DEFAULT_VIDEO, ...initial.video }))
+  const [image, setImage] = useState(() => ({ ...DEFAULT_IMAGE, ...initial.image }))
+  const [audio, setAudio] = useState(() => ({ ...DEFAULT_AUDIO, ...initial.audio }))
+  const [pdf, setPdf] = useState(() => ({ ...DEFAULT_PDF, ...initial.pdf }))
 
   const setFormatForType = useCallback((type, ext) => {
     if (type === 'video' && VIDEO_FORMATS.includes(ext)) {

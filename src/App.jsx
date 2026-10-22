@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import StatusBar from './components/StatusBar.jsx'
 import DropZone from './components/DropZone.jsx'
 import FileList from './components/FileList.jsx'
-import SettingsPanel from './components/SettingsPanel.jsx'
+import SettingsPanel, { PresetEditor } from './components/SettingsPanel.jsx'
 import ToolIntro from './components/ToolIntro.jsx'
 import ProgressLog from './components/ProgressLog.jsx'
 import MixedTypeModal from './components/MixedTypeModal.jsx'
@@ -47,7 +47,11 @@ function LoadingOverlay({ visible }) {
 // every reopen. seq only grows, so remembering the last one is enough.
 let lastLaunchSeq = 0
 
-function App({ pendingLaunch }) {
+// editPreset (hub-provided): a Preset (+ display `label`) to edit, or null.
+// While set, the tool shows PresetEditor instead of the queue; every hook
+// above keeps running, so the queue and settings are untouched. onEditDone
+// (saved: boolean) tells the host the editor closed.
+function App({ pendingLaunch, editPreset, onEditDone }) {
   const { t } = useTranslation()
   const settings = useSettings()
 
@@ -158,6 +162,8 @@ function App({ pendingLaunch }) {
     if (cropIndex < 0) return
     setFiles((prev) => prev.map((f, i) => (i === cropIndex ? { ...f, crop } : f)))
   }
+
+  if (editPreset) return <PresetEditor key={editPreset.id} preset={editPreset} onDone={onEditDone} />
 
   return (
     <>

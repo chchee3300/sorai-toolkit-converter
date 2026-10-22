@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import GlassSelect from './GlassSelect.jsx'
 import { useTranslation } from '../hooks/useTranslation.js'
-import { TARGET_SIZE_PRESETS_MB } from '../hooks/useSettings.js'
+import { TARGET_SIZE_PRESETS_MB, useSettings } from '../hooks/useSettings.js'
 
 // rangeFillStyle used to be this repo's own src/lib/rangeFill.js -- moved
 // into the hub's window.EstellaLib runtime globals (resources/js/lib/
@@ -457,6 +457,50 @@ function SavePresetRow({ fileType, settings }) {
       )}
       {message && <span className="settings-hint" id="preset-save-message" role="status">{message}</span>}
     </div>
+  )
+}
+
+// Edit-preset mode (hub Settings -> a preset's "Edit"): the same settings
+// blocks on a separate useSettings instance seeded from the preset, so the
+// queue and the normal settings stay as they were. "Save preset" overwrites
+// it in place (same id, so existing menu commands keep working); either
+// button hands back to the host through onDone(saved).
+export function PresetEditor({ preset, onDone }) {
+  const { t } = useTranslation()
+  const { fileType } = preset
+  const settings = useSettings({
+    [fileType]: fileType === 'pdf' ? preset.settings : { ...preset.settings, format: preset.format },
+  })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const save = async () => {
+    const s = settings[fileType]
+    setBusy(true)
+    try {
+      await window.SoraiPresets.save({ id: preset.id, name: preset.name, fileType, format: fileType === 'pdf' ? '.pdf' : s.format, settings: s })
+      onDone(true)
+    } catch (e) {
+      setError(String(e))
+      setBusy(false)
+    }
+  }
+  return (
+    <main className="main" id="main-content">
+      <section className="panel preset-editor" id="preset-editor" data-id={preset.id}>
+        <p className="settings-subtitle" id="preset-editor-title">{t('preset.editing', { name: preset.label ?? preset.name ?? preset.id })}</p>
+        <div className="panel-divider"></div>
+        <VideoSettings visible={fileType === 'video'} video={settings.video} setVideo={settings.setVideo} />
+        <ImageSettings visible={fileType === 'image'} image={settings.image} setImage={settings.setImage} />
+        <AudioSettings visible={fileType === 'audio'} audio={settings.audio} setAudio={settings.setAudio} />
+        <PdfSettings visible={fileType === 'pdf'} pdf={settings.pdf} setPdf={settings.setPdf} />
+        {error && <p className="settings-hint preset-save-row" role="alert">{error}</p>}
+        <div className="panel-divider"></div>
+        <div className="execute-row">
+          <button type="button" className="btn btn-outline" id="btn-preset-edit-cancel" disabled={busy} onClick={() => onDone(false)}>{t('preset.cancel')}</button>
+          <button type="button" className="btn btn-primary btn-execute" id="btn-preset-edit-save" disabled={busy} onClick={save}>{t('preset.savePreset')}</button>
+        </div>
+      </section>
+    </main>
   )
 }
 
