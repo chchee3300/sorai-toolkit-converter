@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { previewSrc } from '../plugin.js'
 import { useTranslation } from '../hooks/useTranslation.js'
 
 // New (no vanilla precedent) — modeled on TrimModal.jsx's interaction shape:
-// a preview loaded through Tauri's asset protocol, drag state mirrored into
+// a preview loaded through the plugin's sorai-media:// scheme, drag state mirrored into
 // refs for stable window-level mousemove/mouseup listeners, and the same
 // focus-trap/Escape accessibility block. Where TrimModal drags a 1D
 // dual-thumb range, this drags a 2D rectangle (move + 4 corner handles).
@@ -213,8 +213,8 @@ export default function CropModal({ open, file, onClose, onSave, onClear }) {
       viewportRef.current.scrollTop = 0
     }
 
-    // Asset-protocol URL: probe_source added the file to the asset scope.
-    const fileUrl = convertFileSrc(file.path)
+    // sorai-media:// URL: serves only files in the queue (plugin/src/preview.rs).
+    const fileUrl = previewSrc(file.path)
     if (imgRef.current) imgRef.current.src = fileUrl
     if (dimImgRef.current) dimImgRef.current.src = fileUrl
     return undefined

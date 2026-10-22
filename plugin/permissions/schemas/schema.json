@@ -343,6 +343,18 @@
           "markdownDescription": "Denies the probe_source command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_preview_files command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-preview-files",
+          "markdownDescription": "Enables the set_preview_files command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_preview_files command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-preview-files",
+          "markdownDescription": "Denies the set_preview_files command without any pre-configured scope."
+        },
+        {
           "description": "Enables the start_convert command without any pre-configured scope.",
           "type": "string",
           "const": "allow-start-convert",
@@ -355,10 +367,10 @@
           "markdownDescription": "Denies the start_convert command without any pre-configured scope."
         },
         {
-          "description": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-cancel-job`\n- `allow-estimate-sizes`",
+          "description": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-cancel-job`\n- `allow-estimate-sizes`"
+          "markdownDescription": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`"
         }
       ]
     }

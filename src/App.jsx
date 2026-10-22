@@ -42,6 +42,11 @@ function LoadingOverlay({ visible }) {
 // reference equality, so "already open, a second launch just got
 // forwarded in" needs something that reliably changes to re-trigger off
 // of -- seq is that.
+// Module-level, not a ref: going back to the hub unmounts this component,
+// and a fresh ref would re-apply the last launch (re-adding its files) on
+// every reopen. seq only grows, so remembering the last one is enough.
+let lastLaunchSeq = 0
+
 function App({ pendingLaunch }) {
   const { t } = useTranslation()
   const settings = useSettings()
@@ -53,7 +58,6 @@ function App({ pendingLaunch }) {
   // in a fresh queue" logic here.
   const pendingFormatRef = useRef(null)
   const pendingQuickActionRef = useRef(null)
-  const lastLaunchSeqRef = useRef(0)
 
   const handleFirstFileType = useCallback((type, ext) => {
     const quickAction = pendingQuickActionRef.current
@@ -101,8 +105,8 @@ function App({ pendingLaunch }) {
   // flow via handleFiles when the queue already holds a different file
   // type -- the refs above just sit unconsumed until the user confirms.
   useEffect(() => {
-    if (!pendingLaunch || pendingLaunch.seq === lastLaunchSeqRef.current) return
-    lastLaunchSeqRef.current = pendingLaunch.seq
+    if (!pendingLaunch || pendingLaunch.seq === lastLaunchSeq) return
+    lastLaunchSeq = pendingLaunch.seq
     if (pendingLaunch.format) pendingFormatRef.current = pendingLaunch.format
     if (pendingLaunch.quickAction) pendingQuickActionRef.current = pendingLaunch.quickAction
     handleFiles(pendingLaunch.files)
@@ -131,7 +135,7 @@ function App({ pendingLaunch }) {
   // change clears `converted` on files that have it, so FileList falls
   // back to a live estimate for whatever's now selected.
   useEffect(() => {
-    setFiles((prev) => (prev.some((f) => f.converted) ? prev.map((f) => (f.converted ? { ...f, converted: false, convertedSizeMB: undefined } : f)) : prev))
+    setFiles((prev) => (prev.some((f) => f.converted || f.failed) ? prev.map((f) => (f.converted || f.failed ? { ...f, converted: false, convertedSizeMB: undefined, failed: null } : f)) : prev))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.video, settings.image, settings.audio, settings.pdf])
 

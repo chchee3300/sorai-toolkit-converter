@@ -24,8 +24,10 @@ pub fn bundled<R: Runtime>(app: &AppHandle<R>, name: &str) -> Option<PathBuf> {
 }
 
 /// Command for `name`: the bundled copy, else `name` from PATH.
+/// PYTHONIOENCODING: img2pdf (Python) writes paths in errors as UTF-8
+/// instead of the console codepage (cp950 on zh-TW Windows); others ignore it.
 pub fn command<R: Runtime>(app: &AppHandle<R>, name: &str) -> Command {
-  app.shell().command(bundled(app, name).unwrap_or_else(|| name.into()))
+  app.shell().command(bundled(app, name).unwrap_or_else(|| name.into())).env("PYTHONIOENCODING", "utf-8")
 }
 
 #[cfg(test)]

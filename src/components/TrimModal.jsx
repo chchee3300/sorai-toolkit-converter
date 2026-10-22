@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { previewSrc } from '../plugin.js'
 import { useTranslation } from '../hooks/useTranslation.js'
 
 // Moved into the hub's window.EstellaLib runtime globals (resources/js/lib/
@@ -11,7 +11,7 @@ const rangeFillStyle = (value, min, max) => window.EstellaLib.rangeFill.rangeFil
 // Ported unchanged from resources/index.html:253-312 (markup) and main.js's
 // Trim Modal Logic (main.js:538-867 pre-extraction) — the most complex
 // interactive widget in the app: a custom dual-thumb drag slider + video/
-// audio preview player fed through Tauri's asset protocol. Kept as one
+// audio preview player fed through the plugin's sorai-media:// scheme. Kept as one
 // component (matches the vanilla code's single cohesive-widget structure)
 // rather than split further. `formatTrimTime`/`parseTrimTime` were dead
 // code in main.js (defined, never called anywhere) — not ported, no
@@ -111,12 +111,11 @@ export default function TrimModal({ open, file, fileType, onClose, onSave, onCle
     setTrimEnd(file.trimEnd !== undefined ? file.trimEnd : fileDuration)
     suppressLoopRef.current = false
 
-    // Asset-protocol URL: probe_source added this file to the asset scope
-    // when it was queued (plugin/src/lib.rs).
+    // sorai-media:// URL: serves only files in the queue (plugin/src/preview.rs).
     const player = fileType === 'video' ? vid : aud
     activePlayerRef.current = player
     player.classList.remove('hidden')
-    player.src = convertFileSrc(file.path)
+    player.src = previewSrc(file.path)
     player.load()
     player.volume = volume
 

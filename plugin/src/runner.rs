@@ -4,10 +4,10 @@
 //! ponytail: duplicated (~100 lines) in the downloader plugin on purpose --
 //! extract a shared crate when a third tool needs one (spec decision).
 //!
-//! Events (payload keys camelCase):
-//! - `sorai-converter://log`      { jobId, line }
-//! - `sorai-converter://progress` { jobId, percent }
-//! - `sorai-converter://finished` { jobId, status: success|error|cancelled, message?, outSize? }
+//! Events go to the job's own `tauri::ipc::Channel` (like the downloader's):
+//! - `{ event: 'log', line }`
+//! - `{ event: 'progress', percent }`
+//! - `{ event: 'finished', status: success|error|cancelled, message?, outSize? }`
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -16,7 +16,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{ipc::Channel, AppHandle, Manager, Runtime};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 
 /// After a cancel, report `cancelled` this long later even if the process
@@ -27,6 +27,7 @@ struct Running {
   child: Option<CommandChild>,
   cancelled: bool,
   out: PathBuf,
+  channel: Channel<JobEvent>,
 }
 
 /// Plugin state (managed in `init`). An entry exists until `finished` is
@@ -34,29 +35,30 @@ struct Running {
 #[derive(Default)]
 pub struct Jobs(Mutex<HashMap<u64, Running>>);
 
+impl Jobs {
+  /// App exit: kill every running job's process tree (waits for it), then
+  /// remove its partial output -- in that order, Windows won't delete a file
+  /// ffmpeg still has open. No `finished` is sent (nobody listens any more).
+  pub fn kill_all(&self) {
+    let jobs: Vec<Running> = self.0.lock().unwrap().drain().map(|(_, j)| j).collect();
+    for job in jobs {
+      if let Some(child) = job.child {
+        let _ = child.kill();
+      }
+      let _ = std::fs::remove_file(&job.out);
+    }
+  }
+}
+
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct Log<'a> {
-  job_id: u64,
-  line: &'a str,
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct Progress {
-  job_id: u64,
-  percent: f64,
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct Finished {
-  job_id: u64,
-  status: &'static str,
-  message: Option<String>,
-  out_size: Option<u64>,
+#[serde(tag = "event", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum JobEvent {
+  Log { line: String },
+  Progress { percent: f64 },
+  /// Sent exactly once per job.
+  Finished { status: &'static str, message: Option<String>, out_size: Option<u64> },
 }
 
 /// Splits raw output chunks on `\r` / `\n` (ffmpeg rewrites its progress
@@ -86,7 +88,8 @@ impl LineSplitter {
   }
 }
 
-fn finish<R: Runtime>(app: &AppHandle<R>, job_id: u64, status: &'static str, message: Option<String>, out: &PathBuf) {
+fn finish(job: Running, status: &'static str, message: Option<String>) {
+  let out = &job.out;
   // A killed / failed encoder leaves a truncated file at the final name:
   // always remove it. The name was free before we started (unique_out_path).
   let out_size = if status == "success" {
@@ -95,7 +98,7 @@ fn finish<R: Runtime>(app: &AppHandle<R>, job_id: u64, status: &'static str, mes
     let _ = std::fs::remove_file(out);
     None
   };
-  let _ = app.emit("sorai-converter://finished", Finished { job_id, status, message, out_size });
+  let _ = job.channel.send(JobEvent::Finished { status, message, out_size });
 }
 
 /// Same wording as the old JS pre-flight check.
@@ -116,6 +119,7 @@ pub fn start<R: Runtime>(
   args: Vec<String>,
   out: PathBuf,
   progress: impl Fn(&str) -> Option<f64> + Send + Sync + 'static,
+  channel: Channel<JobEvent>,
 ) -> Result<u64, String> {
   let job_id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
   let header = format!("> Executing: {}", crate::convert::display_command(program, &args));
@@ -128,8 +132,8 @@ pub fn start<R: Runtime>(
     .set_process_group(true)
     .spawn()
     .map_err(|e| format!("{program}: {e}{}", install_hint(program)))?;
-  app.state::<Jobs>().0.lock().unwrap().insert(job_id, Running { child: Some(child), cancelled: false, out });
-  let _ = app.emit("sorai-converter://log", Log { job_id, line: &header });
+  let _ = channel.send(JobEvent::Log { line: header });
+  app.state::<Jobs>().0.lock().unwrap().insert(job_id, Running { child: Some(child), cancelled: false, out, channel: channel.clone() });
 
   let app = app.clone();
   let program = program.to_string();
@@ -139,10 +143,10 @@ pub fn start<R: Runtime>(
     let mut code = None;
     let handle = |line: String, last: &mut String| {
       if let Some(percent) = progress(&line) {
-        let _ = app.emit("sorai-converter://progress", Progress { job_id, percent });
+        let _ = channel.send(JobEvent::Progress { percent });
       }
-      let _ = app.emit("sorai-converter://log", Log { job_id, line: &line });
-      *last = line;
+      *last = line.clone();
+      let _ = channel.send(JobEvent::Log { line });
     };
     while let Some(event) = rx.recv().await {
       match event {
@@ -157,14 +161,14 @@ pub fn start<R: Runtime>(
       handle(l, &mut last_line);
     }
     let Some(job) = app.state::<Jobs>().0.lock().unwrap().remove(&job_id) else {
-      return; // the cancel backstop already reported it
+      return; // the cancel backstop (or app exit) already took it
     };
     match (job.cancelled, code) {
-      (true, _) => finish(&app, job_id, "cancelled", None, &job.out),
-      (false, Some(0)) => finish(&app, job_id, "success", None, &job.out),
+      (true, _) => finish(job, "cancelled", None),
+      (false, Some(0)) => finish(job, "success", None),
       (false, c) => {
         let code = c.map_or("unknown".into(), |c| c.to_string());
-        finish(&app, job_id, "error", Some(format!("{program} exited with code {code}: {last_line}")), &job.out)
+        finish(job, "error", Some(format!("{program} exited with code {code}: {last_line}")))
       }
     }
   });
@@ -188,7 +192,7 @@ pub fn cancel<R: Runtime>(app: &AppHandle<R>, job_id: u64) {
     std::thread::sleep(CANCEL_BACKSTOP);
     let job = app.state::<Jobs>().0.lock().unwrap().remove(&job_id);
     if let Some(job) = job {
-      finish(&app, job_id, "cancelled", Some("timed out waiting for process exit".into()), &job.out);
+      finish(job, "cancelled", Some("timed out waiting for process exit".into()));
     }
   });
 }

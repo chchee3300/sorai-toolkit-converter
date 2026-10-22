@@ -1,14 +1,15 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Mutex};
 
 use regex::Regex;
 use serde::Serialize;
 use tauri::{
   plugin::{Builder, TauriPlugin},
-  AppHandle, Manager, Runtime,
+  AppHandle, Manager, RunEvent, Runtime,
 };
 pub mod convert;
+pub mod preview;
 pub mod runner;
 pub mod sidecar;
 
@@ -20,6 +21,15 @@ pub const NAME: &str = "sorai-converter";
 /// contract: its asset-protocol scope must allow exactly this directory
 /// (hub: `$TEMP/sorai-toolkit/thumbnails/*`), or `<img>` can't load them.
 pub const THUMBNAIL_SUBDIR: &str = "sorai-toolkit/thumbnails";
+
+/// URI scheme Trim/Crop load queued sources from (JS:
+/// `convertFileSrc(path, PREVIEW_SCHEME)`). Serves exactly the files in
+/// `PreviewFiles` -- unlike the asset protocol's scope, entries can be removed.
+pub const PREVIEW_SCHEME: &str = "sorai-media";
+
+/// The converter's current queue, kept in sync by `set_preview_files`.
+#[derive(Default)]
+struct PreviewFiles(Mutex<Vec<String>>);
 
 /// Thumbnails older than this are deleted at plugin setup. Age-based, not
 /// "everything": several instances (dev worktrees) share the temp dir, and a
@@ -150,9 +160,6 @@ async fn probe_source<R: Runtime>(app: AppHandle<R>, path: String, file_type: St
   if !matches!(file_type.as_str(), "video" | "audio" | "image") {
     return Ok(SourceInfo { size, media: MediaInfo::default(), thumbnail: None });
   }
-  // Trim/Crop preview it with convertFileSrc(path): queueing a file is what
-  // grants the webview read access to exactly that file, nothing wider.
-  app.asset_protocol_scope().allow_file(&path).map_err(|e| e.to_string())?;
   let media = parse_media_info(&ffmpeg(&app, vec!["-hide_banner".into(), "-i".into(), path.clone()]).await?);
 
   let dir: PathBuf = app.path().temp_dir().map_err(|e| e.to_string())?.join(THUMBNAIL_SUBDIR);
@@ -174,24 +181,45 @@ struct Started {
   out_path: String,
 }
 
+/// Where output goes: `out_dir` if absolute, else the source's folder. A
+/// relative path would land in the process cwd, so it's never used.
+pub fn resolve_out_dir(out_dir: &str, src: &Path) -> Result<PathBuf, String> {
+  [Path::new(out_dir), src.parent().unwrap_or(Path::new(""))]
+    .into_iter()
+    .find(|p| p.is_absolute())
+    .map(Path::to_path_buf)
+    .ok_or_else(|| format!("no absolute output folder (got {out_dir:?}, source {})", src.display()))
+}
+
 /// Starts converting one file into `outDir` (never overwriting: picks a
-/// free `<name>_converted...` name). Returns at once; progress / log /
-/// finished arrive as `sorai-converter://*` events (see runner.rs).
+/// free `<name>_converted...` name). Returns at once; log / progress /
+/// finished arrive on `on_event` (see runner.rs).
 #[tauri::command]
-fn start_convert<R: Runtime>(app: AppHandle<R>, job: convert::Job, out_dir: String) -> Result<Started, String> {
+fn start_convert<R: Runtime>(
+  app: AppHandle<R>,
+  job: convert::Job,
+  out_dir: String,
+  on_event: tauri::ipc::Channel<runner::JobEvent>,
+) -> Result<Started, String> {
   let src = Path::new(&job.source.path);
   let stem = src.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-  let out = convert::unique_out_path(Path::new(&out_dir), &stem, job.out_ext(), |p| p.exists());
+  let out = convert::unique_out_path(&resolve_out_dir(&out_dir, src)?, &stem, job.out_ext(), |p| p.exists());
   let out_path = out.to_string_lossy().into_owned();
   let args = convert::build_args(&job, &out_path)?;
   let (duration, speed) = (job.source.duration, job.speed());
-  let job_id = runner::start(&app, convert::program(&job), args, out, move |line| convert::parse_progress(line, duration, speed))?;
+  let job_id = runner::start(&app, convert::program(&job), args, out, move |line| convert::parse_progress(line, duration, speed), on_event)?;
   Ok(Started { job_id, out_path })
 }
 
 #[tauri::command]
 fn cancel_job<R: Runtime>(app: AppHandle<R>, job_id: u64) {
   runner::cancel(&app, job_id)
+}
+
+/// Replaces the set of files the preview scheme may serve (the JS queue).
+#[tauri::command]
+fn set_preview_files(state: tauri::State<PreviewFiles>, paths: Vec<String>) {
+  *state.0.lock().unwrap() = paths;
 }
 
 /// Output-size preview per queued file, same order as `jobs`.
@@ -203,9 +231,24 @@ fn estimate_sizes(jobs: Vec<convert::Job>) -> Vec<convert::Estimate> {
 /// Registered by the hub: `.plugin(tauri_plugin_sorai_converter::init())`.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new(NAME)
-    .invoke_handler(tauri::generate_handler![ping, probe_source, start_convert, cancel_job, estimate_sizes])
+    .invoke_handler(tauri::generate_handler![ping, probe_source, start_convert, cancel_job, estimate_sizes, set_preview_files])
+    .register_asynchronous_uri_scheme_protocol(PREVIEW_SCHEME, |ctx, request, responder| {
+      let allowed = ctx.app_handle().state::<PreviewFiles>().0.lock().unwrap().clone();
+      std::thread::spawn(move || {
+        let range = request.headers().get(tauri::http::header::RANGE).and_then(|v| v.to_str().ok());
+        responder.respond(preview::respond(&allowed, request.uri().path(), range));
+      });
+    })
+    // Every quit path (window close, tray Quit, app.exit, restart) ends here:
+    // no ffmpeg outlives the app, no truncated output is left behind.
+    .on_event(|app, event| {
+      if let RunEvent::Exit = event {
+        app.state::<runner::Jobs>().kill_all();
+      }
+    })
     .setup(|app, _| {
       app.manage(runner::Jobs::default());
+      app.manage(PreviewFiles::default());
       if let Ok(tmp) = app.path().temp_dir() {
         std::thread::spawn(move || prune_old_files(&tmp.join(THUMBNAIL_SUBDIR), THUMBNAIL_MAX_AGE));
       }
@@ -232,6 +275,17 @@ mod tests {
     std::fs::remove_dir_all(&dir).unwrap();
     assert_eq!(left, (false, true, true));
     prune_old_files(&dir, THUMBNAIL_MAX_AGE); // missing dir: no panic
+  }
+
+  #[test]
+  fn out_dir_must_be_absolute_else_source_folder() {
+    let abs = std::env::temp_dir();
+    let src = abs.join("a.mp4");
+    assert_eq!(resolve_out_dir(abs.to_str().unwrap(), Path::new("rel/a.mp4")), Ok(abs.clone()));
+    assert_eq!(resolve_out_dir("", &src), Ok(abs.clone()));
+    assert_eq!(resolve_out_dir("out", &src), Ok(abs));
+    assert!(resolve_out_dir("", Path::new("a.mp4")).is_err());
+    assert!(resolve_out_dir("out", Path::new("rel/a.mp4")).is_err());
   }
 
   #[test]

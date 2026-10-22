@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
-import { probeSource } from '../plugin.js'
+import { probeSource, setPreviewFiles } from '../plugin.js'
 
 // Ported unchanged from resources/js/main.js's getFileType (main.js:6-18
 // pre-extraction).
@@ -208,6 +208,13 @@ export function useFileManager({ onFirstFileType }) {
       unlisten.then((f) => f())
     }
   }, [])
+
+  // Trim/Crop preview access == exactly the current queue: removing a file
+  // (remove, clear, mixed-type replace) or leaving the tool revokes it.
+  useEffect(() => {
+    setPreviewFiles(files.map((f) => f.path)).catch(console.error)
+  }, [files])
+  useEffect(() => () => void setPreviewFiles([]).catch(() => {}), [])
 
   const browseForFiles = useCallback(async () => {
     // window.SoraiDialogs is the hub's dialog module, looked up at call time

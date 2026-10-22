@@ -1,7 +1,6 @@
 // JS guest bindings for this repo's Tauri plugin (plugin/). One wrapper per
 // Rust command; argument keys are the Rust parameter names in camelCase.
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { Channel, convertFileSrc, invoke } from '@tauri-apps/api/core'
 
 export const ping = (value) => invoke('plugin:sorai-converter|ping', { value })
 
@@ -11,38 +10,19 @@ export const probeSource = (path, fileType) => invoke('plugin:sorai-converter|pr
 
 // --- Convert jobs (plugin/src/runner.rs) ---
 // job: { source: <file-list record>, fileType, settings: settings[fileType] }.
-// Resolves { jobId, outPath, done } once ffmpeg is running; `done` resolves
+// Resolves { jobId, outPath, done } once the job is running; `done` resolves
 // with the finished payload { status: success|error|cancelled, message, outSize }.
-// Events can beat the invoke reply, so ones for a not-yet-known job id are
-// buffered and replayed.
-
-const handlers = new Map()
-const early = new Map()
-let listening = null
-const dispatch = (kind, p) => {
-  const h = handlers.get(p.jobId)
-  if (h) h[kind](p)
-  else early.set(p.jobId, [...(early.get(p.jobId) ?? []), [kind, p]])
-}
-const ensureListening = () =>
-  (listening ??= Promise.all(['log', 'progress', 'finished'].map((k) => listen(`sorai-converter://${k}`, (e) => dispatch(k, e.payload)))))
-
+// Events come on the job's own Channel, so none can be missed or misrouted.
 export async function startConvert(job, outDir, { onLog, onProgress } = {}) {
-  await ensureListening()
-  const { jobId, outPath } = await invoke('plugin:sorai-converter|start_convert', { job, outDir })
-  const done = new Promise((resolve) => {
-    const h = {
-      log: (p) => onLog?.(p.line),
-      progress: (p) => onProgress?.(p.percent),
-      finished: (p) => {
-        handlers.delete(jobId)
-        resolve(p)
-      },
-    }
-    handlers.set(jobId, h)
-    for (const [k, p] of early.get(jobId) ?? []) h[k](p)
-    early.delete(jobId)
-  })
+  let finish
+  const done = new Promise((resolve) => (finish = resolve))
+  const onEvent = new Channel()
+  onEvent.onmessage = (m) => {
+    if (m.event === 'log') onLog?.(m.line)
+    else if (m.event === 'progress') onProgress?.(m.percent)
+    else if (m.event === 'finished') finish(m)
+  }
+  const { jobId, outPath } = await invoke('plugin:sorai-converter|start_convert', { job, outDir, onEvent })
   return { jobId, outPath, done }
 }
 
@@ -51,3 +31,8 @@ export const cancelJob = (jobId) => invoke('plugin:sorai-converter|cancel_job', 
 
 // jobs: same shape as startConvert's job -> [{ estMB, warn, targetFpsLabel }] in order.
 export const estimateSizes = (jobs) => invoke('plugin:sorai-converter|estimate_sizes', { jobs })
+
+// The queued files Trim/Crop may load (plugin/src/preview.rs). Call with the
+// whole current queue; anything not in it is refused from then on.
+export const setPreviewFiles = (paths) => invoke('plugin:sorai-converter|set_preview_files', { paths })
+export const previewSrc = (path) => convertFileSrc(path, 'sorai-media')

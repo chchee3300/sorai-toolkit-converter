@@ -110,6 +110,13 @@ export default function FileList({ files, fileType, settings, onRemove, onOpenTr
                       ({(fileObj.size / (1024 * 1024)).toFixed(2)} MB){' '}
                       <span style={{ color: 'var(--accent)' }}>&rarr; {fileObj.convertedSizeMB} MB</span>
                     </>
+                  ) : fileObj.failed ? (
+                    <>
+                      {sizeMB} MB{' '}
+                      <span className="file-failed" title={fileObj.failed} style={{ color: 'var(--danger)' }}>
+                        &rarr; {t('file.failed')}
+                      </span>
+                    </>
                   ) : (
                     `${sizeMB} MB`
                   )}

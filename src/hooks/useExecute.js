@@ -91,11 +91,13 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
         setProgressText(tNow('progress.processingFileDone', params))
         if (result.outSize != null) {
           const convertedSizeMB = (result.outSize / (1024 * 1024)).toFixed(2)
-          setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, converted: true, convertedSizeMB } : f)))
+          // By path (unique in the queue), not index: the list may change mid-run.
+          setFiles((prev) => prev.map((f) => (f.path === fileObj.path ? { ...f, converted: true, convertedSizeMB, failed: null } : f)))
         }
       } else if (result.status === 'error') {
+        // Non-blocking: log line + the row's "failed" mark (title = message).
         appendLog(`! ${result.message}`)
-        alert(`Failed to process ${filename}:\n${result.message}`)
+        setFiles((prev) => prev.map((f) => (f.path === fileObj.path ? { ...f, failed: result.message } : f)))
         setStatus('status.errorFile', 'error', { name: filename })
       }
     }

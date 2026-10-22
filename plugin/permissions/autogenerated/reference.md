@@ -9,6 +9,7 @@ Allows every command this plugin exposes.
 - `allow-start-convert`
 - `allow-cancel-job`
 - `allow-estimate-sizes`
+- `allow-set-preview-files`
 
 ## Permission Table
 
@@ -119,6 +120,32 @@ Enables the probe_source command without any pre-configured scope.
 <td>
 
 Denies the probe_source command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:allow-set-preview-files`
+
+</td>
+<td>
+
+Enables the set_preview_files command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:deny-set-preview-files`
+
+</td>
+<td>
+
+Denies the set_preview_files command without any pre-configured scope.
 
 </td>
 </tr>
