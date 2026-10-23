@@ -46,6 +46,14 @@ function OutputPathRow({ outputPath, onBrowse }) {
   )
 }
 
+// The codec really encoded -- mirror of plugin/src/convert.rs effective_codec:
+// target-size forces H.264, and WebM takes only VP9/AV1 (VP9 by default).
+const WEBM_CODECS = ['libvpx-vp9', 'libsvtav1']
+function effectiveCodec(v) {
+  const codec = v.targetSizeMode && v.targetSizeMB != null ? 'libx264' : v.codec
+  return v.format === '.webm' && !WEBM_CODECS.includes(codec) ? 'libvpx-vp9' : codec
+}
+
 function VideoSettings({ visible, video, setVideo, lastFile }) {
   const { t } = useTranslation()
   const set = (patch) => setVideo((v) => ({ ...v, ...patch }))
@@ -82,12 +90,17 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
         </div>
         <div className="field" id="video-codec-group" style={{ display: video.format === '.gif' ? 'none' : 'block' }}>
           <label className="field-label" htmlFor="video-codec">{t('settings.codec')}</label>
-          <GlassSelect id="video-codec" value={video.targetSizeMode ? 'libx264' : video.codec} disabled={video.targetSizeMode} onChange={(e) => set({ codec: e.target.value })}>
-            <option value="libx264">H.264 (avc1)</option>
-            <option value="libx265">H.265 (hevc)</option>
+          {/* LiquidSelect builds its overlay options once, so a new option set
+              remounts it -- keyed on a plain div: LiquidSelect re-parents the
+              <select> into its own wrapper, so React can't remove the select itself. */}
+          <div key={video.format === '.webm' ? 'webm' : 'all'}>
+          <GlassSelect id="video-codec" value={effectiveCodec(video)} disabled={video.targetSizeMode} onChange={(e) => set({ codec: e.target.value })}>
+            {video.format !== '.webm' && <option value="libx264">H.264 (avc1)</option>}
+            {video.format !== '.webm' && <option value="libx265">H.265 (hevc)</option>}
             <option value="libvpx-vp9">VP9 (vp09)</option>
             <option value="libsvtav1">AV1 (av01)</option>
           </GlassSelect>
+          </div>
           {video.targetSizeMode && <p className="settings-hint">{t('settings.video.targetSizeCodecLocked')}</p>}
         </div>
         {/* Quick compress -- switches bitrate off the relative Quality

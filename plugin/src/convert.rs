@@ -152,6 +152,16 @@ pub fn target_size_bitrates(target_mb: f64, seconds: f64) -> (u64, u64, u64) {
 
 /// Sidecar that runs `job`: qpdf for PDFs, img2pdf for image -> PDF
 /// (lossless embed: quality / scale / crop don't apply), ffmpeg otherwise.
+/// The codec actually encoded (SettingsPanel.jsx's effectiveCodec mirrors it for the UI).
+/// Target-size mode forces libx264: VBV (-maxrate/-bufsize) only reliably
+/// caps the size there. The WebM muxer takes only VP8/VP9/AV1 + Vorbis/Opus:
+/// H.264/H.265 (the default codec, and target-size mode's) would fail at the
+/// header, so WebM gets VP9 unless AV1 was picked.
+pub fn effective_codec(v: &VideoSettings) -> &str {
+  let codec = if v.target_size_mode && v.target_size_mb.is_some() { "libx264" } else { v.codec.as_str() };
+  if v.format == ".webm" && !matches!(codec, "libvpx-vp9" | "libsvtav1") { "libvpx-vp9" } else { codec }
+}
+
 pub fn program(job: &Job) -> &'static str {
   match &job.kind {
     Kind::Pdf(_) => "qpdf",
@@ -192,15 +202,9 @@ pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
         let pre = if chain.is_empty() { String::new() } else { chain.join(",") + "," };
         a.extend([s("-filter_complex"), format!("{pre}split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse")]);
       } else {
-        // Target-size mode forces libx264: VBV (-maxrate/-bufsize) only
-        // reliably caps the size there.
         let target = v.target_size_mode.then_some(v.target_size_mb).flatten();
-        let codec = if target.is_some() { "libx264" } else { v.codec.as_str() };
-        // The WebM muxer takes only VP8/VP9/AV1 + Vorbis/Opus: H.264/H.265
-        // (the default codec, and target-size mode's) would fail at the header.
         let webm = v.format == ".webm";
-        let codec = if webm && !matches!(codec, "libvpx-vp9" | "libsvtav1") { "libvpx-vp9" } else { codec };
-        a.extend([s("-c:v"), s(codec)]);
+        a.extend([s("-c:v"), s(effective_codec(v))]);
         let mut vf = vec![];
         let mut af = vec![];
         if let Some(fps) = v.fps {
@@ -368,7 +372,7 @@ pub fn estimate(job: &Job) -> Estimate {
           let e = if v.format == ".gif" {
             current * ratio * q * q * fps_factor * 2.5 / v.speed
           } else {
-            let codec = match v.codec.as_str() {
+            let codec = match effective_codec(v) {
               "libx265" => 0.6,
               "libvpx-vp9" => 0.65,
               "libsvtav1" => 0.5,
@@ -644,6 +648,8 @@ mod tests {
     assert!((e.est_mb - 0.3).abs() < 1e-9 && e.target_fps_label.as_deref() == Some("15"));
     assert_eq!(est(src("a.mp4"), video(|v| { v.target_size_mode = true; v.target_size_mb = Some(25.0); })).est_mb, 23.75);
     assert_eq!(est(src("a.mp4"), video(|v| v.quality = 1.0)).est_mb, 0.1); // floor
+    // WebM estimates with the codec it really encodes (VP9 for H.264).
+    assert_eq!(est(src("a.mp4"), video(|v| { v.format = ".webm".into(); v.quality = 50.0; })).est_mb, 0.5 * 0.65);
     let up = est(src("a.mp4"), video(|v| v.quality = 200.0));
     assert!(up.warn);
     let trimmed = Source { trim_start: Some(0.0), trim_end: Some(5.0), ..src("a.mp4") };
