@@ -210,11 +210,15 @@ async fn start_convert<R: Runtime>(
   let args = convert::build_args(&job, &out_path)?;
   // PDF compress: built-in, except encrypted files stay on qpdf (keeps the
   // encryption; a missing open password gets qpdf's own error).
-  if matches!(&job.kind, convert::Kind::Pdf(p) if p.optimize == "compress") {
+  let compress_level = match &job.kind {
+    convert::Kind::Pdf(p) if p.optimize == "compress" => Some(p.level.clone()),
+    _ => None,
+  };
+  if let Some(level) = compress_level {
     let bytes = std::fs::read(src).map_err(|e| format!("{}: {e}", src.display()))?;
     if !pdf_compress::is_encrypted(&bytes) {
       let header = convert::display_command("builtin-pdf-compress", &[job.source.path.clone(), out_path.clone()]);
-      let job_id = runner::start_task(&app, &header, out, on_event, move |cancel, progress| pdf_compress::compress(&bytes, cancel, progress));
+      let job_id = runner::start_task(&app, &header, out, on_event, move |cancel, progress| pdf_compress::compress(&bytes, &level, cancel, progress));
       return Ok(Started { job_id, out_path });
     }
   }
