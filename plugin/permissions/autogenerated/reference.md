@@ -15,6 +15,8 @@ Allows every command this plugin exposes.
 - `allow-engine-install`
 - `allow-engine-cancel`
 - `allow-engine-remove`
+- `allow-engine-prompt`
+- `allow-engine-set-prompted`
 
 ## Permission Table
 
@@ -106,6 +108,32 @@ Denies the engine_install command without any pre-configured scope.
 <tr>
 <td>
 
+`sorai-converter:allow-engine-prompt`
+
+</td>
+<td>
+
+Enables the engine_prompt command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:deny-engine-prompt`
+
+</td>
+<td>
+
+Denies the engine_prompt command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `sorai-converter:allow-engine-remove`
 
 </td>
@@ -151,6 +179,32 @@ Enables the engine_set_path command without any pre-configured scope.
 <td>
 
 Denies the engine_set_path command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:allow-engine-set-prompted`
+
+</td>
+<td>
+
+Enables the engine_set_prompted command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:deny-engine-set-prompted`
+
+</td>
+<td>
+
+Denies the engine_set_prompted command without any pre-configured scope.
 
 </td>
 </tr>

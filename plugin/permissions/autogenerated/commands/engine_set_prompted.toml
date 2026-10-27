@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-engine-set-prompted"
+description = "Enables the engine_set_prompted command without any pre-configured scope."
+commands.allow = ["engine_set_prompted"]
+
+[[permission]]
+identifier = "deny-engine-set-prompted"
+description = "Denies the engine_set_prompted command without any pre-configured scope."
+commands.deny = ["engine_set_prompted"]

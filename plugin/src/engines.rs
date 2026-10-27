@@ -27,13 +27,16 @@ pub fn resolve(user: Option<&Path>, own_dir: Option<PathBuf>, system_dirs: Vec<P
   crate::sidecar::find(GS, system_dirs.into_iter().map(Some)).map(|p| ("system", p))
 }
 
-/// `engines.json` in the app config dir. Keys we don't know (ticket 06's
-/// `prompted`) are kept as they are.
+/// `engines.json` in the app config dir. Keys we don't know are kept as
+/// they are.
 #[derive(Serialize, Deserialize, Default, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub ghostscript_path: Option<String>,
+  /// The converter's first-run engine prompt has been shown.
+  #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+  pub prompted: bool,
   #[serde(flatten)]
   pub rest: serde_json::Map<String, serde_json::Value>,
 }
@@ -55,10 +58,26 @@ pub fn set_user_path(file: &Path, path: Option<&str>) -> Result<(), String> {
   }
   let mut cfg = load(file)?;
   cfg.ghostscript_path = path.map(String::from);
+  save(file, &cfg)
+}
+
+/// The first-run prompt is due: never shown, and no Ghostscript found. A
+/// broken engines.json never nags.
+pub fn needs_prompt(file: &Path, gs_found: bool) -> bool {
+  !gs_found && load(file).is_ok_and(|c| !c.prompted)
+}
+
+pub fn set_prompted(file: &Path, prompted: bool) -> Result<(), String> {
+  let mut cfg = load(file)?;
+  cfg.prompted = prompted;
+  save(file, &cfg)
+}
+
+fn save(file: &Path, cfg: &Config) -> Result<(), String> {
   let err = |e: std::io::Error| format!("{}: {e}", file.display());
   std::fs::create_dir_all(file.parent().unwrap_or(Path::new("."))).map_err(err)?;
   let tmp = file.with_extension("json.tmp");
-  std::fs::write(&tmp, serde_json::to_vec_pretty(&cfg).unwrap()).map_err(err)?;
+  std::fs::write(&tmp, serde_json::to_vec_pretty(cfg).unwrap()).map_err(err)?;
   std::fs::rename(&tmp, file).map_err(err)
 }
 
@@ -110,6 +129,8 @@ pub struct Status {
   pub installable: bool,
   /// The app's own downloaded copy exists (even when another one is used).
   pub installed: bool,
+  /// Bytes `install` downloads (None where it can't).
+  pub download_size: Option<u64>,
 }
 
 fn config_file<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
@@ -160,7 +181,17 @@ pub fn status<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<Status>, String> {
     install_command,
     installable: cfg!(windows),
     installed,
+    download_size: cfg!(windows).then_some(GS_SIZE),
   }])
+}
+
+/// `engine_prompt`: show the converter's first-run prompt?
+pub fn prompt_due<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
+  Ok(needs_prompt(&config_file(app)?, ghostscript(app).is_some()))
+}
+
+pub fn mark_prompted<R: Runtime>(app: &AppHandle<R>, prompted: bool) -> Result<(), String> {
+  set_prompted(&config_file(app)?, prompted)
 }
 
 pub fn set_path<R: Runtime>(app: &AppHandle<R>, engine: &str, path: Option<&str>) -> Result<Vec<Status>, String> {
@@ -594,7 +625,7 @@ mod tests {
     assert_eq!(load(&file).unwrap().ghostscript_path, None); // no file yet
     set_user_path(&file, Some(gs.to_str().unwrap())).unwrap();
     assert_eq!(load(&file).unwrap().ghostscript_path.as_deref(), gs.to_str());
-    // Ticket 06's `prompted` (and anything else) survives our writes.
+    // Other keys survive our writes.
     let mut v: serde_json::Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
     v["prompted"] = true.into();
     std::fs::write(&file, v.to_string()).unwrap();
@@ -607,6 +638,28 @@ mod tests {
     std::fs::write(&file, "{oops").unwrap();
     assert!(load(&file).is_err());
     assert!(set_user_path(&file, None).is_err());
+  }
+
+  #[test]
+  fn first_run_prompt_is_asked_once_and_never_when_gs_is_found() {
+    let dir = dir_with("prompt", &["gs.exe"]);
+    let file = dir.join("engines.json");
+    assert!(needs_prompt(&file, false)); // fresh install
+    assert!(!needs_prompt(&file, true)); // Ghostscript already there
+    set_prompted(&file, true).unwrap();
+    assert!(!needs_prompt(&file, false));
+    // Keeps the user's pick; set_user_path keeps `prompted`.
+    set_user_path(&file, Some(dir.join("gs.exe").to_str().unwrap())).unwrap();
+    set_prompted(&file, true).unwrap();
+    assert!(load(&file).unwrap().ghostscript_path.is_some());
+    set_user_path(&file, None).unwrap();
+    assert!(!needs_prompt(&file, false));
+    // E2E resets it.
+    set_prompted(&file, false).unwrap();
+    assert!(needs_prompt(&file, false));
+    // A broken engines.json never nags.
+    std::fs::write(&file, "{oops").unwrap();
+    assert!(!needs_prompt(&file, false));
   }
 
   #[test]

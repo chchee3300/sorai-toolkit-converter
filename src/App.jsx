@@ -8,6 +8,7 @@ import ProgressLog from './components/ProgressLog.jsx'
 import MixedTypeModal from './components/MixedTypeModal.jsx'
 import TrimModal from './components/TrimModal.jsx'
 import CropModal from './components/CropModal.jsx'
+import EnginePrompt from './components/EnginePrompt.jsx'
 import { useFileManager } from './hooks/useFileManager.js'
 import { useSettings } from './hooks/useSettings.js'
 import { useExecute } from './hooks/useExecute.js'
@@ -243,6 +244,8 @@ function App({ pendingLaunch, editPreset, onEditDone }) {
         onConfirm={confirmClearAndLoad}
         onCancel={cancelPendingMismatch}
       />
+      {/* First Converter visit only; not in edit-preset mode (returned above). */}
+      <EnginePrompt />
     </>
   )
 }

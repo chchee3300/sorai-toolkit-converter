@@ -39,7 +39,7 @@ export const previewSrc = (path) => convertFileSrc(path, 'sorai-media')
 
 // --- Optional engines (plugin/src/engines.rs) ---
 // -> [{ id, name, state: user|installed|system|missing, path, userPath,
-// license, homepage, installCommand, installable, installed }]. Looked up
+// license, homepage, installCommand, installable, installed, downloadSize }]. Looked up
 // fresh on every call.
 export const engineStatus = () => invoke('plugin:sorai-converter|engine_status')
 
@@ -69,4 +69,36 @@ export async function engineRemove(engine) {
   const list = await invoke('plugin:sorai-converter|engine_remove', { engine })
   window.dispatchEvent(new Event('sorai:engines-changed'))
   return list
+}
+
+// The first-run prompt (EnginePrompt.jsx): due when never shown and no
+// Ghostscript is found. engineSetPrompted(true) records it was shown.
+export const enginePrompt = () => invoke('plugin:sorai-converter|engine_prompt')
+export const engineSetPrompted = (prompted) => invoke('plugin:sorai-converter|engine_set_prompted', { prompted })
+
+// The running install's progress, kept here rather than in a component so
+// the hub's Settings and the first-run prompt show the same one and it
+// outlives either closing. { engine, percent (null = idle), error } --
+// subscribe with useSyncExternalStore(onInstallChange, installState).
+// Rust allows one install at a time, so one slot is enough.
+let install = { engine: null, percent: null, error: '' }
+const listeners = new Set()
+const setInstall = (patch) => {
+  install = { ...install, ...patch }
+  listeners.forEach((f) => f())
+}
+export const installState = () => install
+export const onInstallChange = (f) => (listeners.add(f), () => listeners.delete(f))
+
+// Resolves { list, error } (error '' on success and on Cancel); never rejects.
+export function startInstall(engine) {
+  setInstall({ engine, percent: 0, error: '' })
+  return engineInstall(engine, (p) => setInstall({ percent: p })).then(
+    (list) => (setInstall({ engine: null, percent: null }), { list, error: '' }),
+    async (e) => {
+      const error = String(e) === 'cancelled' ? '' : String(e)
+      setInstall({ engine: null, percent: null, error })
+      return { list: await engineStatus().catch(() => []), error }
+    },
+  )
 }

@@ -258,6 +258,18 @@ fn engine_cancel() {
   engines::cancel_install()
 }
 
+/// Show the first-run engine prompt? (never shown yet, no Ghostscript)
+#[tauri::command]
+fn engine_prompt<R: Runtime>(app: AppHandle<R>) -> Result<bool, String> {
+  engines::prompt_due(&app)
+}
+
+/// Records that the prompt was shown (E2E resets it with false).
+#[tauri::command]
+fn engine_set_prompted<R: Runtime>(app: AppHandle<R>, prompted: bool) -> Result<(), String> {
+  engines::mark_prompted(&app, prompted)
+}
+
 /// Deletes the app's own copy.
 #[tauri::command]
 fn engine_remove<R: Runtime>(app: AppHandle<R>, engine: String) -> Result<Vec<engines::Status>, String> {
@@ -284,7 +296,7 @@ fn estimate_sizes(jobs: Vec<convert::Job>) -> Vec<convert::Estimate> {
 /// Registered by the hub: `.plugin(tauri_plugin_sorai_converter::init())`.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new(NAME)
-    .invoke_handler(tauri::generate_handler![ping, probe_source, start_convert, cancel_job, estimate_sizes, set_preview_files, engine_status, engine_set_path, engine_install, engine_cancel, engine_remove])
+    .invoke_handler(tauri::generate_handler![ping, probe_source, start_convert, cancel_job, estimate_sizes, set_preview_files, engine_status, engine_set_path, engine_install, engine_cancel, engine_remove, engine_prompt, engine_set_prompted])
     .register_asynchronous_uri_scheme_protocol(PREVIEW_SCHEME, |ctx, request, responder| {
       let allowed = ctx.app_handle().state::<PreviewFiles>().0.lock().unwrap().clone();
       std::thread::spawn(move || {

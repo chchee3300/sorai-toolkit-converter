@@ -109,6 +109,22 @@ export const dict = {
     // MixedTypeModal.jsx -- EN reproduces today's exact interpolation (raw
     // fileType keys, lowercase) since test_drop.js's D2 check requires the
     // literal words "video"/"image" to appear.
+    'enginePrompt.title': 'Optional engines',
+    'enginePrompt.intro': 'The Converter works without these. Pick any you want; you can install or remove them later in Settings → Conversion engines.',
+    'enginePrompt.desc.ghostscript': 'Compresses PDFs further. PDF compression runs it too and keeps the smaller result.',
+    'enginePrompt.size': ({ mb }) => `About ${mb} MB download`,
+    'enginePrompt.license': ({ license }) => `License: ${license}`,
+    'enginePrompt.installWith': 'Install with',
+    'enginePrompt.ready': 'Already on this computer',
+    'enginePrompt.downloading': ({ percent }) => `Downloading… ${percent}%`,
+    'enginePrompt.background': 'You can close this; the download carries on and you will be notified when it is done.',
+    'enginePrompt.install': 'Install selected',
+    'enginePrompt.skip': 'Skip',
+    'enginePrompt.cancel': 'Cancel',
+    'enginePrompt.close': 'Close',
+    'enginePrompt.notifyTitle': ({ name }) => name,
+    'enginePrompt.notifyDone': ({ name }) => `${name} is installed.`,
+    'enginePrompt.notifyFailed': ({ name, error }) => `${name} couldn't be installed: ${error}`,
     'mixedType.title': 'Different file type detected',
     'mixedType.body': ({ existingCount, existingType, incomingCount, incomingType }) =>
       `You have ${existingCount} ${existingType} file${existingCount === 1 ? '' : 's'} loaded. These ${incomingCount} file${incomingCount === 1 ? '' : 's'} ${incomingCount === 1 ? 'is' : 'are'} ${incomingType} — only one type can be converted per batch. Clear the current files and load the new ones instead?`,
@@ -244,6 +260,22 @@ export const dict = {
     'preset.editing': ({ name }) => `正在編輯預設：${name}`,
     'preset.savePreset': '儲存預設',
 
+    'enginePrompt.title': '選配引擎',
+    'enginePrompt.intro': 'Converter 不裝這些也能用。勾選想要的；之後也可以在「設定 → 轉換引擎」安裝或移除。',
+    'enginePrompt.desc.ghostscript': '把 PDF 壓得更小。壓縮 PDF 時也會用它跑一次，取比較小的結果。',
+    'enginePrompt.size': ({ mb }) => `下載約 ${mb} MB`,
+    'enginePrompt.license': ({ license }) => `授權：${license}`,
+    'enginePrompt.installWith': '安裝指令',
+    'enginePrompt.ready': '電腦上已經有了',
+    'enginePrompt.downloading': ({ percent }) => `下載中… ${percent}%`,
+    'enginePrompt.background': '可以先關掉這個視窗，下載會在背景繼續，完成時會通知你。',
+    'enginePrompt.install': '安裝所選',
+    'enginePrompt.skip': '略過',
+    'enginePrompt.cancel': '取消',
+    'enginePrompt.close': '關閉',
+    'enginePrompt.notifyTitle': ({ name }) => name,
+    'enginePrompt.notifyDone': ({ name }) => `${name} 已安裝完成。`,
+    'enginePrompt.notifyFailed': ({ name, error }) => `${name} 安裝失敗：${error}`,
     'mixedType.title': '偵測到不同的檔案類型',
     'mixedType.body': ({ existingCount, existingType, incomingCount, incomingType }) => {
       const name = { video: '影片', image: '圖片', audio: '音訊', pdf: 'PDF' }
