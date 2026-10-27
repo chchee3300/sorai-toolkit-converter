@@ -39,7 +39,8 @@ export const previewSrc = (path) => convertFileSrc(path, 'sorai-media')
 
 // --- Optional engines (plugin/src/engines.rs) ---
 // -> [{ id, name, state: user|installed|system|missing, path, userPath,
-// license, homepage, installCommand }]. Looked up fresh on every call.
+// license, homepage, installCommand, installable, installed }]. Looked up
+// fresh on every call.
 export const engineStatus = () => invoke('plugin:sorai-converter|engine_status')
 
 // "Use my own program..." (path) or back to auto-detect (null). Resolves the
@@ -47,6 +48,25 @@ export const engineStatus = () => invoke('plugin:sorai-converter|engine_status')
 // (the converter's PDF status line) re-check.
 export async function engineSetPath(engine, path) {
   const list = await invoke('plugin:sorai-converter|engine_set_path', { engine, path })
+  window.dispatchEvent(new Event('sorai:engines-changed'))
+  return list
+}
+
+// Download + install (Windows; status rows have `installable`). onProgress
+// gets 0-100. Resolves the new status list, rejects "cancelled" after
+// engineCancel(). Both install and remove fire `sorai:engines-changed`.
+export async function engineInstall(engine, onProgress) {
+  const channel = new Channel()
+  channel.onmessage = (p) => onProgress?.(p)
+  const list = await invoke('plugin:sorai-converter|engine_install', { engine, onProgress: channel })
+  window.dispatchEvent(new Event('sorai:engines-changed'))
+  return list
+}
+
+export const engineCancel = () => invoke('plugin:sorai-converter|engine_cancel')
+
+export async function engineRemove(engine) {
+  const list = await invoke('plugin:sorai-converter|engine_remove', { engine })
   window.dispatchEvent(new Event('sorai:engines-changed'))
   return list
 }

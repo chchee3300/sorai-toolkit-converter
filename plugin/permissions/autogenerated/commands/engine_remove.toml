@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-engine-remove"
+description = "Enables the engine_remove command without any pre-configured scope."
+commands.allow = ["engine_remove"]
+
+[[permission]]
+identifier = "deny-engine-remove"
+description = "Denies the engine_remove command without any pre-configured scope."
+commands.deny = ["engine_remove"]

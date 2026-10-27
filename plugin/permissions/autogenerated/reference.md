@@ -12,6 +12,9 @@ Allows every command this plugin exposes.
 - `allow-set-preview-files`
 - `allow-engine-status`
 - `allow-engine-set-path`
+- `allow-engine-install`
+- `allow-engine-cancel`
+- `allow-engine-remove`
 
 ## Permission Table
 
@@ -44,6 +47,84 @@ Enables the cancel_job command without any pre-configured scope.
 <td>
 
 Denies the cancel_job command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:allow-engine-cancel`
+
+</td>
+<td>
+
+Enables the engine_cancel command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:deny-engine-cancel`
+
+</td>
+<td>
+
+Denies the engine_cancel command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:allow-engine-install`
+
+</td>
+<td>
+
+Enables the engine_install command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:deny-engine-install`
+
+</td>
+<td>
+
+Denies the engine_install command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:allow-engine-remove`
+
+</td>
+<td>
+
+Enables the engine_remove command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:deny-engine-remove`
+
+</td>
+<td>
+
+Denies the engine_remove command without any pre-configured scope.
 
 </td>
 </tr>

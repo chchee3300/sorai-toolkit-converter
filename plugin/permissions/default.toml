@@ -2,4 +2,4 @@
 # Add every new command's allow-<command> here.
 [default]
 description = "Allows every command this plugin exposes."
-permissions = ["allow-ping", "allow-probe-source", "allow-start-convert", "allow-cancel-job", "allow-estimate-sizes", "allow-set-preview-files", "allow-engine-status", "allow-engine-set-path"]
+permissions = ["allow-ping", "allow-probe-source", "allow-start-convert", "allow-cancel-job", "allow-estimate-sizes", "allow-set-preview-files", "allow-engine-status", "allow-engine-set-path", "allow-engine-install", "allow-engine-cancel", "allow-engine-remove"]

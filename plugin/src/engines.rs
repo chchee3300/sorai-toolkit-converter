@@ -106,6 +106,10 @@ pub struct Status {
   pub homepage: &'static str,
   /// macOS / Linux, when missing: the package-manager command to show.
   pub install_command: Option<&'static str>,
+  /// The app can download it here (Windows only).
+  pub installable: bool,
+  /// The app's own downloaded copy exists (even when another one is used).
+  pub installed: bool,
 }
 
 fn config_file<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
@@ -113,7 +117,7 @@ fn config_file<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
 }
 
 /// The app's own copy: `%LOCALAPPDATA%\<identifier>\engines\ghostscript\`
-/// on Windows. Ticket 05 downloads into it; nothing writes it yet.
+/// on Windows; `install` downloads into it.
 fn own_dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
   app.path().app_local_data_dir().ok().map(|d| d.join("engines").join("ghostscript"))
 }
@@ -137,7 +141,9 @@ pub fn ghostscript<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 
 pub fn status<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<Status>, String> {
   let user_path = load(&config_file(app)?)?.ghostscript_path;
-  let found = resolve(user_path.as_deref().map(Path::new), own_dir(app), system_dirs());
+  let own = own_dir(app);
+  let installed = crate::sidecar::find(GS, [own.clone()]).is_some();
+  let found = resolve(user_path.as_deref().map(Path::new), own, system_dirs());
   let install_command = match (found.is_some(), std::env::consts::OS) {
     (false, "macos") => Some("brew install ghostscript"),
     (false, "linux") => Some("sudo apt install ghostscript"),
@@ -152,6 +158,8 @@ pub fn status<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<Status>, String> {
     license: "AGPL-3.0",
     homepage: "https://www.ghostscript.com/",
     install_command,
+    installable: cfg!(windows),
+    installed,
   }])
 }
 
@@ -161,6 +169,204 @@ pub fn set_path<R: Runtime>(app: &AppHandle<R>, engine: &str, path: Option<&str>
   }
   set_user_path(&config_file(app)?, path.filter(|p| !p.is_empty()))?;
   status(app)
+}
+
+// --- Download (Windows): a pinned conda-forge package, never a remote list.
+
+pub const GS_URL: &str = "https://conda.anaconda.org/conda-forge/win-64/ghostscript-10.08.0-hac47afa_0.conda";
+pub const GS_SHA256: &str = "512BE9413C58B0AD3A2CD95A63EAEA73CBE32D9A6B9170C848BF825694A4ADB0";
+pub const GS_SIZE: u64 = 19_295_904;
+/// The download's name inside the staging dir.
+const PACKAGE_FILE: &str = "package.conda";
+
+/// What to download. `size` caps the download (None = dev override).
+pub struct Package {
+  pub url: String,
+  pub sha256: String,
+  pub size: Option<u64>,
+}
+
+/// The pinned package. Dev builds only (`debug_assertions`) honour
+/// `SORAI_GS_URL` / `SORAI_GS_SHA256`, for the hub E2E's local server.
+pub fn package() -> Package {
+  #[cfg(debug_assertions)]
+  if let Ok(url) = std::env::var("SORAI_GS_URL") {
+    return Package { url, sha256: std::env::var("SORAI_GS_SHA256").unwrap_or_default(), size: None };
+  }
+  Package { url: GS_URL.into(), sha256: GS_SHA256.into(), size: Some(GS_SIZE) }
+}
+
+fn sha256_file(file: &Path) -> Result<String, String> {
+  use sha2::Digest;
+  let mut f = std::fs::File::open(file).map_err(|e| format!("{}: {e}", file.display()))?;
+  let mut h = sha2::Sha256::new();
+  let mut buf = vec![0; 1 << 16];
+  loop {
+    match std::io::Read::read(&mut f, &mut buf).map_err(|e| format!("{}: {e}", file.display()))? {
+      0 => break,
+      n => h.update(&buf[..n]),
+    }
+  }
+  Ok(h.finalize().iter().map(|b| format!("{b:02X}")).collect())
+}
+
+/// Writes the `Library/bin/*` files of a `.conda` (zip -> `pkg-*.tar.zst`)
+/// flat into `dest`. Init / fonts / CMaps are compiled into gsdll64.dll
+/// (checked against the real package: SPEC "引擎下載"), so nothing else.
+fn extract_bin(conda: &Path, dest: &Path, cancel: &AtomicBool) -> Result<(), String> {
+  let err = |e: &dyn std::fmt::Display| format!("{}: {e}", conda.display());
+  let mut zip = zip::ZipArchive::new(std::fs::File::open(conda).map_err(|e| err(&e))?).map_err(|e| err(&e))?;
+  let index = (0..zip.len())
+    .find(|&i| zip.name_for_index(i).and_then(|n| n.ok()).is_some_and(|n| n.starts_with("pkg-") && n.ends_with(".tar.zst")))
+    .ok_or_else(|| err(&"no pkg-*.tar.zst inside"))?;
+  let entry = zip.by_index(index).map_err(|e| err(&e))?;
+  let zst = ruzstd::decoding::StreamingDecoder::new(entry).map_err(|e| err(&e))?;
+  let mut tar = tar::Archive::new(zst);
+  std::fs::create_dir_all(dest).map_err(|e| err(&e))?;
+  for entry in tar.entries().map_err(|e| err(&e))? {
+    if cancel.load(Ordering::Relaxed) {
+      return Err("cancelled".into());
+    }
+    let mut entry = entry.map_err(|e| err(&e))?;
+    let path = entry.path().map_err(|e| err(&e))?.into_owned();
+    let Ok(rel) = path.strip_prefix("Library/bin") else { continue };
+    if !entry.header().entry_type().is_file() {
+      continue;
+    }
+    // A plain file name only: no subdirs, no `..`, nothing absolute.
+    let mut parts = rel.components();
+    let (Some(std::path::Component::Normal(name)), None) = (parts.next(), parts.next()) else { continue };
+    let mut out = std::fs::File::create(dest.join(name)).map_err(|e| err(&e))?;
+    std::io::copy(&mut entry, &mut out).map_err(|e| err(&e))?;
+  }
+  Ok(())
+}
+
+/// After the download: `staging/package.conda` must hash to `sha256`
+/// (case-insensitive), its `Library/bin` is extracted to `staging/`, then
+/// renamed over `dest`. `staging` is always removed, so a mismatch, an
+/// error or `cancel` leaves neither a download nor half an install.
+pub fn finish_install(staging: &Path, sha256: &str, dest: &Path, cancel: &AtomicBool) -> Result<(), String> {
+  let result = (|| {
+    let conda = staging.join(PACKAGE_FILE);
+    let got = sha256_file(&conda)?;
+    if !got.eq_ignore_ascii_case(sha256) {
+      return Err(format!("SHA-256 mismatch: expected {sha256}, got {got}"));
+    }
+    let bin = staging.join("ghostscript");
+    extract_bin(&conda, &bin, cancel)?;
+    if cancel.load(Ordering::Relaxed) {
+      return Err("cancelled".into());
+    }
+    match std::fs::remove_dir_all(dest) {
+      Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(format!("{}: {e}", dest.display())),
+      _ => {}
+    }
+    std::fs::rename(&bin, dest).map_err(|e| format!("{}: {e}", dest.display()))
+  })();
+  let _ = std::fs::remove_dir_all(staging);
+  result
+}
+
+/// Streams `pkg.url` into `to`, reporting 0-100 and polling `cancel`
+/// between chunks.
+async fn download(pkg: &Package, to: &Path, cancel: &AtomicBool, progress: &(dyn Fn(f64) + Sync)) -> Result<(), String> {
+  use std::io::Write;
+  // Same as tauri-plugin-updater: reqwest is built without a crypto provider.
+  if rustls::crypto::CryptoProvider::get_default().is_none() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+  }
+  let err = |e: reqwest::Error| format!("{}: {e}", pkg.url);
+  let client = reqwest::Client::builder().read_timeout(Duration::from_secs(30)).build().map_err(err)?;
+  let mut res = tokio::select! {
+    r = client.get(&pkg.url).send() => r.and_then(|r| r.error_for_status()).map_err(err)?,
+    _ = until(cancel) => return Err("cancelled".into()),
+  };
+  let total = res.content_length().or(pkg.size).unwrap_or(0);
+  let mut file = std::fs::File::create(to).map_err(|e| format!("{}: {e}", to.display()))?;
+  let mut got = 0u64;
+  loop {
+    // Raced against Cancel: a stalled connection mustn't hold it up.
+    let chunk = tokio::select! {
+      c = res.chunk() => c.map_err(err)?,
+      _ = until(cancel) => return Err("cancelled".into()),
+    };
+    let Some(chunk) = chunk else { break };
+    got += chunk.len() as u64;
+    if pkg.size.is_some_and(|max| got > max) {
+      return Err(format!("{}: larger than the expected {} bytes", pkg.url, pkg.size.unwrap()));
+    }
+    file.write_all(&chunk).map_err(|e| format!("{}: {e}", to.display()))?;
+    if total > 0 {
+      progress((got as f64 / total as f64 * 100.0).min(100.0));
+    }
+  }
+  file.sync_all().map_err(|e| e.to_string())
+}
+
+async fn until(flag: &AtomicBool) {
+  while !flag.load(Ordering::Relaxed) {
+    tokio::time::sleep(Duration::from_millis(50)).await;
+  }
+}
+
+/// The running install's cancel flag (one install at a time).
+static INSTALLING: std::sync::Mutex<Option<std::sync::Arc<AtomicBool>>> = std::sync::Mutex::new(None);
+
+/// Downloads into `engines/.ghostscript.partial/`, verifies, extracts and
+/// renames to the own-copy dir. Progress: download 0-95, then 100.
+/// ponytail: quitting mid-download leaves the staging dir; the next
+/// install starts by deleting it (it's never mistaken for an install).
+pub async fn install<R: Runtime>(app: &AppHandle<R>, engine: &str, progress: impl Fn(f64) + Send + Sync) -> Result<Vec<Status>, String> {
+  if engine != "ghostscript" {
+    return Err(format!("unknown engine {engine:?}"));
+  }
+  if !cfg!(windows) {
+    return Err("Ghostscript downloads are Windows-only".into());
+  }
+  let dest = own_dir(app).ok_or("no app data folder")?;
+  let staging = dest.with_file_name(".ghostscript.partial");
+  let cancel = {
+    let mut slot = INSTALLING.lock().unwrap();
+    if slot.is_some() {
+      return Err("already installing".into());
+    }
+    slot.insert(Default::default()).clone()
+  };
+  let result = async {
+    let _ = std::fs::remove_dir_all(&staging);
+    std::fs::create_dir_all(&staging).map_err(|e| format!("{}: {e}", staging.display()))?;
+    let pkg = package();
+    download(&pkg, &staging.join(PACKAGE_FILE), &cancel, &|p| progress(p * 0.95)).await?;
+    let (s, d, c) = (staging.clone(), dest.clone(), cancel.clone());
+    tauri::async_runtime::spawn_blocking(move || finish_install(&s, &pkg.sha256, &d, &c)).await.map_err(|e| e.to_string())?
+  }
+  .await;
+  let _ = std::fs::remove_dir_all(&staging);
+  *INSTALLING.lock().unwrap() = None;
+  result?;
+  progress(100.0);
+  status(app)
+}
+
+/// Cancels a running install (no-op otherwise); `install` then errors with
+/// "cancelled" and has cleaned up.
+pub fn cancel_install() {
+  if let Some(c) = INSTALLING.lock().unwrap().as_ref() {
+    c.store(true, Ordering::Relaxed);
+  }
+}
+
+/// Deletes the app's own copy (a user-picked or PATH gs is never touched).
+pub fn remove<R: Runtime>(app: &AppHandle<R>, engine: &str) -> Result<Vec<Status>, String> {
+  if engine != "ghostscript" {
+    return Err(format!("unknown engine {engine:?}"));
+  }
+  let dir = own_dir(app).ok_or("no app data folder")?;
+  match std::fs::remove_dir_all(&dir) {
+    Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("{}: {e}", dir.display())),
+    _ => status(app),
+  }
 }
 
 static GS_SEQ: AtomicU64 = AtomicU64::new(0);
@@ -251,6 +457,93 @@ mod tests {
       std::fs::write(d.join(n), b"").unwrap();
     }
     d
+  }
+
+  /// A `.conda` like conda-forge's: a STORED zip with metadata, the
+  /// `pkg-*.tar.zst` holding `files`, and an info tarball.
+  fn fake_conda(files: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut tar = tar::Builder::new(Vec::new());
+    for (name, data) in files {
+      let mut h = tar::Header::new_gnu();
+      h.set_size(data.len() as u64);
+      h.set_mode(0o755);
+      tar.append_data(&mut h, name, *data).unwrap();
+    }
+    let zst = ruzstd::encoding::compress_to_vec(&tar.into_inner().unwrap()[..], ruzstd::encoding::CompressionLevel::Fastest);
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    for (name, data) in [("metadata.json", &b"{\"conda_pkg_format_version\": 2}"[..]), ("pkg-ghostscript-1.0-x_0.tar.zst", &zst), ("info-ghostscript-1.0-x_0.tar.zst", &zst)] {
+      zip.start_file(name, opts).unwrap();
+      std::io::Write::write_all(&mut zip, data).unwrap();
+    }
+    zip.finish().unwrap().into_inner()
+  }
+
+  fn sha_hex(b: &[u8]) -> String {
+    use sha2::Digest;
+    sha2::Sha256::digest(b).iter().map(|b| format!("{b:02X}")).collect()
+  }
+
+  /// `<engines>/.ghostscript.partial/package.conda`; returns (staging, dest).
+  fn stage(engines: &Path, conda: &[u8]) -> (PathBuf, PathBuf) {
+    let staging = engines.join(".ghostscript.partial");
+    std::fs::create_dir_all(&staging).unwrap();
+    std::fs::write(staging.join(PACKAGE_FILE), conda).unwrap();
+    (staging, engines.join("ghostscript"))
+  }
+
+  fn files_in(dir: &Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    v.sort();
+    v
+  }
+
+  const PKG: &[(&str, &[u8])] = &[
+    ("Library/bin/gswin64c.exe", b"exe"),
+    ("Library/bin/gsdll64.dll", b"dll"),
+    ("Library/Init/gs_init.ps", b"init"),
+    ("Library/lib/gsdll64.lib", b"lib"),
+    ("info/index.json", b"{}"),
+  ];
+
+  #[test]
+  fn installs_only_library_bin_and_removes_the_staging_dir() {
+    let engines = dir_with("install", &[]);
+    let conda = fake_conda(PKG);
+    let (staging, dest) = stage(&engines, &conda);
+    finish_install(&staging, &sha_hex(&conda).to_lowercase(), &dest, &AtomicBool::new(false)).unwrap();
+    assert_eq!(files_in(&dest), ["gsdll64.dll", "gswin64c.exe"]);
+    assert_eq!(std::fs::read(dest.join("gswin64c.exe")).unwrap(), b"exe");
+    assert_eq!(files_in(&engines), ["ghostscript"]);
+    // Reinstalling replaces the old copy entirely.
+    let conda = fake_conda(&[("Library/bin/gswin64c.exe", b"new")]);
+    let (staging, _) = stage(&engines, &conda);
+    finish_install(&staging, &sha_hex(&conda), &dest, &AtomicBool::new(false)).unwrap();
+    assert_eq!(files_in(&dest), ["gswin64c.exe"]);
+    assert_eq!(std::fs::read(dest.join("gswin64c.exe")).unwrap(), b"new");
+  }
+
+  #[test]
+  fn sha_mismatch_is_refused_and_the_download_deleted() {
+    let engines = dir_with("sha", &[]);
+    let conda = fake_conda(PKG);
+    let (staging, dest) = stage(&engines, &conda);
+    let e = finish_install(&staging, GS_SHA256, &dest, &AtomicBool::new(false)).unwrap_err();
+    assert!(e.starts_with("SHA-256 mismatch"), "{e}");
+    assert_eq!(files_in(&engines), Vec::<String>::new());
+  }
+
+  #[test]
+  fn cancel_or_a_broken_package_leaves_nothing() {
+    let engines = dir_with("cancelled", &[]);
+    let conda = fake_conda(PKG);
+    let (staging, dest) = stage(&engines, &conda);
+    assert_eq!(finish_install(&staging, &sha_hex(&conda), &dest, &AtomicBool::new(true)), Err("cancelled".into()));
+    assert_eq!(files_in(&engines), Vec::<String>::new());
+    // Right hash, but not a .conda: an error, nothing left either.
+    let (staging, dest) = stage(&engines, b"not a zip");
+    assert!(finish_install(&staging, &sha_hex(b"not a zip"), &dest, &AtomicBool::new(false)).is_err());
+    assert_eq!(files_in(&engines), Vec::<String>::new());
   }
 
   #[test]

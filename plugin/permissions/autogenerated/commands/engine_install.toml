@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-engine-install"
+description = "Enables the engine_install command without any pre-configured scope."
+commands.allow = ["engine_install"]
+
+[[permission]]
+identifier = "deny-engine-install"
+description = "Denies the engine_install command without any pre-configured scope."
+commands.deny = ["engine_install"]

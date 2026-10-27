@@ -307,6 +307,42 @@
           "markdownDescription": "Denies the cancel_job command without any pre-configured scope."
         },
         {
+          "description": "Enables the engine_cancel command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-engine-cancel",
+          "markdownDescription": "Enables the engine_cancel command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the engine_cancel command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-engine-cancel",
+          "markdownDescription": "Denies the engine_cancel command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the engine_install command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-engine-install",
+          "markdownDescription": "Enables the engine_install command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the engine_install command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-engine-install",
+          "markdownDescription": "Denies the engine_install command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the engine_remove command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-engine-remove",
+          "markdownDescription": "Enables the engine_remove command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the engine_remove command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-engine-remove",
+          "markdownDescription": "Denies the engine_remove command without any pre-configured scope."
+        },
+        {
           "description": "Enables the engine_set_path command without any pre-configured scope.",
           "type": "string",
           "const": "allow-engine-set-path",
@@ -391,10 +427,10 @@
           "markdownDescription": "Denies the start_convert command without any pre-configured scope."
         },
         {
-          "description": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`\n- `allow-engine-status`\n- `allow-engine-set-path`",
+          "description": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`\n- `allow-engine-status`\n- `allow-engine-set-path`\n- `allow-engine-install`\n- `allow-engine-cancel`\n- `allow-engine-remove`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`\n- `allow-engine-status`\n- `allow-engine-set-path`"
+          "markdownDescription": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`\n- `allow-engine-status`\n- `allow-engine-set-path`\n- `allow-engine-install`\n- `allow-engine-cancel`\n- `allow-engine-remove`"
         }
       ]
     }
