@@ -7,12 +7,14 @@
 //! Events go to the job's own `tauri::ipc::Channel` (like the downloader's):
 //! - `{ event: 'log', line }`
 //! - `{ event: 'progress', percent }`
-//! - `{ event: 'finished', status: success|error|cancelled, message?, outSize? }`
+//! - `{ event: 'finished', status: success|error|cancelled, message?, outSize?, notSmaller? }`
+//!
+//! `start_task` runs in-process Rust work (the PDF compressor) the same way.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -25,7 +27,8 @@ const CANCEL_BACKSTOP: Duration = Duration::from_secs(3);
 
 struct Running {
   child: Option<CommandChild>,
-  cancelled: bool,
+  /// Shared with an in-process task, which polls it (kill can't stop it).
+  cancelled: Arc<AtomicBool>,
   out: PathBuf,
   channel: Channel<JobEvent>,
 }
@@ -42,6 +45,7 @@ impl Jobs {
   pub fn kill_all(&self) {
     let jobs: Vec<Running> = self.0.lock().unwrap().drain().map(|(_, j)| j).collect();
     for job in jobs {
+      job.cancelled.store(true, Ordering::Relaxed);
       if let Some(child) = job.child {
         let _ = child.kill();
       }
@@ -58,7 +62,14 @@ pub enum JobEvent {
   Log { line: String },
   Progress { percent: f64 },
   /// Sent exactly once per job.
-  Finished { status: &'static str, message: Option<String>, out_size: Option<u64> },
+  /// `not_smaller`: success, but the output is a copy of the source.
+  Finished {
+    status: &'static str,
+    message: Option<String>,
+    out_size: Option<u64>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    not_smaller: bool,
+  },
 }
 
 /// Splits raw output chunks on `\r` / `\n` (ffmpeg rewrites its progress
@@ -88,7 +99,7 @@ impl LineSplitter {
   }
 }
 
-fn finish(job: Running, status: &'static str, message: Option<String>) {
+fn finish(job: Running, status: &'static str, message: Option<String>, not_smaller: bool) {
   let out = &job.out;
   // A killed / failed encoder leaves a truncated file at the final name:
   // always remove it. The name was free before we started (unique_out_path).
@@ -98,7 +109,7 @@ fn finish(job: Running, status: &'static str, message: Option<String>) {
     let _ = std::fs::remove_file(out);
     None
   };
-  let _ = job.channel.send(JobEvent::Finished { status, message, out_size });
+  let _ = job.channel.send(JobEvent::Finished { status, message, out_size, not_smaller });
 }
 
 /// Same wording as the old JS pre-flight check.
@@ -133,7 +144,7 @@ pub fn start<R: Runtime>(
     .spawn()
     .map_err(|e| format!("{program}: {e}{}", install_hint(program)))?;
   let _ = channel.send(JobEvent::Log { line: header });
-  app.state::<Jobs>().0.lock().unwrap().insert(job_id, Running { child: Some(child), cancelled: false, out, channel: channel.clone() });
+  app.state::<Jobs>().0.lock().unwrap().insert(job_id, Running { child: Some(child), cancelled: Default::default(), out, channel: channel.clone() });
 
   let app = app.clone();
   let program = program.to_string();
@@ -163,25 +174,65 @@ pub fn start<R: Runtime>(
     let Some(job) = app.state::<Jobs>().0.lock().unwrap().remove(&job_id) else {
       return; // the cancel backstop (or app exit) already took it
     };
-    match (job.cancelled, code) {
-      (true, _) => finish(job, "cancelled", None),
-      (false, Some(0)) => finish(job, "success", None),
+    match (job.cancelled.load(Ordering::Relaxed), code) {
+      (true, _) => finish(job, "cancelled", None, false),
+      (false, Some(0)) => finish(job, "success", None, false),
       (false, c) => {
         let code = c.map_or("unknown".into(), |c| c.to_string());
-        finish(job, "error", Some(format!("{program} exited with code {code}: {last_line}")))
+        finish(job, "error", Some(format!("{program} exited with code {code}: {last_line}")), false)
       }
     }
   });
   Ok(job_id)
 }
 
-/// Kills the job's process tree. Unknown / finished ids are a no-op.
+/// Runs `work(cancelled, progress)` on a thread, as a job like `start`'s:
+/// same `Jobs` entry, cancel, single `finished`. `header` is logged as
+/// `> Executing: <header>` (hub E2E counts those lines). `work` builds the
+/// output (bytes + not-smaller flag) in memory; it's written to `out` only after the job is taken out
+/// of `Jobs`, so a cancel backstop / app exit can't delete it mid-write or
+/// race a late write after cleaning up.
+pub fn start_task<R: Runtime>(
+  app: &AppHandle<R>,
+  header: &str,
+  out: PathBuf,
+  channel: Channel<JobEvent>,
+  work: impl FnOnce(&AtomicBool, &dyn Fn(f64)) -> Result<crate::pdf_compress::Outcome, String> + Send + 'static,
+) -> u64 {
+  let job_id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+  let cancelled = Arc::new(AtomicBool::new(false));
+  let _ = channel.send(JobEvent::Log { line: format!("> Executing: {header}") });
+  let running = Running { child: None, cancelled: cancelled.clone(), out, channel: channel.clone() };
+  app.state::<Jobs>().0.lock().unwrap().insert(job_id, running);
+
+  let app = app.clone();
+  std::thread::spawn(move || {
+    let result = work(&cancelled, &|percent| _ = channel.send(JobEvent::Progress { percent }));
+    let Some(job) = app.state::<Jobs>().0.lock().unwrap().remove(&job_id) else {
+      return; // the cancel backstop (or app exit) already took it
+    };
+    match result {
+      _ if job.cancelled.load(Ordering::Relaxed) => finish(job, "cancelled", None, false),
+      Err(e) => finish(job, "error", Some(e), false),
+      Ok(o) => match std::fs::write(&job.out, &o.bytes) {
+        Ok(()) => finish(job, "success", None, o.not_smaller),
+        Err(e) => {
+          let message = format!("{}: {e}", job.out.display());
+          finish(job, "error", Some(message), false)
+        }
+      },
+    }
+  });
+  job_id
+}
+
+/// Kills the job's process tree (sidecar) or flags it (task). Unknown / finished ids are a no-op.
 pub fn cancel<R: Runtime>(app: &AppHandle<R>, job_id: u64) {
   let child = {
     let jobs = app.state::<Jobs>();
     let mut jobs = jobs.0.lock().unwrap();
     let Some(job) = jobs.get_mut(&job_id) else { return };
-    job.cancelled = true;
+    job.cancelled.store(true, Ordering::Relaxed);
     job.child.take()
   };
   if let Some(child) = child {
@@ -192,7 +243,7 @@ pub fn cancel<R: Runtime>(app: &AppHandle<R>, job_id: u64) {
     std::thread::sleep(CANCEL_BACKSTOP);
     let job = app.state::<Jobs>().0.lock().unwrap().remove(&job_id);
     if let Some(job) = job {
-      finish(job, "cancelled", Some("timed out waiting for process exit".into()));
+      finish(job, "cancelled", Some("timed out waiting for process exit".into()), false);
     }
   });
 }

@@ -16,6 +16,8 @@ percent-encoding = "2" # sorai-media:// request paths (preview.rs)
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 regex = "1"
+# Built-in PDF compressor (pdf_compress.rs). Defaults (chrono, rayon) unused.
+lopdf = { version = "0.46", default-features = false }
 
 [build-dependencies]
 tauri-plugin = { version = "2.7", features = ["build"] }

@@ -92,7 +92,9 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
         if (result.outSize != null) {
           const convertedSizeMB = (result.outSize / (1024 * 1024)).toFixed(2)
           // By path (unique in the queue), not index: the list may change mid-run.
-          setFiles((prev) => prev.map((f) => (f.path === fileObj.path ? { ...f, converted: true, convertedSizeMB, failed: null } : f)))
+          // notSmaller: the output is a copy of the source (PDF compress).
+          const notSmaller = !!result.notSmaller
+          setFiles((prev) => prev.map((f) => (f.path === fileObj.path ? { ...f, converted: true, convertedSizeMB, notSmaller, failed: null } : f)))
         }
       } else if (result.status === 'error') {
         // Non-blocking: log line + the row's "failed" mark (title = message).

@@ -139,7 +139,7 @@ function App({ pendingLaunch, editPreset, onEditDone }) {
   // change clears `converted` on files that have it, so FileList falls
   // back to a live estimate for whatever's now selected.
   useEffect(() => {
-    setFiles((prev) => (prev.some((f) => f.converted || f.failed) ? prev.map((f) => (f.converted || f.failed ? { ...f, converted: false, convertedSizeMB: undefined, failed: null } : f)) : prev))
+    setFiles((prev) => (prev.some((f) => f.converted || f.failed) ? prev.map((f) => (f.converted || f.failed ? { ...f, converted: false, convertedSizeMB: undefined, notSmaller: false, failed: null } : f)) : prev))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.video, settings.image, settings.audio, settings.pdf])
 

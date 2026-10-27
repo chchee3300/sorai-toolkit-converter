@@ -108,7 +108,11 @@ export default function FileList({ files, fileType, settings, onRemove, onOpenTr
                   {fileObj.converted ? (
                     <>
                       ({(fileObj.size / (1024 * 1024)).toFixed(2)} MB){' '}
-                      <span style={{ color: 'var(--accent)' }}>&rarr; {fileObj.convertedSizeMB} MB</span>
+                      {fileObj.notSmaller ? (
+                        <span className="file-not-smaller">&rarr; {t('file.notSmaller')}</span>
+                      ) : (
+                        <span style={{ color: 'var(--accent)' }}>&rarr; {fileObj.convertedSizeMB} MB</span>
+                      )}
                     </>
                   ) : fileObj.failed ? (
                     <>

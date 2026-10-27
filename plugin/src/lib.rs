@@ -9,6 +9,7 @@ use tauri::{
   AppHandle, Manager, RunEvent, Runtime,
 };
 pub mod convert;
+pub mod pdf_compress;
 pub mod preview;
 pub mod runner;
 pub mod sidecar;
@@ -192,10 +193,11 @@ pub fn resolve_out_dir(out_dir: &str, src: &Path) -> Result<PathBuf, String> {
 }
 
 /// Starts converting one file into `outDir` (never overwriting: picks a
-/// free `<name>_converted...` name). Returns at once; log / progress /
-/// finished arrive on `on_event` (see runner.rs).
+/// free `<name>_converted...` name). Returns once the job runs; log /
+/// progress / finished arrive on `on_event` (see runner.rs). Async only so
+/// reading a PDF to compress stays off the main thread.
 #[tauri::command]
-fn start_convert<R: Runtime>(
+async fn start_convert<R: Runtime>(
   app: AppHandle<R>,
   job: convert::Job,
   out_dir: String,
@@ -206,6 +208,16 @@ fn start_convert<R: Runtime>(
   let out = convert::unique_out_path(&resolve_out_dir(&out_dir, src)?, &stem, job.out_ext(), |p| p.exists());
   let out_path = out.to_string_lossy().into_owned();
   let args = convert::build_args(&job, &out_path)?;
+  // PDF compress: built-in, except encrypted files stay on qpdf (keeps the
+  // encryption; a missing open password gets qpdf's own error).
+  if matches!(&job.kind, convert::Kind::Pdf(p) if p.optimize == "compress") {
+    let bytes = std::fs::read(src).map_err(|e| format!("{}: {e}", src.display()))?;
+    if !pdf_compress::is_encrypted(&bytes) {
+      let header = convert::display_command("builtin-pdf-compress", &[job.source.path.clone(), out_path.clone()]);
+      let job_id = runner::start_task(&app, &header, out, on_event, move |cancel, progress| pdf_compress::compress(&bytes, cancel, progress));
+      return Ok(Started { job_id, out_path });
+    }
+  }
   let (duration, speed) = (job.source.duration, job.speed());
   let job_id = runner::start(&app, convert::program(&job), args, out, move |line| convert::parse_progress(line, duration, speed), on_event)?;
   Ok(Started { job_id, out_path })
