@@ -359,6 +359,7 @@ function AudioSettings({ visible, audio, setAudio }) {
             <option value=".mp3">MP3</option>
             <option value=".wav">WAV</option>
             <option value=".aac">AAC</option>
+            <option value=".m4a">M4A</option>
             <option value=".flac">FLAC</option>
             <option value=".ogg">OGG</option>
           </GlassSelect>

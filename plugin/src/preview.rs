@@ -19,6 +19,7 @@ fn mime(path: &str) -> &'static str {
     "mp3" => "audio/mpeg",
     "wav" => "audio/wav",
     "aac" => "audio/aac",
+    "m4a" => "audio/mp4",
     "flac" => "audio/flac",
     "ogg" => "audio/ogg",
     "png" => "image/png",

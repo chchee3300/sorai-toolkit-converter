@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react'
 // Matches resources/index.html's <option> lists exactly (index.html:108-219).
 export const VIDEO_FORMATS = ['.mp4', '.mkv', '.webm', '.avi', '.gif']
 export const IMAGE_FORMATS = ['.jpg', '.png', '.webp', '.avif', '.ico', '.pdf']
-export const AUDIO_FORMATS = ['.mp3', '.wav', '.aac', '.flac', '.ogg']
+export const AUDIO_FORMATS = ['.mp3', '.wav', '.aac', '.m4a', '.flac', '.ogg']
 
 // Preset "compress to under N MB" targets -- decimal MB (1,000,000 bytes),
 // not MiB, deliberately stricter for extra safety margin against

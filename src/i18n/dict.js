@@ -55,7 +55,7 @@ export const dict = {
     'toolIntro.image.title': 'Image',
     'toolIntro.image.desc': 'JPG, PNG, WebP, AVIF, or ICO — control quality, scale resolution down, or export straight to PDF.',
     'toolIntro.audio.title': 'Audio',
-    'toolIntro.audio.desc': 'MP3, WAV, AAC, FLAC, or OGG — set bitrate and change playback speed.',
+    'toolIntro.audio.desc': 'MP3, WAV, AAC, M4A, FLAC, or OGG — set bitrate and change playback speed.',
     'toolIntro.pdf.title': 'PDF',
     'toolIntro.pdf.desc': 'Linearize for fast web view, or compress for maximum size reduction.',
 
@@ -211,7 +211,7 @@ export const dict = {
     'toolIntro.image.title': '圖片',
     'toolIntro.image.desc': 'JPG、PNG、WebP、AVIF 或 ICO — 調整畫質、縮放解析度，或直接匯出成 PDF。',
     'toolIntro.audio.title': '音訊',
-    'toolIntro.audio.desc': 'MP3、WAV、AAC、FLAC 或 OGG — 設定位元速率並調整播放速度。',
+    'toolIntro.audio.desc': 'MP3、WAV、AAC、M4A、FLAC 或 OGG — 設定位元速率並調整播放速度。',
     'toolIntro.pdf.title': 'PDF',
     'toolIntro.pdf.desc': '線性化以加快網頁瀏覽，或壓縮以最大化縮小檔案大小。',
 

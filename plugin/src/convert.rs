@@ -292,6 +292,10 @@ pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
         // ceiling ("encoder setup failed": 320k on a mono 44.1k source);
         // VBR quality works for any layout, so map the kbps onto -q:a.
         a.extend([s("-c:a"), s("libvorbis"), s("-q:a"), vorbis_quality(&au.bitrate).to_string()]);
+      } else if au.format == ".m4a" {
+        // The ipod muxer refuses the h264 ffmpeg would re-encode cover art
+        // to; copy it as an attached picture instead.
+        a.extend([s("-c:v"), s("copy"), s("-disposition:v"), s("attached_pic"), s("-c:a"), s("aac"), s("-b:a"), au.bitrate.clone()]);
       } else {
         a.extend([s("-b:a"), au.bitrate.clone()]);
       }
@@ -603,6 +607,9 @@ mod tests {
   fn audio_bitrate_speed_and_ogg_encoder() {
     assert_eq!(joined(src("a.mp3"), audio(".aac", "128k", 2.0)), "-y -i a.mp3 -af atempo=2 -b:a 128k o.x");
     assert_eq!(joined(src("a.mp3"), audio(".ogg", "192k", 1.0)), "-y -i a.mp3 -c:a libvorbis -q:a 6 o.x");
+    // M4A: AAC; cover art copied as an attached picture (re-encoding it to
+    // h264 is refused by the ipod muxer).
+    assert_eq!(joined(src("a.flac"), audio(".m4a", "192k", 1.0)), "-y -i a.flac -c:v copy -disposition:v attached_pic -c:a aac -b:a 192k o.x");
   }
 
   #[test]

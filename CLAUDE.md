@@ -11,7 +11,7 @@
 
 1. **Video**：格式切換 (MP4/WebM/GIF)、編碼器自動隱藏、FPS 計算、畫質壓縮、變速。
 2. **Image**：格式切換 (JPG/PNG/WebP/AVIF)、Quality（注意 PNG `palettegen` 是否正確觸發）、Scale 計算。
-3. **Audio**：格式切換 (MP3/WAV/AAC/FLAC/OGG)、Bitrate、變速 (`atempo`)。
+3. **Audio**：格式切換 (MP3/WAV/AAC/M4A/FLAC/OGG；M4A＝AAC，封面以 `-c:v copy -disposition:v attached_pic` 複製，重新編碼成 h264 會被 ipod muxer 拒絕)、Bitrate、變速 (`atempo`)。
 4. **PDF**：Compress（內建壓縮器，加密檔走 qpdf，內建讀不了的走 gs／qpdf 修復）／Linearize（qpdf）。
 5. **共用功能**：即時預估算法、進度條解析、檔名防覆蓋機制 (`_converted_converted`)。
 

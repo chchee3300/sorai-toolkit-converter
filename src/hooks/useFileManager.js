@@ -7,7 +7,7 @@ import { probeSource, setPreviewFiles } from '../plugin.js'
 // pre-extraction).
 const VIDEO_EXTS = ['mp4', 'mkv', 'avi', 'mov', 'webm']
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif', 'ico']
-const AUDIO_EXTS = ['mp3', 'wav', 'aac', 'flac', 'ogg']
+const AUDIO_EXTS = ['mp3', 'wav', 'aac', 'm4a', 'flac', 'ogg']
 const PDF_EXTS = ['pdf']
 
 function getFileType(filename) {
