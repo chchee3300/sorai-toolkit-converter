@@ -13,6 +13,9 @@ import { useTranslation } from '../hooks/useTranslation.js'
 
 // Module-level: an install started here outlives this component.
 let promptOpen = false
+// engine_set_prompted failed (engines.json not writable): don't show it
+// again on every visit this session.
+let recordFailed = false
 
 const tNow = (key, params) => window.EstellaLib.i18n.translate(dict, window.EstellaLib.i18n.getLang(), key, params)
 
@@ -40,13 +43,16 @@ export default function EnginePrompt() {
     let live = true
     enginePrompt()
       .then(async (due) => {
-        if (!due) return
+        if (!due || recordFailed) return
         const list = await engineStatus()
         if (!live) return
         setEngines(list)
         setPicked(Object.fromEntries(list.map((e) => [e.id, e.installable])))
         promptOpen = true
-        await engineSetPrompted(true)
+        await engineSetPrompted(true).catch((e) => {
+          recordFailed = true
+          console.warn('engine_set_prompted failed; not showing the prompt again this session', e)
+        })
       })
       .catch(console.error)
     return () => {

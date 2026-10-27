@@ -20,10 +20,13 @@ use lopdf::{Document, LoadOptions, Object, ObjectId, Stream};
 const MAX_DECODED: usize = 512 * 1024 * 1024;
 
 pub struct Outcome {
-  /// The compressed PDF, or a copy of the input when `not_smaller`.
+  /// The compressed PDF; empty when `not_smaller`.
   pub bytes: Vec<u8>,
-  /// Nothing came out smaller than the input: `bytes` is the input.
+  /// Nothing came out smaller than the input: the output is a copy of the
+  /// source file (the runner copies it; no second copy in memory).
   pub not_smaller: bool,
+  /// The source's page count (a Ghostscript result must match it).
+  pub pages: usize,
 }
 
 /// `level` is the PDF setting (`screen` / `ebook` / `printer`; anything
@@ -46,18 +49,24 @@ pub fn compress(src: &[u8], level: &str, cancel: &AtomicBool, progress: &dyn Fn(
     _ => (150.0, 65),
   };
   let (shown, page) = (display_sizes(&doc), page_size(&doc));
-  // Soft masks are resized with their image, never on their own.
+  // Soft masks are resized with their image, never on their own; one shared
+  // by several images keeps its size (PDF lets it differ from the image's).
   let all: Vec<_> = doc.objects.iter().filter_map(|(id, o)| Some((*id, o.as_stream().ok()?))).collect();
-  let smasks: HashSet<ObjectId> = all.iter().filter_map(|(_, s)| s.dict.get(b"SMask").ok()?.as_reference().ok()).collect();
+  let mut smasks: HashMap<ObjectId, usize> = HashMap::new();
+  for m in all.iter().filter_map(|(_, s)| s.dict.get(b"SMask").ok()?.as_reference().ok()) {
+    *smasks.entry(m).or_default() += 1;
+  }
   let images: Vec<ObjectId> =
-    all.iter().filter(|(id, s)| !smasks.contains(id) && s.dict.get(b"Subtype").and_then(Object::as_name).ok() == Some(b"Image")).map(|(id, _)| *id).collect();
+    all.iter().filter(|(id, s)| !smasks.contains_key(id) && s.dict.get(b"Subtype").and_then(Object::as_name).ok() == Some(b"Image")).map(|(id, _)| *id).collect();
   let ids: Vec<ObjectId> = all.iter().map(|(id, _)| *id).collect();
   for (i, id) in images.iter().enumerate() {
     if cancel.load(Ordering::Relaxed) {
       return Err("cancelled".into());
     }
     for (id, s) in shrink(&doc, *id, shown.get(id).copied().unwrap_or(page), dpi, quality).unwrap_or_default() {
-      doc.objects.insert(id, Object::Stream(s));
+      if smasks.get(&id).is_none_or(|users| *users == 1) {
+        doc.objects.insert(id, Object::Stream(s));
+      }
     }
     progress((i + 1) as f64 * 100.0 / images.len() as f64);
   }
@@ -76,9 +85,13 @@ pub fn compress(src: &[u8], level: &str, cancel: &AtomicBool, progress: &dyn Fn(
   // ponytail: lopdf's prune is O(n^2) (Vec::contains); fine below ~10k objects.
   doc.prune_objects();
 
+  // Object streams + an xref stream (PDF 1.5; lopdf bumps older versions):
+  // a classic xref with loose dictionaries inflates files that already use them.
+  let options = lopdf::SaveOptions::builder().use_object_streams(true).use_xref_streams(true).compression_level(9).build();
   let mut out = vec![];
-  doc.save_to(&mut out).map_err(|e| e.to_string())?;
-  Ok(if out.len() < src.len() { Outcome { bytes: out, not_smaller: false } } else { Outcome { bytes: src.to_vec(), not_smaller: true } })
+  doc.save_with_options(&mut out, options).map_err(|e| e.to_string())?;
+  let pages = doc.get_pages().len();
+  Ok(if out.len() < src.len() { Outcome { bytes: out, not_smaller: false, pages } } else { Outcome { bytes: vec![], not_smaller: true, pages } })
 }
 
 /// Has an `/Encrypt` key (classic trailer or xref-stream dictionary, both
@@ -365,9 +378,22 @@ fn walk(doc: &Document, content: &[u8], res: &[&lopdf::Dictionary], ctm: Matrix,
 }
 
 /// Largest page (points) in the document, for images we couldn't track.
+/// MediaBox is inheritable: missing on the page means look up `/Parent`.
 fn page_size(doc: &Document) -> (f64, f64) {
+  let media_box = |page: ObjectId| {
+    let mut node = doc.get_dictionary(page).ok();
+    // ponytail: depth cap instead of cycle tracking, like walk().
+    for _ in 0..32 {
+      let d = node?;
+      if let Some(m) = d.get(b"MediaBox").ok().and_then(|m| deref(doc, m)) {
+        return Some(numbers(Some(m)));
+      }
+      node = d.get(b"Parent").ok().and_then(|p| deref(doc, p)?.as_dict().ok());
+    }
+    None
+  };
   doc.get_pages().into_values().fold((0.0, 0.0), |acc, page| {
-    let b = doc.get_dictionary(page).ok().and_then(|d| d.get(b"MediaBox").ok()).map(|m| numbers(Some(m))).unwrap_or_default();
+    let b = media_box(page).unwrap_or_default();
     match b[..] {
       [x0, y0, x1, y1] => (acc.0.max((x1 - x0).abs()), acc.1.max((y1 - y0).abs())),
       _ => acc,
@@ -527,6 +553,15 @@ mod tests {
     assert_eq!(page_size(&doc), (612.0, 792.0));
   }
 
+  #[test]
+  fn page_size_inherits_media_box_from_the_pages_tree() {
+    let (mut doc, page) = page_doc("");
+    doc.get_dictionary_mut(page).unwrap().remove(b"MediaBox");
+    let pages = doc.get_dictionary(page).unwrap().get(b"Parent").unwrap().as_reference().unwrap();
+    doc.get_dictionary_mut(pages).unwrap().set("MediaBox", vec![0.into(), 0.into(), 300.into(), 400.into()]);
+    assert_eq!(page_size(&doc), (300.0, 400.0));
+  }
+
   /// A ramp plus noise: a photo (well over 256 colors / 16 gray levels),
   /// still compressible enough for Flate.
   fn photo(w: u32, h: u32, n: u32) -> Vec<u8> {
@@ -560,7 +595,7 @@ mod tests {
   /// The (only) image stream after compressing at `level`.
   fn image_after(src: &[u8], level: &str) -> Stream {
     let out = compress(src, level, &AtomicBool::new(false), &|_| {}).unwrap();
-    let doc = Document::load_mem(&out.bytes).unwrap();
+    let doc = Document::load_mem(if out.not_smaller { src } else { &out.bytes }).unwrap(); // the runner copies the source
     let page = *doc.get_pages().values().next().unwrap();
     let (res, _) = doc.get_page_resources(page).unwrap();
     let id = res.unwrap().get(b"XObject").unwrap().as_dict().unwrap().get(b"Im0").unwrap().as_reference().unwrap();
@@ -674,6 +709,31 @@ mod tests {
   }
 
   #[test]
+  fn soft_mask_shared_by_two_images_is_not_scaled_twice() {
+    // Same 600 px mask; Im0 drawn at 72 pt (-> 150 px), Im1 at 144 pt (-> 300 px).
+    let (mut doc, page) = page_doc("q 72 0 0 72 0 0 cm /Im0 Do Q q 144 0 0 144 0 0 cm /Im1 Do Q");
+    let mask = doc.add_object(Stream::new(
+      dictionary! { "Type" => "XObject", "Subtype" => "Image", "Width" => 600, "Height" => 600, "ColorSpace" => "DeviceGray", "BitsPerComponent" => 8 },
+      photo(600, 600, 1),
+    ));
+    let image = |doc: &mut Document, seed: u8| {
+      let px = photo(600, 600, 3).into_iter().map(|p| p.wrapping_add(seed)).collect();
+      doc.add_object(Stream::new(
+        dictionary! { "Type" => "XObject", "Subtype" => "Image", "Width" => 600, "Height" => 600, "ColorSpace" => "DeviceRGB", "BitsPerComponent" => 8, "SMask" => mask },
+        px,
+      ))
+    };
+    let (im0, im1) = (image(&mut doc, 0), image(&mut doc, 1));
+    set_xobjects(&mut doc, page, dictionary! { "Im0" => im0, "Im1" => im1 });
+    let out = compress(&bytes(&mut doc), "ebook", &AtomicBool::new(false), &|_| {}).unwrap();
+    let doc = Document::load_mem(&out.bytes).unwrap();
+    let stream = |id| doc.get_object(id).unwrap().as_stream().unwrap();
+    assert_eq!((dim(stream(im0)), dim(stream(im1))), ((150, 150), (300, 300)));
+    // PDF lets a soft mask's size differ from its image's: the shared one stays as it was.
+    assert_eq!(dim(stream(mask)), (600, 600));
+  }
+
+  #[test]
   fn gray_jpeg_is_downsampled_and_unresized_jpeg_needs_ten_percent() {
     let (src, _) = image_pdf(dictionary! { "ColorSpace" => "DeviceGray", "BitsPerComponent" => 8, "Filter" => "DCTDecode" }, 600, 600, jpeg(&photo(600, 600, 1), 600, 600, 95), 72);
     assert_eq!(dim(&image_after(&src, "screen")), (72, 72));
@@ -750,7 +810,35 @@ mod tests {
     assert!(!once.not_smaller);
     let twice = run(&once.bytes);
     assert!(twice.not_smaller);
-    assert_eq!(twice.bytes, once.bytes);
+    assert!(twice.bytes.is_empty()); // no second copy of the source: the runner copies the file
+  }
+
+  #[test]
+  fn object_stream_pdf_with_little_to_gain_still_shrinks() {
+    // 100 text pages with compressed content, saved with object streams +
+    // an xref stream; the only waste is a 2 KB noise thumbnail. Written back
+    // with a classic xref and loose objects, the output would be bigger.
+    let mut doc = Document::with_version("1.5");
+    let pages_id = doc.new_object_id();
+    let kids: Vec<Object> = (0..100)
+      .map(|i| {
+        let mut content = Stream::new(dictionary! {}, format!("BT /F1 12 Tf 72 720 Td (Page {i}) Tj ET").into_bytes());
+        content.compress().unwrap();
+        let content = doc.add_object(content);
+        doc.add_object(dictionary! { "Type" => "Page", "Parent" => pages_id, "Contents" => content, "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()], "Resources" => dictionary! {} }).into()
+      })
+      .collect();
+    doc.objects.insert(pages_id, Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => kids, "Count" => 100 }));
+    let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    doc.trailer.set("Root", catalog);
+    let thumb = doc.add_object(Stream::new(dictionary! {}, photo(2000, 1, 1).iter().map(|b| b.wrapping_mul(97)).collect()));
+    let first = *doc.get_pages().values().next().unwrap();
+    doc.get_dictionary_mut(first).unwrap().set("Thumb", thumb);
+    let mut src = vec![];
+    doc.save_modern(&mut src).unwrap();
+    let out = run(&src);
+    assert!(!out.not_smaller && out.bytes.len() < src.len(), "{} -> {}", src.len(), out.bytes.len());
+    assert_eq!(Document::load_mem(&out.bytes).unwrap().get_pages().len(), 100);
   }
 
   #[test]

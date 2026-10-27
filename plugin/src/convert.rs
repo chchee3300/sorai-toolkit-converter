@@ -345,6 +345,15 @@ pub fn unique_out_path(dir: &Path, stem: &str, ext: &str, exists: impl Fn(&Path)
   }
 }
 
+/// `exists` for `unique_out_path` that also reserves: creates `p` empty
+/// (atomically, `create_new`), so a job started a moment later can't pick
+/// the same name before this one writes. Taken = something is there (a
+/// folder on Windows fails with access denied); any other error leaves the
+/// name to the job, which then fails on it.
+pub fn taken(p: &Path) -> bool {
+  std::fs::File::create_new(p).is_err_and(|e| e.kind() == std::io::ErrorKind::AlreadyExists || p.exists())
+}
+
 #[derive(Serialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Estimate {
@@ -654,6 +663,19 @@ mod tests {
     let p = unique_out_path(Path::new("d"), "a", ".mp4", |p| taken.iter().any(|t| t == p));
     assert_eq!(p, PathBuf::from("d").join("a_converted_converted_converted.mp4"));
     assert_eq!(unique_out_path(Path::new("d"), "影片 一", ".gif", |_| false), PathBuf::from("d").join("影片 一_converted.gif"));
+  }
+
+  #[test]
+  fn taken_reserves_the_name_so_concurrent_jobs_never_share_it() {
+    let dir = std::env::temp_dir().join(format!("sorai-reserve-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let a = unique_out_path(&dir, "文件", ".pdf", taken);
+    let b = unique_out_path(&dir, "文件", ".pdf", taken);
+    assert_eq!((a.file_name().unwrap(), b.file_name().unwrap()), ("文件_converted.pdf".as_ref(), "文件_converted_converted.pdf".as_ref()));
+    assert_eq!(std::fs::metadata(&a).unwrap().len(), 0); // reserved: an empty file
+    // A folder it can't create in still gets a name (the job then fails on it).
+    assert_eq!(unique_out_path(&dir.join("missing"), "x", ".pdf", taken), dir.join("missing").join("x_converted.pdf"));
   }
 
   fn est(source: Source, kind: Kind) -> Estimate {

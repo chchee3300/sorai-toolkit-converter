@@ -194,9 +194,11 @@ pub fn resolve_out_dir(out_dir: &str, src: &Path) -> Result<PathBuf, String> {
 }
 
 /// Starts converting one file into `outDir` (never overwriting: picks a
-/// free `<name>_converted...` name). Returns once the job runs; log /
-/// progress / finished arrive on `on_event` (see runner.rs). Async only so
-/// reading a PDF to compress stays off the main thread.
+/// free `<name>_converted...` name and reserves it as an empty file right
+/// away, so concurrent jobs never share it; removed again if the job can't
+/// start, and by the runner on error / cancel). Returns once the job runs;
+/// log / progress / finished arrive on `on_event` (see runner.rs). Async
+/// only so reading a PDF to compress stays off the main thread.
 #[tauri::command]
 async fn start_convert<R: Runtime>(
   app: AppHandle<R>,
@@ -206,9 +208,18 @@ async fn start_convert<R: Runtime>(
 ) -> Result<Started, String> {
   let src = Path::new(&job.source.path);
   let stem = src.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-  let out = convert::unique_out_path(&resolve_out_dir(&out_dir, src)?, &stem, job.out_ext(), |p| p.exists());
+  let out = convert::unique_out_path(&resolve_out_dir(&out_dir, src)?, &stem, job.out_ext(), convert::taken);
   let out_path = out.to_string_lossy().into_owned();
-  let args = convert::build_args(&job, &out_path)?;
+  let started = start_job(&app, &job, out.clone(), on_event).await;
+  if started.is_err() {
+    let _ = std::fs::remove_file(&out);
+  }
+  Ok(Started { job_id: started?, out_path })
+}
+
+async fn start_job<R: Runtime>(app: &AppHandle<R>, job: &convert::Job, out: PathBuf, on_event: tauri::ipc::Channel<runner::JobEvent>) -> Result<u64, String> {
+  let out_path = out.to_string_lossy().into_owned();
+  let args = convert::build_args(job, &out_path)?;
   // PDF compress: built-in, except encrypted files stay on qpdf (keeps the
   // encryption; a missing open password gets qpdf's own error).
   let compress_level = match &job.kind {
@@ -216,21 +227,25 @@ async fn start_convert<R: Runtime>(
     _ => None,
   };
   if let Some(level) = compress_level {
-    let bytes = std::fs::read(src).map_err(|e| format!("{}: {e}", src.display()))?;
+    // Whole-file read: blocking, so not on the async runtime's threads.
+    let path = PathBuf::from(&job.source.path);
+    let bytes = tauri::async_runtime::spawn_blocking(move || std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display())))
+      .await
+      .map_err(|e| e.to_string())??;
     if !pdf_compress::is_encrypted(&bytes) {
-      let header = convert::display_command("builtin-pdf-compress", &[job.source.path.clone(), out_path.clone()]);
-      // With Ghostscript (engines.rs) it runs too and the smaller result wins.
-      let (gs, src, log) = (engines::ghostscript(&app), job.source.path.clone(), on_event.clone());
-      let job_id = runner::start_task(&app, &header, out, on_event, move |cancel, progress| {
+      let header = convert::display_command("builtin-pdf-compress", &[job.source.path.clone(), out_path]);
+      // With Ghostscript (engines.rs) it runs too and the smaller result wins;
+      // a file the built-in can't read goes to gs, else qpdf.
+      let (gs, src, log) = (engines::ghostscript(app), job.source.path.clone(), on_event.clone());
+      let qpdf = sidecar::bundled(app, "qpdf").unwrap_or_else(|| "qpdf".into());
+      return Ok(runner::start_task(app, &header, src.clone().into(), out, on_event, move |cancel, progress| {
         let log = |line| _ = log.send(runner::JobEvent::Log { line });
-        engines::compress_best(&bytes, &src, &level, gs, cancel, progress, &log)
-      });
-      return Ok(Started { job_id, out_path });
+        engines::compress_best(&bytes, &src, &level, gs, &qpdf, cancel, progress, &log)
+      }));
     }
   }
   let (duration, speed) = (job.source.duration, job.speed());
-  let job_id = runner::start(&app, convert::program(&job), args, out, move |line| convert::parse_progress(line, duration, speed), on_event)?;
-  Ok(Started { job_id, out_path })
+  runner::start(app, convert::program(job), args, out, move |line| convert::parse_progress(line, duration, speed), on_event)
 }
 
 /// Optional engines for the hub's settings and the PDF status line.

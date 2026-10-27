@@ -189,12 +189,14 @@ pub fn start<R: Runtime>(
 /// Runs `work(cancelled, progress)` on a thread, as a job like `start`'s:
 /// same `Jobs` entry, cancel, single `finished`. `header` is logged as
 /// `> Executing: <header>` (hub E2E counts those lines). `work` builds the
-/// output (bytes + not-smaller flag) in memory; it's written to `out` only after the job is taken out
+/// output (bytes + not-smaller flag) in memory; it's written to `out` (or,
+/// when not smaller, `source` is copied there) only after the job is taken out
 /// of `Jobs`, so a cancel backstop / app exit can't delete it mid-write or
 /// race a late write after cleaning up.
 pub fn start_task<R: Runtime>(
   app: &AppHandle<R>,
   header: &str,
+  source: PathBuf,
   out: PathBuf,
   channel: Channel<JobEvent>,
   work: impl FnOnce(&AtomicBool, &dyn Fn(f64)) -> Result<crate::pdf_compress::Outcome, String> + Send + 'static,
@@ -214,7 +216,7 @@ pub fn start_task<R: Runtime>(
     match result {
       _ if job.cancelled.load(Ordering::Relaxed) => finish(job, "cancelled", None, false),
       Err(e) => finish(job, "error", Some(e), false),
-      Ok(o) => match std::fs::write(&job.out, &o.bytes) {
+      Ok(o) => match if o.not_smaller { std::fs::copy(&source, &job.out).map(drop) } else { std::fs::write(&job.out, &o.bytes) } {
         Ok(()) => finish(job, "success", None, o.not_smaller),
         Err(e) => {
           let message = format!("{}: {e}", job.out.display());
@@ -235,6 +237,8 @@ pub fn cancel<R: Runtime>(app: &AppHandle<R>, job_id: u64) {
     job.cancelled.store(true, Ordering::Relaxed);
     job.child.take()
   };
+  // In-process tasks have no process to wait for: no message.
+  let message = child.is_some().then(|| "timed out waiting for process exit".to_string());
   if let Some(child) = child {
     std::thread::spawn(move || child.kill()); // blocks until exit
   }
@@ -243,7 +247,7 @@ pub fn cancel<R: Runtime>(app: &AppHandle<R>, job_id: u64) {
     std::thread::sleep(CANCEL_BACKSTOP);
     let job = app.state::<Jobs>().0.lock().unwrap().remove(&job_id);
     if let Some(job) = job {
-      finish(job, "cancelled", Some("timed out waiting for process exit".into()), false);
+      finish(job, "cancelled", message, false);
     }
   });
 }

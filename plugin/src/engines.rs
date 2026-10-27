@@ -99,13 +99,28 @@ pub fn gs_args(level: &str, input: &str, out: &str) -> Vec<String> {
   .into()
 }
 
-/// The smaller of the built-in result and Ghostscript's output. The
-/// built-in's bytes are already the source when it couldn't shrink it, so
-/// "smaller than that" also means "smaller than the source".
-pub fn smallest(builtin: Outcome, gs: Option<Vec<u8>>) -> Outcome {
+/// The smaller of the built-in result and Ghostscript's output. A
+/// not-smaller built-in result stands for the source (`src_len` bytes), so
+/// gs must beat that.
+pub fn smallest(builtin: Outcome, gs: Option<Vec<u8>>, src_len: usize) -> Outcome {
+  let best = if builtin.not_smaller { src_len } else { builtin.bytes.len() };
   match gs {
-    Some(bytes) if bytes.len() < builtin.bytes.len() => Outcome { bytes, not_smaller: false },
+    Some(bytes) if bytes.len() < best => Outcome { bytes, not_smaller: false, pages: builtin.pages },
     _ => builtin,
+  }
+}
+
+/// `bytes` if it's a PDF lopdf reads, with `pages` pages (None: any but 0).
+/// Ghostscript can exit 0 having written an error page or half a document.
+pub fn check_pdf(bytes: Vec<u8>, pages: Option<usize>) -> Result<Vec<u8>, String> {
+  if !bytes.starts_with(b"%PDF-") {
+    return Err("output is not a PDF".into());
+  }
+  let n = lopdf::Document::load_mem(&bytes).map_err(|e| format!("output is not a readable PDF: {e}"))?.get_pages().len();
+  match pages {
+    Some(p) if p != n => Err(format!("output has {n} pages, expected {p}")),
+    None if n == 0 => Err("output has no pages".into()),
+    _ => Ok(bytes),
   }
 }
 
@@ -440,31 +455,49 @@ fn run_gs(exe: &Path, args: &[String], out: &Path, cancel: &AtomicBool) -> Resul
   result
 }
 
+/// `<system temp>/sorai-<tag>-<pid>-<seq>.pdf`: an ASCII name for an engine's output.
+fn temp_pdf(tag: &str) -> PathBuf {
+  std::env::temp_dir().join(format!("sorai-{tag}-{}-{}.pdf", std::process::id(), GS_SEQ.fetch_add(1, Ordering::Relaxed)))
+}
+
 /// PDF compress job body: the built-in compressor, then (when `gs` is set)
 /// Ghostscript on the source into a temp file; the smaller result wins.
-/// Ghostscript failing only logs and keeps the built-in result.
+/// Ghostscript failing (or writing something `check_pdf` refuses) only logs
+/// and keeps the built-in result. When the built-in can't read the file
+/// (damaged), `repair` takes over. `qpdf` is the program to run for that.
 /// ponytail: progress is the built-in's 0-50%, then a jump to 100 after gs
 /// (no per-page parsing); parse gs's `Page N` lines if long files feel stuck.
+#[allow(clippy::too_many_arguments)]
 pub fn compress_best(
   bytes: &[u8],
   src: &str,
   level: &str,
   gs: Option<PathBuf>,
+  qpdf: &Path,
   cancel: &AtomicBool,
   progress: &dyn Fn(f64),
   log: &dyn Fn(String),
 ) -> Result<Outcome, String> {
-  let Some(gs) = gs else { return crate::pdf_compress::compress(bytes, level, cancel, progress) };
-  let builtin = crate::pdf_compress::compress(bytes, level, cancel, &|p| progress(p / 2.0))?;
+  let share = if gs.is_some() { 0.5 } else { 1.0 };
+  let builtin = match crate::pdf_compress::compress(bytes, level, cancel, &|p| progress(p * share)) {
+    Err(e) if !cancel.load(Ordering::Relaxed) => {
+      log(format!("Built-in compressor failed: {e}"));
+      let r = repair(src, level, gs.as_deref(), qpdf, cancel, log);
+      progress(100.0);
+      return r;
+    }
+    r => r?,
+  };
+  let Some(gs) = gs else { return Ok(builtin) };
   if cancel.load(Ordering::Relaxed) {
     return Ok(builtin); // the runner reports `cancelled` and drops it
   }
-  let out = std::env::temp_dir().join(format!("sorai-gs-{}-{}.pdf", std::process::id(), GS_SEQ.fetch_add(1, Ordering::Relaxed)));
+  let out = temp_pdf("gs");
   let args = gs_args(level, src, &out.to_string_lossy());
   log(format!("+ Ghostscript: {}", crate::convert::display_command(&gs.to_string_lossy(), &args)));
-  let gs_bytes = match run_gs(&gs, &args, &out, cancel) {
+  let gs_bytes = match run_gs(&gs, &args, &out, cancel).and_then(|b| check_pdf(b, Some(builtin.pages))) {
     Ok(b) => {
-      log(format!("Ghostscript: {} bytes, built-in: {} bytes", b.len(), builtin.bytes.len()));
+      log(format!("Ghostscript: {} bytes, built-in: {} bytes", b.len(), if builtin.not_smaller { bytes.len() } else { builtin.bytes.len() }));
       Some(b)
     }
     Err(e) => {
@@ -473,7 +506,29 @@ pub fn compress_best(
     }
   };
   progress(100.0);
-  Ok(smallest(builtin, gs_bytes))
+  Ok(smallest(builtin, gs_bytes, bytes.len()))
+}
+
+/// The built-in couldn't read `src`: Ghostscript when there is one, else
+/// (or when it fails) the old `qpdf --stream-data=compress` route, which
+/// repairs damaged files (its warnings don't fail the job). The output is
+/// used as is, like that route's always was.
+fn repair(src: &str, level: &str, gs: Option<&Path>, qpdf: &Path, cancel: &AtomicBool, log: &dyn Fn(String)) -> Result<Outcome, String> {
+  let done = |bytes| Outcome { bytes, not_smaller: false, pages: 0 };
+  if let Some(gs) = gs {
+    let out = temp_pdf("gs");
+    let args = gs_args(level, src, &out.to_string_lossy());
+    log(format!("+ Ghostscript: {}", crate::convert::display_command(&gs.to_string_lossy(), &args)));
+    match run_gs(gs, &args, &out, cancel).and_then(|b| check_pdf(b, None)) {
+      Ok(b) => return Ok(done(b)),
+      Err(e) if cancel.load(Ordering::Relaxed) => return Err(e),
+      Err(e) => log(format!("Ghostscript failed: {e}")),
+    }
+  }
+  let out = temp_pdf("qpdf");
+  let args: Vec<String> = vec!["--stream-data=compress".into(), "--warning-exit-0".into(), src.into(), out.to_string_lossy().into_owned()];
+  log(format!("+ qpdf: {}", crate::convert::display_command(&qpdf.to_string_lossy(), &args)));
+  run_gs(qpdf, &args, &out, cancel).map(done).map_err(|e| format!("qpdf: {e}"))
 }
 
 #[cfg(test)]
@@ -606,16 +661,18 @@ mod tests {
 
   #[test]
   fn keeps_the_smallest_of_builtin_and_ghostscript() {
-    let o = |n: usize, not_smaller| Outcome { bytes: vec![b'b'; n], not_smaller };
-    let size = |r: Outcome| (r.bytes.len(), r.bytes[0], r.not_smaller);
-    assert_eq!(size(smallest(o(50, false), Some(vec![b'g'; 30]))), (30, b'g', false));
-    assert_eq!(size(smallest(o(50, false), Some(vec![b'g'; 70]))), (50, b'b', false));
-    // Built-in couldn't shrink it (bytes = the source, 100): gs at 90 wins.
-    assert_eq!(size(smallest(o(100, true), Some(vec![b'g'; 90]))), (90, b'g', false));
+    // Source: 100 bytes. A not-smaller built-in result carries no bytes.
+    let o = |n: usize| Outcome { bytes: vec![b'b'; n], not_smaller: false, pages: 1 };
+    let same = || Outcome { bytes: vec![], not_smaller: true, pages: 1 };
+    let size = |r: Outcome| (r.bytes.len(), r.bytes.first().copied(), r.not_smaller);
+    assert_eq!(size(smallest(o(50), Some(vec![b'g'; 30]), 100)), (30, Some(b'g'), false));
+    assert_eq!(size(smallest(o(50), Some(vec![b'g'; 70]), 100)), (50, Some(b'b'), false));
+    // Built-in couldn't shrink it: gs at 90 wins.
+    assert_eq!(size(smallest(same(), Some(vec![b'g'; 90]), 100)), (90, Some(b'g'), false));
     // Neither is smaller than the source: the source copy, flagged.
-    assert_eq!(size(smallest(o(100, true), Some(vec![b'g'; 100]))), (100, b'b', true));
+    assert_eq!(size(smallest(same(), Some(vec![b'g'; 100]), 100)), (0, None, true));
     // Ghostscript failed / not installed.
-    assert_eq!(size(smallest(o(50, false), None)), (50, b'b', false));
+    assert_eq!(size(smallest(o(50), None, 100)), (50, Some(b'b'), false));
   }
 
   #[test]
@@ -660,6 +717,92 @@ mod tests {
     // A broken engines.json never nags.
     std::fs::write(&file, "{oops").unwrap();
     assert!(!needs_prompt(&file, false));
+  }
+
+  fn pdf(pages: usize) -> Vec<u8> {
+    use lopdf::{dictionary, Object};
+    let mut doc = lopdf::Document::with_version("1.5");
+    let pages_id = doc.new_object_id();
+    let kids: Vec<Object> = (0..pages).map(|_| doc.add_object(dictionary! { "Type" => "Page", "Parent" => pages_id }).into()).collect();
+    doc.objects.insert(pages_id, Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => kids, "Count" => pages as i64 }));
+    let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    doc.trailer.set("Root", catalog);
+    let mut v = vec![];
+    doc.save_to(&mut v).unwrap();
+    v
+  }
+
+  /// A stand-in engine in `dir` that copies `<dir>/in.pdf` to its output:
+  /// the `-sOutputFile=` arg (gs) or else the 4th arg (qpdf).
+  fn fake_engine(dir: &Path, name: &str, gs: bool) -> PathBuf {
+    let (file, script) = if cfg!(windows) {
+      let copy = if gs {
+        // `shift` shifts %0 too, so the dir is kept first.
+        "@echo off\r\nset \"d=%~dp0\"\r\n:loop\r\nif \"%~1\"==\"\" exit /b 0\r\nset \"a=%~1\"\r\nif \"%a:~0,13%\"==\"-sOutputFile=\" copy /y \"%d%in.pdf\" \"%a:~13%\" >nul\r\nshift\r\ngoto loop\r\n"
+      } else {
+        "@copy /y \"%~dp0in.pdf\" \"%~4\" >nul\r\n"
+      };
+      (format!("{name}.cmd"), copy.to_string())
+    } else {
+      let copy = if gs { r#"for a; do case $a in -sOutputFile=*) cp "$(dirname "$0")/in.pdf" "${a#-sOutputFile=}";; esac; done"# } else { r#"cp "$(dirname "$0")/in.pdf" "$4""# };
+      (name.to_string(), format!("#!/bin/sh\n{copy}\n"))
+    };
+    let exe = dir.join(file);
+    std::fs::write(&exe, script).unwrap();
+    #[cfg(unix)]
+    std::fs::set_permissions(&exe, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    exe
+  }
+
+  fn best(src: &[u8], gs: Option<PathBuf>, qpdf: &Path) -> (Result<Outcome, String>, String) {
+    let log = std::cell::RefCell::new(String::new());
+    let r = compress_best(src, "unread.pdf", "ebook", gs, qpdf, &AtomicBool::new(false), &|_| {}, &|l| log.borrow_mut().push_str(&format!("{l}\n")));
+    (r, log.into_inner())
+  }
+
+  #[test]
+  fn unreadable_pdf_falls_back_to_qpdf_without_ghostscript() {
+    let dir = dir_with("repair-qpdf", &[]);
+    std::fs::write(dir.join("in.pdf"), pdf(1)).unwrap();
+    let qpdf = fake_engine(&dir, "qpdf", false);
+    let (r, log) = best(b"%PDF-1.4 damaged", None, &qpdf);
+    let o = r.unwrap();
+    assert_eq!((o.bytes, o.not_smaller), (pdf(1), false));
+    assert!(log.contains("Built-in compressor failed") && log.contains("+ qpdf: ") && log.contains("--stream-data=compress"), "{log}");
+    // No qpdf either: the job fails.
+    assert!(best(b"%PDF-1.4 damaged", None, &dir.join("missing-qpdf")).0.is_err());
+  }
+
+  #[test]
+  fn unreadable_pdf_tries_ghostscript_first_then_qpdf() {
+    let dir = dir_with("repair-gs", &[]);
+    std::fs::write(dir.join("in.pdf"), pdf(2)).unwrap();
+    let (gs, missing_qpdf) = (fake_engine(&dir, "gs", true), dir.join("missing-qpdf"));
+    let (r, log) = best(b"%PDF-1.4 damaged", Some(gs.clone()), &missing_qpdf);
+    assert_eq!(r.unwrap_or_else(|e| panic!("{e}
+{log}")).bytes, pdf(2));
+    assert!(log.contains("+ Ghostscript: ") && !log.contains("+ qpdf: "), "{log}");
+    // gs writes something that isn't a PDF: qpdf runs.
+    std::fs::write(dir.join("in.pdf"), b"not a pdf").unwrap();
+    let (r, log) = best(b"%PDF-1.4 damaged", Some(gs), &fake_engine(&dir, "qpdf", false));
+    assert_eq!(r.unwrap().bytes, b"not a pdf"); // qpdf's output is taken as is (the old route)
+    assert!(log.contains("Ghostscript failed") && log.contains("+ qpdf: "), "{log}");
+  }
+
+  #[test]
+  fn ghostscript_output_must_be_a_pdf_with_the_source_page_count() {
+    assert_eq!(check_pdf(pdf(2), Some(2)), Ok(pdf(2)));
+    assert_eq!(check_pdf(pdf(2), None), Ok(pdf(2)));
+    assert!(check_pdf(pdf(1), Some(2)).unwrap_err().contains("1 pages, expected 2"));
+    assert!(check_pdf(b"%PDF-1.6\n% fake gs\n".to_vec(), Some(1)).is_err());
+    assert!(check_pdf(b"GS error page".to_vec(), None).unwrap_err().contains("not a PDF"));
+    // In compress_best: a wrong page count keeps the built-in result.
+    let dir = dir_with("gs-pages", &[]);
+    std::fs::write(dir.join("in.pdf"), &b"%PDF-1.6\n"[..]).unwrap();
+    let src = pdf(3);
+    let (r, log) = best(&src, Some(fake_engine(&dir, "gs", true)), &dir.join("missing-qpdf"));
+    assert_ne!(r.unwrap().bytes, b"%PDF-1.6\n"); // smaller, but not used
+    assert!(log.contains("Ghostscript failed, keeping the built-in result"), "{log}");
   }
 
   #[test]
