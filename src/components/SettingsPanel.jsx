@@ -412,6 +412,16 @@ function PdfSettings({ visible, pdf, setPdf }) {
             <option value="compress">{t('settings.pdf.compress')}</option>
           </GlassSelect>
         </div>
+        {pdf.optimize === 'compress' && (
+          <div className="field span-2">
+            <label className="field-label" htmlFor="pdf-level">{t('settings.pdf.levelLabel')}</label>
+            <GlassSelect id="pdf-level" value={pdf.level} onChange={(e) => set({ level: e.target.value })}>
+              <option value="screen">{t('settings.pdf.level.screen')}</option>
+              <option value="ebook">{t('settings.pdf.level.ebook')}</option>
+              <option value="printer">{t('settings.pdf.level.printer')}</option>
+            </GlassSelect>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -24,7 +24,7 @@ const DEFAULT_VIDEO = {
 }
 const DEFAULT_IMAGE = { format: '.jpg', quality: 85, scale: 100 }
 const DEFAULT_AUDIO = { format: '.mp3', bitrate: '320k', speed: 1.0 }
-const DEFAULT_PDF = { optimize: 'linearize' }
+const DEFAULT_PDF = { optimize: 'linearize', level: 'ebook' } // level: compress only; screen | ebook | printer
 
 // Owns the 4 per-category settings blocks. setFormatForType is the
 // DropZone -> SettingsPanel coupling point (see useFileManager's

@@ -69,6 +69,14 @@ pub struct AudioSettings {
 pub struct PdfSettings {
   /// compress | linearize
   pub optimize: String,
+  /// screen | ebook | printer (compress only). Older settings and presets have
+  /// none and read as the default.
+  #[serde(default = "default_pdf_level")]
+  pub level: String,
+}
+
+fn default_pdf_level() -> String {
+  "ebook".into()
 }
 
 /// JS sends `{ fileType, settings: settings[fileType] }`.
@@ -459,6 +467,17 @@ mod tests {
   }
 
   #[test]
+  fn pdf_level_defaults_to_ebook_for_old_settings() {
+    let level = |settings: &str| {
+      let j: Job = serde_json::from_str(&format!(r#"{{"source":{{"path":"a.pdf"}},"fileType":"pdf","settings":{settings}}}"#)).unwrap();
+      let Kind::Pdf(p) = j.kind else { panic!() };
+      p.level
+    };
+    assert_eq!(level(r#"{"optimize":"compress"}"#), "ebook");
+    assert_eq!(level(r#"{"optimize":"compress","level":"screen"}"#), "screen");
+  }
+
+  #[test]
   fn video_default_uses_codec_and_relative_bitrate() {
     // 1 MiB over 10 s = 819.2 kbps original
     assert_eq!(args(src("in.mp4"), video(|_| {})), ["-y", "-i", "in.mp4", "-c:v", "libx264", "-b:v", "819k", "-bufsize", "1638k", "o.x"]);
@@ -588,7 +607,7 @@ mod tests {
   }
 
   fn pdf(optimize: &str) -> Kind {
-    Kind::Pdf(PdfSettings { optimize: optimize.into() })
+    Kind::Pdf(PdfSettings { optimize: optimize.into(), level: default_pdf_level() })
   }
 
   #[test]
@@ -671,6 +690,6 @@ mod tests {
     let half = Source { crop: Some(Crop { x: 0.0, y: 0.0, width: 160.0, height: 240.0 }), ..src("a.jpg") };
     assert_eq!(est(half, image(".jpg", 100.0, 100.0)).est_mb, 0.5);
     assert!((est(src("a.png"), image(".pdf", 1.0, 1.0)).est_mb - 1.05).abs() < 1e-9);
-    assert!((est(src("a.pdf"), Kind::Pdf(PdfSettings { optimize: "compress".into() })).est_mb - 0.7).abs() < 1e-9);
+    assert!((est(src("a.pdf"), pdf("compress")).est_mb - 0.7).abs() < 1e-9);
   }
 }
