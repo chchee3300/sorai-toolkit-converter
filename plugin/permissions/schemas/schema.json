@@ -307,6 +307,30 @@
           "markdownDescription": "Denies the cancel_job command without any pre-configured scope."
         },
         {
+          "description": "Enables the engine_set_path command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-engine-set-path",
+          "markdownDescription": "Enables the engine_set_path command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the engine_set_path command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-engine-set-path",
+          "markdownDescription": "Denies the engine_set_path command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the engine_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-engine-status",
+          "markdownDescription": "Enables the engine_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the engine_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-engine-status",
+          "markdownDescription": "Denies the engine_status command without any pre-configured scope."
+        },
+        {
           "description": "Enables the estimate_sizes command without any pre-configured scope.",
           "type": "string",
           "const": "allow-estimate-sizes",
@@ -367,10 +391,10 @@
           "markdownDescription": "Denies the start_convert command without any pre-configured scope."
         },
         {
-          "description": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`",
+          "description": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`\n- `allow-engine-status`\n- `allow-engine-set-path`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`"
+          "markdownDescription": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`\n- `allow-engine-status`\n- `allow-engine-set-path`"
         }
       ]
     }

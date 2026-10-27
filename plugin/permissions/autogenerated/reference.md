@@ -10,6 +10,8 @@ Allows every command this plugin exposes.
 - `allow-cancel-job`
 - `allow-estimate-sizes`
 - `allow-set-preview-files`
+- `allow-engine-status`
+- `allow-engine-set-path`
 
 ## Permission Table
 
@@ -42,6 +44,58 @@ Enables the cancel_job command without any pre-configured scope.
 <td>
 
 Denies the cancel_job command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:allow-engine-set-path`
+
+</td>
+<td>
+
+Enables the engine_set_path command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:deny-engine-set-path`
+
+</td>
+<td>
+
+Denies the engine_set_path command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:allow-engine-status`
+
+</td>
+<td>
+
+Enables the engine_status command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:deny-engine-status`
+
+</td>
+<td>
+
+Denies the engine_status command without any pre-configured scope.
 
 </td>
 </tr>

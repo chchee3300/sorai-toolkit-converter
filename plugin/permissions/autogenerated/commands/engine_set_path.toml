@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-engine-set-path"
+description = "Enables the engine_set_path command without any pre-configured scope."
+commands.allow = ["engine_set_path"]
+
+[[permission]]
+identifier = "deny-engine-set-path"
+description = "Denies the engine_set_path command without any pre-configured scope."
+commands.deny = ["engine_set_path"]

@@ -36,3 +36,17 @@ export const estimateSizes = (jobs) => invoke('plugin:sorai-converter|estimate_s
 // whole current queue; anything not in it is refused from then on.
 export const setPreviewFiles = (paths) => invoke('plugin:sorai-converter|set_preview_files', { paths })
 export const previewSrc = (path) => convertFileSrc(path, 'sorai-media')
+
+// --- Optional engines (plugin/src/engines.rs) ---
+// -> [{ id, name, state: user|installed|system|missing, path, userPath,
+// license, homepage, installCommand }]. Looked up fresh on every call.
+export const engineStatus = () => invoke('plugin:sorai-converter|engine_status')
+
+// "Use my own program..." (path) or back to auto-detect (null). Resolves the
+// new status list; fires `sorai:engines-changed` on window so open views
+// (the converter's PDF status line) re-check.
+export async function engineSetPath(engine, path) {
+  const list = await invoke('plugin:sorai-converter|engine_set_path', { engine, path })
+  window.dispatchEvent(new Event('sorai:engines-changed'))
+  return list
+}

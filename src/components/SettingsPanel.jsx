@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import GlassSelect from './GlassSelect.jsx'
 import { useTranslation } from '../hooks/useTranslation.js'
 import { TARGET_SIZE_PRESETS_MB, useSettings } from '../hooks/useSettings.js'
+import { engineStatus } from '../plugin.js'
 
 // rangeFillStyle used to be this repo's own src/lib/rangeFill.js -- moved
 // into the hub's window.EstellaLib runtime globals (resources/js/lib/
@@ -420,10 +421,36 @@ function PdfSettings({ visible, pdf, setPdf }) {
               <option value="ebook">{t('settings.pdf.level.ebook')}</option>
               <option value="printer">{t('settings.pdf.level.printer')}</option>
             </GlassSelect>
+            <GhostscriptStatus />
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+// Under the compression level: Ghostscript is used, or a pointer to the
+// hub's "Conversion engines" settings (window.SoraiSettings, optional like
+// SoraiPresets) / the brew/apt command. Re-checks when engines change.
+function GhostscriptStatus() {
+  const { t } = useTranslation()
+  const [gs, setGs] = useState(null)
+  useEffect(() => {
+    const check = () => engineStatus().then((l) => setGs(l.find((e) => e.id === 'ghostscript')), () => setGs(null))
+    check()
+    window.addEventListener('sorai:engines-changed', check)
+    return () => window.removeEventListener('sorai:engines-changed', check)
+  }, [])
+  if (!gs) return null
+  if (gs.state !== 'missing') return <p className="settings-hint" id="pdf-engine-status" data-state={gs.state}>{t('settings.pdf.gsEnabled')}</p>
+  return (
+    <p className="settings-hint" id="pdf-engine-status" data-state="missing">
+      {t('settings.pdf.gsMissing')}
+      {gs.installCommand && <> <code>{gs.installCommand}</code></>}
+      {window.SoraiSettings && (
+        <> <button type="button" className="btn btn-ghost btn-xs" id="pdf-engine-settings" onClick={() => window.SoraiSettings.open('engines')}>{t('settings.pdf.gsSettings')}</button></>
+      )}
+    </p>
   )
 }
 
