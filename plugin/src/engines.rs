@@ -217,8 +217,8 @@ pub fn compress_best(
   progress: &dyn Fn(f64),
   log: &dyn Fn(String),
 ) -> Result<Outcome, String> {
-  let Some(gs) = gs else { return crate::pdf_compress::compress(bytes, cancel, progress) };
-  let builtin = crate::pdf_compress::compress(bytes, cancel, &|p| progress(p / 2.0))?;
+  let Some(gs) = gs else { return crate::pdf_compress::compress(bytes, level, cancel, progress) };
+  let builtin = crate::pdf_compress::compress(bytes, level, cancel, &|p| progress(p / 2.0))?;
   if cancel.load(Ordering::Relaxed) {
     return Ok(builtin); // the runner reports `cancelled` and drops it
   }

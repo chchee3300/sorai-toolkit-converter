@@ -19,7 +19,15 @@ serde_json = "1" # engines.json (already in the tree via tauri)
 regex = "1"
 # Built-in PDF compressor (pdf_compress.rs). Defaults (chrono, rayon) unused.
 lopdf = { version = "0.46", default-features = false }
+# Image downsampling (Lanczos) and JPEG encode / decode for the same.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 
 [build-dependencies]
 tauri-plugin = { version = "2.7", features = ["build"] }
 
+# Pixel loops (JPEG decode, Lanczos, zlib) are ~10x slower unoptimized; this
+# keeps `cargo test` quick. Only applies when this crate is the build root.
+[profile.dev.package]
+image = { opt-level = 3 }
+zune-jpeg = { opt-level = 3 }
+miniz_oxide = { opt-level = 3 }

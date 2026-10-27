@@ -211,19 +211,21 @@ async fn start_convert<R: Runtime>(
   let args = convert::build_args(&job, &out_path)?;
   // PDF compress: built-in, except encrypted files stay on qpdf (keeps the
   // encryption; a missing open password gets qpdf's own error).
-  // With Ghostscript (engines.rs) it runs too and the smaller result wins.
-  if let convert::Kind::Pdf(p) = &job.kind {
-    if p.optimize == "compress" {
-      let bytes = std::fs::read(src).map_err(|e| format!("{}: {e}", src.display()))?;
-      if !pdf_compress::is_encrypted(&bytes) {
-        let header = convert::display_command("builtin-pdf-compress", &[job.source.path.clone(), out_path.clone()]);
-        let (gs, level, src, log) = (engines::ghostscript(&app), p.level.clone(), job.source.path.clone(), on_event.clone());
-        let job_id = runner::start_task(&app, &header, out, on_event, move |cancel, progress| {
-          let log = |line| _ = log.send(runner::JobEvent::Log { line });
-          engines::compress_best(&bytes, &src, &level, gs, cancel, progress, &log)
-        });
-        return Ok(Started { job_id, out_path });
-      }
+  let compress_level = match &job.kind {
+    convert::Kind::Pdf(p) if p.optimize == "compress" => Some(p.level.clone()),
+    _ => None,
+  };
+  if let Some(level) = compress_level {
+    let bytes = std::fs::read(src).map_err(|e| format!("{}: {e}", src.display()))?;
+    if !pdf_compress::is_encrypted(&bytes) {
+      let header = convert::display_command("builtin-pdf-compress", &[job.source.path.clone(), out_path.clone()]);
+      // With Ghostscript (engines.rs) it runs too and the smaller result wins.
+      let (gs, src, log) = (engines::ghostscript(&app), job.source.path.clone(), on_event.clone());
+      let job_id = runner::start_task(&app, &header, out, on_event, move |cancel, progress| {
+        let log = |line| _ = log.send(runner::JobEvent::Log { line });
+        engines::compress_best(&bytes, &src, &level, gs, cancel, progress, &log)
+      });
+      return Ok(Started { job_id, out_path });
     }
   }
   let (duration, speed) = (job.source.duration, job.speed());
