@@ -28,7 +28,6 @@ fn mime(path: &str) -> &'static str {
     "avif" => "image/avif",
     "gif" => "image/gif",
     "ico" => "image/x-icon",
-    // PdfPreviewModal's <iframe>: the webview's own PDF viewer.
     "pdf" => "application/pdf",
     _ => "application/octet-stream",
   }
@@ -60,7 +59,12 @@ pub fn respond(allowed: &[String], uri_path: &str, range: Option<&str>) -> Respo
   }
   let Ok(mut file) = std::fs::File::open(path.as_ref()) else { return status(StatusCode::NOT_FOUND) };
   let len = file.metadata().map(|m| m.len()).unwrap_or(0);
-  let resp = Response::builder().header(header::CONTENT_TYPE, mime(&path)).header(header::ACCEPT_RANGES, "bytes");
+  // CORS: pdf.js (PdfPreviewModal) fetch()es from the app's origin. Only
+  // queued paths are served, and only the app's own webviews load pages.
+  let resp = Response::builder()
+    .header(header::CONTENT_TYPE, mime(&path))
+    .header(header::ACCEPT_RANGES, "bytes")
+    .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*");
   let Some(spec) = range else {
     let mut body = Vec::with_capacity(len as usize);
     return match file.read_to_end(&mut body) {
@@ -94,6 +98,8 @@ mod tests {
     let full = respond(&q, &url, None);
     assert_eq!((full.status().as_u16(), full.body().as_slice()), (200, &b"0123456789"[..]));
     assert_eq!(full.headers()[header::CONTENT_TYPE], "video/mp4");
+    // PdfPreviewModal's pdf.js fetch()es from the app's origin.
+    assert_eq!(full.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
     assert_eq!(mime(r"C:\文件.PDF"), "application/pdf");
     let r = respond(&q, &url, Some("bytes=2-4"));
     assert_eq!((r.status().as_u16(), r.body().as_slice()), (206, &b"234"[..]));

@@ -1,11 +1,24 @@
-import { useEffect, useRef } from 'react'
+import { Component, lazy, Suspense, useEffect, useRef } from 'react'
 import { previewSrc } from '../plugin.js'
 import { useTranslation } from '../hooks/useTranslation.js'
 
 // Read-only look at a queued PDF (to pick page numbers for 擷取／旋轉):
-// the webview's own PDF viewer in an <iframe>, loaded through sorai-media://
-// like Trim/Crop (preview.rs serves it as application/pdf). Escape / the
-// button close it; Escape typed inside the viewer stays in the iframe.
+// PdfViewer.jsx (pdf.js, lazy-loaded) reads it through sorai-media:// like
+// Trim/Crop (preview.rs: application/pdf + CORS). Escape / the button close it.
+const PdfViewer = lazy(() => import('./PdfViewer.jsx'))
+
+// A viewer failure (chunk didn't load, pdf.js threw while rendering) shows
+// here instead of unmounting the whole Converter (and its queue).
+class ViewerBoundary extends Component {
+  state = { error: null }
+  static getDerivedStateFromError(error) {
+    return { error }
+  }
+  render() {
+    return this.state.error ? <p className="settings-hint" id="pdf-viewer-error">{String(this.state.error?.message ?? this.state.error)}</p> : this.props.children
+  }
+}
+
 export default function PdfPreviewModal({ file, onClose }) {
   const { t } = useTranslation()
   const closeRef = useRef(null)
@@ -38,7 +51,11 @@ export default function PdfPreviewModal({ file, onClose }) {
           <h3 className="modal-title" id="pdf-preview-title">{name}</h3>
         </div>
         <div className="modal-body">
-          <iframe id="pdf-preview-frame" title={name} src={previewSrc(file.path)} style={{ width: '100%', height: '70vh', border: 0, borderRadius: 8 }} />
+          <ViewerBoundary key={file.path}>
+            <Suspense fallback={<p className="settings-hint">…</p>}>
+              <PdfViewer url={previewSrc(file.path)} />
+            </Suspense>
+          </ViewerBoundary>
         </div>
         <div className="modal-footer" style={{ justifyContent: 'flex-end' }}>
           <button ref={closeRef} className="btn btn-outline" id="btn-pdf-preview-close" onClick={onClose}>{t('pdfPreview.close')}</button>
