@@ -25,7 +25,10 @@ const DEFAULT_VIDEO = {
 const DEFAULT_IMAGE = { format: '.jpg', quality: 85, scale: 100 }
 // alac (M4A only) stays unset until ticked: Rust's serde defaults it to false.
 const DEFAULT_AUDIO = { format: '.mp3', bitrate: '320k', speed: 1.0 }
-const DEFAULT_PDF = { optimize: 'linearize', level: 'ebook' } // level: compress only; screen | ebook | printer
+// optimize = the operation (old key name): compress | linearize | extract | split | rotate | encrypt.
+// level: compress only (screen | ebook | printer); pages: extract/rotate; angle: rotate; password: encrypt.
+// Only the keys every operation shows: the others stay out of presets until used (the plugin's serde defaults fill them).
+const DEFAULT_PDF = { optimize: 'linearize', level: 'ebook' }
 
 // Owns the 4 per-category settings blocks. setFormatForType is the
 // DropZone -> SettingsPanel coupling point (see useFileManager's
