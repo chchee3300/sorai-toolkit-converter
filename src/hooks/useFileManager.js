@@ -109,8 +109,8 @@ export function useFileManager({ onFirstFileType }) {
               const info = await probeSource(path, type)
               const thumbnail = info.thumbnail ? convertFileSrc(info.thumbnail) : null
               const { size, duration, fps, width, height } = info
-              const videoCodec = info.codec
-              additions.push({ path, size, duration, fps, width, height, videoCodec, thumbnail })
+              const { codec: videoCodec, audioCodec } = info
+              additions.push({ path, size, duration, fps, width, height, videoCodec, audioCodec, thumbnail })
             }
           } catch (err) {
             console.error('Error processing file path: ' + path, err)

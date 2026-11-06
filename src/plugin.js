@@ -4,7 +4,7 @@ import { Channel, convertFileSrc, invoke } from '@tauri-apps/api/core'
 
 export const ping = (value) => invoke('plugin:sorai-converter|ping', { value })
 
-// -> { size, duration, fps, width, height, codec, thumbnail: absPath|null };
+// -> { size, duration, fps, width, height, codec, audioCodec, thumbnail: absPath|null };
 // rejects for a directory / missing file. fileType: video|image|audio|pdf.
 export const probeSource = (path, fileType) => invoke('plugin:sorai-converter|probe_source', { path, fileType })
 

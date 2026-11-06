@@ -12,7 +12,7 @@
 //! `start_task` runs in-process Rust work (the PDF compressor) the same way.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -49,9 +49,23 @@ impl Jobs {
       if let Some(child) = job.child {
         let _ = child.kill();
       }
-      let _ = std::fs::remove_file(&job.out);
+      remove_out(&job.out);
     }
   }
+}
+
+/// Deletes a job's output: the file, or the whole folder (PDF split).
+pub fn remove_out(out: &Path) {
+  let _ = if out.is_dir() { std::fs::remove_dir_all(out) } else { std::fs::remove_file(out) };
+}
+
+/// Bytes a successful job wrote: the file's size, or the folder's files summed.
+pub fn out_size(out: &Path) -> Option<u64> {
+  let m = std::fs::metadata(out).ok()?;
+  if !m.is_dir() {
+    return Some(m.len());
+  }
+  Some(std::fs::read_dir(out).ok()?.flatten().filter_map(|e| e.metadata().ok()).filter(|m| m.is_file()).map(|m| m.len()).sum())
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -104,9 +118,9 @@ fn finish(job: Running, status: &'static str, message: Option<String>, not_small
   // A killed / failed encoder leaves a truncated file at the final name:
   // always remove it. The name was free before we started (unique_out_path).
   let out_size = if status == "success" {
-    std::fs::metadata(out).ok().map(|m| m.len())
+    out_size(out)
   } else {
-    let _ = std::fs::remove_file(out);
+    remove_out(out);
     None
   };
   let _ = job.channel.send(JobEvent::Finished { status, message, out_size, not_smaller });
@@ -122,8 +136,9 @@ fn install_hint(program: &str) -> &'static str {
 }
 
 /// Spawns sidecar `program` and returns its job id right away. `progress`
-/// maps an output line to a 0..=100 percent. `out` is the file the job
-/// writes (sized on success, removed on failure / cancel).
+/// maps an output line to a 0..=100 percent. `out` is the file (or, PDF
+/// split, the folder) the job writes: sized on success, removed on failure /
+/// cancel / app exit.
 pub fn start<R: Runtime>(
   app: &AppHandle<R>,
   program: &str,
@@ -263,6 +278,23 @@ mod tests {
     assert_eq!(s.push(b"me=00:00:02.00\r\n\nDone"), ["frame=2 time=00:00:02.00"]);
     assert_eq!(s.finish().as_deref(), Some("Done"));
     assert_eq!(s.finish(), None);
+  }
+
+  #[test]
+  fn folder_output_is_sized_and_removed_whole() {
+    let dir = std::env::temp_dir().join(format!("sorai-runner-test-{}", std::process::id()));
+    let pages = dir.join("文件_pages");
+    std::fs::create_dir_all(&pages).unwrap();
+    std::fs::write(pages.join("文件-1.pdf"), [0u8; 3]).unwrap();
+    std::fs::write(pages.join("文件-2.pdf"), [0u8; 4]).unwrap();
+    let file = dir.join("a_converted.mp4");
+    std::fs::write(&file, [0u8; 5]).unwrap();
+    assert_eq!((out_size(&pages), out_size(&file), out_size(&dir.join("missing"))), (Some(7), Some(5), None));
+    remove_out(&pages);
+    remove_out(&file);
+    let left = (pages.exists(), file.exists());
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(left, (false, false));
   }
 
   #[test]

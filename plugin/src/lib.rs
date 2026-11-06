@@ -61,6 +61,7 @@ fn ping(value: String) -> String {
 
 /// What `ffmpeg -i <file>` tells us about a source. Zero / empty = unknown.
 #[derive(Serialize, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct MediaInfo {
   pub duration: f64,
   pub fps: f64,
@@ -68,12 +69,15 @@ pub struct MediaInfo {
   pub height: u32,
   /// First video stream's codec (`h264`, `vp9`, `png`...). Empty for audio-only.
   pub codec: String,
+  /// First audio stream's codec (`aac`, `mp3`...). Empty when there's none.
+  pub audio_codec: String,
 }
 
 static DURATION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"Duration:\s+(\d+):(\d+):(\d+\.\d+)").unwrap());
 static FPS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d+(?:\.\d+)?)\s+fps").unwrap());
 static DIMS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r",\s+(\d+)x(\d+)(?:[,\s]|$)").unwrap());
 static CODEC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"Video:\s+(\w+)").unwrap());
+static AUDIO_CODEC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"Audio:\s+(\w+)").unwrap());
 
 /// Parses ffmpeg's `-i` banner (stderr). Same patterns the old JS
 /// getMediaInfo used.
@@ -92,6 +96,9 @@ pub fn parse_media_info(stderr: &str) -> MediaInfo {
   }
   if let Some(c) = CODEC.captures(stderr) {
     info.codec = c[1].to_string();
+  }
+  if let Some(c) = AUDIO_CODEC.captures(stderr) {
+    info.audio_codec = c[1].to_string();
   }
   info
 }
@@ -194,7 +201,8 @@ pub fn resolve_out_dir(out_dir: &str, src: &Path) -> Result<PathBuf, String> {
 }
 
 /// Starts converting one file into `outDir` (never overwriting: picks a
-/// free `<name>_converted...` name and reserves it as an empty file right
+/// free `<name>_converted...` name (PDF split: a `<name>_pages...` folder)
+/// and reserves it as an empty file / folder right
 /// away, so concurrent jobs never share it; removed again if the job can't
 /// start, and by the runner on error / cancel). Returns once the job runs;
 /// log / progress / finished arrive on `on_event` (see runner.rs). Async
@@ -208,11 +216,17 @@ async fn start_convert<R: Runtime>(
 ) -> Result<Started, String> {
   let src = Path::new(&job.source.path);
   let stem = src.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-  let out = convert::unique_out_path(&resolve_out_dir(&out_dir, src)?, &stem, job.out_ext(), convert::taken);
+  let dir = resolve_out_dir(&out_dir, src)?;
+  // PDF split writes a new `<name>_pages` folder, reserved by creating it.
+  let out = if job.out_is_dir() {
+    convert::unique_out_path(&dir, &stem, "_pages", "", convert::taken_dir)
+  } else {
+    convert::unique_out_path(&dir, &stem, "_converted", job.out_ext(), convert::taken)
+  };
   let out_path = out.to_string_lossy().into_owned();
   let started = start_job(&app, &job, out.clone(), on_event).await;
   if started.is_err() {
-    let _ = std::fs::remove_file(&out);
+    runner::remove_out(&out);
   }
   Ok(Started { job_id: started?, out_path })
 }
@@ -381,7 +395,7 @@ mod tests {
 
   #[test]
   fn parses_video_resolution_fps_codec_duration() {
-    let want = MediaInfo { duration: 2.0, fps: 30.0, width: 320, height: 240, codec: "h264".into() };
+    let want = MediaInfo { duration: 2.0, fps: 30.0, width: 320, height: 240, codec: "h264".into(), ..Default::default() };
     assert_eq!(parse_media_info(MP4), want);
   }
 
@@ -393,7 +407,19 @@ mod tests {
 
   #[test]
   fn audio_only_has_duration_but_no_video_fields() {
-    assert_eq!(parse_media_info(MP3), MediaInfo { duration: 2.0, ..Default::default() });
+    assert_eq!(parse_media_info(MP3), MediaInfo { duration: 2.0, audio_codec: "mp3".into(), ..Default::default() });
+  }
+
+  #[test]
+  fn parses_audio_codec_next_to_video() {
+    let mov = "  Duration: 00:00:06.00, start: 0.000000, bitrate: 90 kb/s
+  Stream #0:0[0x1](und): Video: hevc (Main) (hvc1 / 0x31637668), yuv420p(tv), 1920x1080, 80 kb/s, 30 fps, 30 tbr, 15360 tbn (default)
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 2 kb/s (default)
+";
+    let i = parse_media_info(mov);
+    assert_eq!((i.codec.as_str(), i.audio_codec.as_str()), ("hevc", "aac"));
+    assert_eq!(serde_json::to_value(&i).unwrap()["audioCodec"], "aac");
+    assert_eq!(parse_media_info(MP4).audio_codec, ""); // no audio stream
   }
 
   #[test]
