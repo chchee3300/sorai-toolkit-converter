@@ -24,6 +24,9 @@ pub struct Source {
   pub trim_start: Option<f64>,
   pub trim_end: Option<f64>,
   pub crop: Option<Crop>,
+  /// Codec names as `ffmpeg -i` prints them (`h264`, `aac`); empty = none / unknown.
+  pub video_codec: String,
+  pub audio_codec: String,
 }
 
 /// Source-pixel crop rect (CropModal).
@@ -63,20 +66,37 @@ pub struct AudioSettings {
   /// e.g. "320k"
   pub bitrate: String,
   pub speed: f64,
+  /// M4A only: Apple Lossless instead of AAC (bitrate unused).
+  #[serde(default)]
+  pub alac: bool,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct PdfSettings {
-  /// compress | linearize
+  /// The operation: compress | linearize | extract | split | rotate | encrypt
+  /// (the old key name, so older settings and presets still read).
   pub optimize: String,
   /// screen | ebook | printer (compress only). Older settings and presets have
   /// none and read as the default.
   #[serde(default = "default_pdf_level")]
   pub level: String,
+  /// qpdf page range ("1-3,5", "z" = last): extract (required), rotate (empty = all).
+  #[serde(default)]
+  pub pages: String,
+  /// rotate: 90 | 180 | 270, clockwise.
+  #[serde(default = "default_angle")]
+  pub angle: i32,
+  /// encrypt: opens the PDF (user and owner password alike), AES-256.
+  #[serde(default)]
+  pub password: String,
 }
 
 fn default_pdf_level() -> String {
   "ebook".into()
+}
+
+fn default_angle() -> i32 {
+  90
 }
 
 /// JS sends `{ fileType, settings: settings[fileType] }`.
@@ -96,15 +116,36 @@ pub struct Job {
   pub kind: Kind,
 }
 
-impl Job {
-  /// Output extension, dot included.
+/// Several queued files into one output, in this order ("Merge into one file").
+#[derive(Deserialize, Debug, Clone)]
+pub struct MergeJob {
+  pub sources: Vec<Source>,
+  #[serde(flatten)]
+  pub kind: Kind,
+}
+
+impl Kind {
+  /// Output extension, dot included ("" for a folder).
   pub fn out_ext(&self) -> &str {
-    match &self.kind {
+    match self {
       Kind::Video(v) => &v.format,
       Kind::Image(i) => &i.format,
       Kind::Audio(a) => &a.format,
+      Kind::Pdf(p) if p.optimize == "split" => "",
       Kind::Pdf(_) => ".pdf",
     }
+  }
+}
+
+impl Job {
+  /// Output extension, dot included ("" for a folder, see `out_is_dir`).
+  pub fn out_ext(&self) -> &str {
+    self.kind.out_ext()
+  }
+
+  /// PDF split writes one PDF per page into a new folder.
+  pub fn out_is_dir(&self) -> bool {
+    matches!(&self.kind, Kind::Pdf(p) if p.optimize == "split")
   }
 
   /// Playback speed (progress scales the timeline by it).
@@ -158,18 +199,179 @@ pub fn target_size_bitrates(target_mb: f64, seconds: f64) -> (u64, u64, u64) {
   (video as u64, (video * VBV_BUFFER_SECS).floor() as u64, audio as u64)
 }
 
-/// Sidecar that runs `job`: qpdf for PDFs, img2pdf for image -> PDF
-/// (lossless embed: quality / scale / crop don't apply), ffmpeg otherwise.
-/// The codec actually encoded (SettingsPanel.jsx's effectiveCodec mirrors it for the UI).
-/// Target-size mode forces libx264: VBV (-maxrate/-bufsize) only reliably
-/// caps the size there. The WebM muxer takes only VP8/VP9/AV1 + Vorbis/Opus:
-/// H.264/H.265 (the default codec, and target-size mode's) would fail at the
-/// header, so WebM gets VP9 unless AV1 was picked.
-pub fn effective_codec(v: &VideoSettings) -> &str {
-  let codec = if v.target_size_mode && v.target_size_mb.is_some() { "libx264" } else { v.codec.as_str() };
-  if v.format == ".webm" && !matches!(codec, "libvpx-vp9" | "libsvtav1") { "libvpx-vp9" } else { codec }
+fn target_mb(v: &VideoSettings) -> Option<f64> {
+  v.target_size_mode.then_some(v.target_size_mb).flatten()
 }
 
+/// Video formats that take only some encoders; any other pick gets the first.
+/// The WebM muxer takes only VP8/VP9/AV1 (H.264/H.265, the default codec and
+/// target-size mode's, would fail at the header); MOV/M4V/TS get H.264/H.265;
+/// WMV and MPG have their own. SettingsPanel.jsx's CONTAINER_CODECS mirrors it.
+fn container_codecs(format: &str) -> Option<&'static [&'static str]> {
+  match format {
+    ".webm" => Some(&["libvpx-vp9", "libsvtav1"]),
+    ".mov" | ".m4v" | ".ts" => Some(&["libx264", "libx265"]),
+    ".wmv" => Some(&["wmv2"]),
+    ".mpg" => Some(&["mpeg2video"]),
+    _ => None,
+  }
+}
+
+/// The codec actually used (SettingsPanel.jsx's effectiveCodec mirrors it for
+/// the UI). Target-size mode forces libx264: VBV (-maxrate/-bufsize) only
+/// reliably caps the size there. "copy" keeps the source's streams where the
+/// container takes them (`video_encoder`).
+pub fn effective_codec(v: &VideoSettings) -> &str {
+  let codec = if target_mb(v).is_some() { "libx264" } else { v.codec.as_str() };
+  match container_codecs(&v.format) {
+    Some(ok) if codec != "copy" && !ok.contains(&codec) => ok[0],
+    _ => codec,
+  }
+}
+
+/// Can video `format` hold this video stream (codec as `ffmpeg -i` names it) as is?
+pub fn holds_video(format: &str, codec: &str) -> bool {
+  match format {
+    ".mkv" => !codec.is_empty(),
+    ".mp4" => matches!(codec, "h264" | "hevc" | "av1" | "vp9" | "mpeg4"),
+    ".mov" | ".m4v" => matches!(codec, "h264" | "hevc" | "mpeg4" | "prores"),
+    ".webm" => matches!(codec, "vp8" | "vp9" | "av1"),
+    ".avi" => matches!(codec, "h264" | "mpeg4" | "mjpeg" | "msmpeg4v3"),
+    ".ts" => matches!(codec, "h264" | "hevc" | "mpeg2video"),
+    ".wmv" => matches!(codec, "wmv1" | "wmv2" | "wmv3" | "vc1"),
+    ".mpg" => matches!(codec, "mpeg1video" | "mpeg2video"),
+    _ => false,
+  }
+}
+
+/// Can video `format` hold this audio stream as is? (No audio: yes.)
+pub fn holds_audio(format: &str, codec: &str) -> bool {
+  codec.is_empty()
+    || match format {
+      ".mkv" => true,
+      ".mp4" | ".m4v" | ".mov" => matches!(codec, "aac" | "alac" | "ac3" | "eac3" | "mp3"),
+      ".webm" => matches!(codec, "opus" | "vorbis"),
+      ".avi" => matches!(codec, "mp3" | "ac3" | "aac" | "pcm_s16le"),
+      ".ts" => matches!(codec, "aac" | "ac3" | "mp3" | "mp2"),
+      ".wmv" => matches!(codec, "wmav1" | "wmav2"),
+      ".mpg" => matches!(codec, "mp2" | "mp3" | "ac3"),
+      _ => false,
+    }
+}
+
+/// Encoder for a video's sound when it's re-encoded explicitly.
+fn audio_encoder(format: &str) -> &'static str {
+  match format {
+    ".webm" => "libopus",
+    ".wmv" => "wmav2",
+    ".mpg" => "mp2",
+    _ => "aac",
+  }
+}
+
+/// Video encoder for a source whose video is `codec`: "copy" the container
+/// can't hold falls back to the container's default encoder.
+fn video_encoder<'a>(v: &'a VideoSettings, codec: &str) -> &'a str {
+  match effective_codec(v) {
+    "copy" if !holds_video(&v.format, codec) => container_codecs(&v.format).map_or("libx264", |c| c[0]),
+    c => c,
+  }
+}
+
+/// Video-tab outputs that aren't a video container: animations, one still
+/// frame, the sound only. They can't be merged.
+pub fn is_special_video_out(format: &str) -> bool {
+  matches!(format, ".gif" | ".apng" | ".png" | ".m4a" | ".mp3")
+}
+
+/// -c:v/-b:v... for an encoded video: target size over `out_secs`, else
+/// `quality` % of the source's kbps (scaled by the fps change), else CRF.
+fn rate_args(v: &VideoSettings, out_secs: f64, src_kbps: Option<f64>, src_fps: f64, a: &mut Vec<String>) {
+  match target_mb(v) {
+    Some(mb) if out_secs > 0.0 => {
+      let (vk, buf, ak) = target_size_bitrates(mb, out_secs);
+      a.extend(
+        [
+          "-b:v".into(), format!("{vk}k"), "-maxrate".into(), format!("{vk}k"), "-bufsize".into(), format!("{buf}k"),
+          "-c:a".into(), audio_encoder(&v.format).into(), "-b:a".into(), format!("{ak}k"),
+        ],
+      );
+    }
+    _ => match src_kbps {
+      Some(orig_kbps) => {
+        let fps_factor = match v.fps {
+          Some(t) if src_fps > 0.0 => t / src_fps,
+          _ => 1.0,
+        };
+        let k = ((orig_kbps * (v.quality / 100.0) * fps_factor).floor() as i64).max(10);
+        a.extend(["-b:v".into(), format!("{k}k"), "-bufsize".into(), format!("{}k", k * 2)]);
+      }
+      None => {
+        let crf = 51 - ((v.quality / 100.0) * 51.0).round() as i64;
+        a.extend(["-crf".into(), crf.to_string()]);
+      }
+    },
+  }
+}
+
+/// GIF / APNG frame chain: fps (picked, else the source's), speed, scale by quality.
+fn anim_chain(v: &VideoSettings, src: &Source) -> Vec<String> {
+  let mut chain = vec![];
+  if let Some(fps) = v.fps.or((src.fps > 0.0).then_some(src.fps)) {
+    chain.push(format!("fps={fps}"));
+  }
+  if v.speed != 1.0 {
+    chain.push(format!("setpts={}*PTS", 1.0 / v.speed));
+  }
+  let scale = v.quality / 100.0;
+  if scale < 1.0 {
+    chain.push(format!("scale=trunc(iw*{scale}/2)*2:-2:flags=lanczos"));
+  }
+  chain
+}
+
+/// Encoder args for an audio target. `cover`: copy the source's cover art
+/// (M4A); every format new in 2.2 drops it (`-vn`).
+fn audio_codec_args(au: &AudioSettings, cover: bool) -> Vec<String> {
+  let s = |x: &str| x.to_string();
+  let b = au.bitrate.clone();
+  match au.format.as_str() {
+    // libvorbis ABR (-b:a) rejects bitrates above its per-channel/rate
+    // ceiling ("encoder setup failed": 320k on a mono 44.1k source);
+    // VBR quality works for any layout, so map the kbps onto -q:a.
+    ".ogg" => vec![s("-c:a"), s("libvorbis"), s("-q:a"), vorbis_quality(&b).to_string()],
+    ".m4a" => {
+      // The ipod muxer refuses the h264 ffmpeg would re-encode cover art
+      // to; copy it as an attached picture instead.
+      let mut a = if cover { vec![s("-c:v"), s("copy"), s("-disposition:v"), s("attached_pic")] } else { vec![s("-vn")] };
+      a.extend(if au.alac { vec![s("-c:a"), s("alac")] } else { vec![s("-c:a"), s("aac"), s("-b:a"), b] });
+      a
+    }
+    // libopus refuses more than 256k per channel (320k on a mono source fails).
+    ".opus" => vec![s("-vn"), s("-c:a"), s("libopus"), s("-b:a"), format!("{}k", kbps(&b).min(256.0))],
+    ".wma" => vec![s("-vn"), s("-c:a"), s("wmav2"), s("-b:a"), b],
+    ".ac3" => vec![s("-vn"), s("-c:a"), s("ac3"), s("-b:a"), b],
+    ".aiff" => vec![s("-vn")],
+    _ => vec![s("-b:a"), b],
+  }
+}
+
+fn kbps(bitrate: &str) -> f64 {
+  bitrate.trim_end_matches('k').parse().unwrap_or(128.0)
+}
+
+/// qpdf page range from what the user typed ("1-3, 5" -> "1-3,5"; "z" = last
+/// page, "r1" = counted from the end).
+pub fn page_range(s: &str) -> Result<String, String> {
+  let r: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+  if r.is_empty() || !r.chars().all(|c| c.is_ascii_digit() || matches!(c, ',' | '-' | 'z' | 'r')) {
+    return Err(format!("invalid page range {s:?} (e.g. 1-3,5)"));
+  }
+  Ok(r)
+}
+
+/// Sidecar that runs `job`: qpdf for PDFs, img2pdf for image -> PDF
+/// (lossless embed: quality / scale / crop don't apply), ffmpeg otherwise.
 pub fn program(job: &Job) -> &'static str {
   match &job.kind {
     Kind::Pdf(_) => "qpdf",
@@ -181,76 +383,99 @@ pub fn program(job: &Job) -> &'static str {
 /// Args (without the program, see `program`) to convert `src` into `out`.
 pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
   let src = &job.source;
+  let s = |x: &str| x.to_string();
   match &job.kind {
     Kind::Pdf(p) => {
-      let flag = if p.optimize == "linearize" { "--linearize" } else { "--stream-data=compress" };
-      return Ok(vec![flag.into(), src.path.clone(), out.into()]);
+      let (i, o) = (src.path.clone(), s(out));
+      return match p.optimize.as_str() {
+        "linearize" => Ok(vec![s("--linearize"), i, o]),
+        "extract" => Ok(vec![i, s("--pages"), s("."), page_range(&p.pages)?, s("--"), o]),
+        "rotate" => {
+          if ![90, 180, 270].contains(&p.angle) {
+            return Err(format!("invalid angle {}", p.angle));
+          }
+          let pages = if p.pages.trim().is_empty() { String::new() } else { format!(":{}", page_range(&p.pages)?) };
+          Ok(vec![i, o, format!("--rotate=+{}{pages}", p.angle)])
+        }
+        // Old positional syntax: macOS / Linux system qpdf may predate 11.
+        "encrypt" if p.password.is_empty() => Err("no password".into()),
+        "encrypt" => Ok(vec![s("--encrypt"), p.password.clone(), p.password.clone(), s("256"), s("--"), i, o]),
+        // `out` is a new folder; qpdf puts the page number at %d.
+        "split" => {
+          let stem = Path::new(&src.path).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+          Ok(vec![s("--split-pages"), i, Path::new(out).join(format!("{stem}-%d.pdf")).to_string_lossy().into_owned()])
+        }
+        // compress: what the built-in compressor leaves to qpdf (encrypted files).
+        _ => Ok(vec![s("--stream-data=compress"), i, o]),
+      };
     }
     Kind::Image(i) if i.format == ".pdf" => return Ok(vec![src.path.clone(), "-o".into(), out.into()]),
     _ => {}
   }
   let mut a: Vec<String> = vec!["-y".into()];
-  let s = |x: &str| x.to_string();
   match &job.kind {
+    // One still frame: the Trim start, else the middle (like the thumbnail).
+    Kind::Video(v) if v.format == ".png" => {
+      let at = src.trim_start.unwrap_or(src.duration / 2.0);
+      a.extend([s("-ss"), at.to_string(), s("-i"), src.path.clone(), s("-frames:v"), s("1")]);
+    }
     Kind::Video(v) => {
       trim_args(src, &mut a);
       a.extend([s("-i"), src.path.clone()]);
-      if v.format == ".gif" {
-        let mut chain = vec![];
-        if let Some(fps) = v.fps.or((src.fps > 0.0).then_some(src.fps)) {
-          chain.push(format!("fps={fps}"));
+      match v.format.as_str() {
+        ".gif" => {
+          let chain = anim_chain(v, src);
+          let pre = if chain.is_empty() { String::new() } else { chain.join(",") + "," };
+          a.extend([s("-filter_complex"), format!("{pre}split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse")]);
         }
-        if v.speed != 1.0 {
-          chain.push(format!("setpts={}*PTS", 1.0 / v.speed));
-        }
-        let scale = v.quality / 100.0;
-        if scale < 1.0 {
-          chain.push(format!("scale=trunc(iw*{scale}/2)*2:-2:flags=lanczos"));
-        }
-        let pre = if chain.is_empty() { String::new() } else { chain.join(",") + "," };
-        a.extend([s("-filter_complex"), format!("{pre}split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse")]);
-      } else {
-        let target = v.target_size_mode.then_some(v.target_size_mb).flatten();
-        let webm = v.format == ".webm";
-        a.extend([s("-c:v"), s(effective_codec(v))]);
-        let mut vf = vec![];
-        let mut af = vec![];
-        if let Some(fps) = v.fps {
-          vf.push(format!("fps={fps}"));
-        }
-        if v.speed != 1.0 {
-          vf.push(format!("setpts={}*PTS", 1.0 / v.speed));
-          af.push(format!("atempo={}", v.speed));
-        }
-        if !vf.is_empty() {
-          a.extend([s("-vf"), vf.join(",")]);
-        }
-        if !af.is_empty() {
-          a.extend([s("-af"), af.join(",")]);
-        }
-        let out_secs = output_duration(src, v.speed);
-        match target {
-          Some(mb) if out_secs > 0.0 => {
-            let (vk, buf, ak) = target_size_bitrates(mb, out_secs);
-            a.extend([
-              s("-b:v"), format!("{vk}k"), s("-maxrate"), format!("{vk}k"), s("-bufsize"), format!("{buf}k"),
-              s("-c:a"), s(if webm { "libopus" } else { "aac" }), s("-b:a"), format!("{ak}k"),
-            ]);
+        ".apng" => {
+          let chain = anim_chain(v, src);
+          if !chain.is_empty() {
+            a.extend([s("-vf"), chain.join(",")]);
           }
-          _ if src.duration > 0.0 => {
-            let fps_factor = match v.fps {
-              Some(t) if src.fps > 0.0 => t / src.fps,
-              _ => 1.0,
-            };
-            let orig_kbps = src.size as f64 * 8.0 / (src.duration * 1024.0);
-            let k = ((orig_kbps * (v.quality / 100.0) * fps_factor).floor() as i64).max(10);
-            a.extend([s("-b:v"), format!("{k}k"), s("-bufsize"), format!("{}k", k * 2)]);
+          a.extend([s("-plays"), s("0")]);
+        }
+        // The sound only: AAC / ALAC go into M4A as they are (unless sped up).
+        ".m4a" | ".mp3" => {
+          a.push(s("-vn"));
+          if v.speed != 1.0 {
+            a.extend([s("-af"), format!("atempo={}", v.speed)]);
           }
-          _ => {
-            let crf = 51 - ((v.quality / 100.0) * 51.0).round() as i64;
-            a.extend([s("-crf"), crf.to_string()]);
+          if v.format == ".mp3" {
+            a.extend([s("-c:a"), s("libmp3lame"), s("-q:a"), s("2")]);
+          } else if v.speed == 1.0 && matches!(src.audio_codec.as_str(), "aac" | "alac") {
+            a.extend([s("-c:a"), s("copy")]);
+          } else {
+            a.extend([s("-c:a"), s("aac"), s("-b:a"), s("192k")]);
           }
         }
+        _ => match video_encoder(v, &src.video_codec) {
+          // Rewrap: quality / fps / speed don't apply (the UI hides them).
+          "copy" => {
+            let audio = if holds_audio(&v.format, &src.audio_codec) { "copy" } else { audio_encoder(&v.format) };
+            a.extend([s("-c:v"), s("copy"), s("-c:a"), s(audio)]);
+          }
+          enc => {
+            a.extend([s("-c:v"), s(enc)]);
+            let mut vf = vec![];
+            let mut af = vec![];
+            if let Some(fps) = v.fps {
+              vf.push(format!("fps={fps}"));
+            }
+            if v.speed != 1.0 {
+              vf.push(format!("setpts={}*PTS", 1.0 / v.speed));
+              af.push(format!("atempo={}", v.speed));
+            }
+            if !vf.is_empty() {
+              a.extend([s("-vf"), vf.join(",")]);
+            }
+            if !af.is_empty() {
+              a.extend([s("-af"), af.join(",")]);
+            }
+            let src_kbps = (src.duration > 0.0).then(|| src.size as f64 * 8.0 / (src.duration * 1024.0));
+            rate_args(v, output_duration(src, v.speed), src_kbps, src.fps, &mut a);
+          }
+        },
       }
     }
     Kind::Image(i) => {
@@ -287,18 +512,7 @@ pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
       if au.speed != 1.0 {
         a.extend([s("-af"), format!("atempo={}", au.speed)]);
       }
-      if au.format == ".ogg" {
-        // libvorbis ABR (-b:a) rejects bitrates above its per-channel/rate
-        // ceiling ("encoder setup failed": 320k on a mono 44.1k source);
-        // VBR quality works for any layout, so map the kbps onto -q:a.
-        a.extend([s("-c:a"), s("libvorbis"), s("-q:a"), vorbis_quality(&au.bitrate).to_string()]);
-      } else if au.format == ".m4a" {
-        // The ipod muxer refuses the h264 ffmpeg would re-encode cover art
-        // to; copy it as an attached picture instead.
-        a.extend([s("-c:v"), s("copy"), s("-disposition:v"), s("attached_pic"), s("-c:a"), s("aac"), s("-b:a"), au.bitrate.clone()]);
-      } else {
-        a.extend([s("-b:a"), au.bitrate.clone()]);
-      }
+      a.extend(audio_codec_args(au, true));
     }
     Kind::Pdf(_) => unreachable!("handled above"),
   }
@@ -309,14 +523,132 @@ pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
 /// Highest libvorbis -q:a whose nominal stereo 44.1k bitrate fits `bitrate`.
 fn vorbis_quality(bitrate: &str) -> u8 {
   const NOMINAL: [f64; 11] = [64.0, 80.0, 96.0, 112.0, 128.0, 160.0, 192.0, 224.0, 256.0, 320.0, 500.0];
-  let kbps: f64 = bitrate.trim_end_matches('k').parse().unwrap_or(128.0);
-  NOMINAL.iter().rposition(|&n| n <= kbps).unwrap_or(0) as u8
+  NOMINAL.iter().rposition(|&n| n <= kbps(bitrate)).unwrap_or(0) as u8
 }
 
-/// For the log line: args joined, quoting the ones with spaces.
+/// A merge to run: `args` for `merge_program`, the concat list to write to
+/// the `list` path given to `merge_args` (video stream copy only), and the
+/// output length in seconds for progress.
+#[derive(Debug, PartialEq)]
+pub struct MergePlan {
+  pub args: Vec<String>,
+  pub list: Option<String>,
+  pub seconds: f64,
+}
+
+pub fn merge_program(kind: &Kind) -> &'static str {
+  if matches!(kind, Kind::Pdf(_)) { "qpdf" } else { "ffmpeg" }
+}
+
+/// One line of an ffmpeg concat list (`'` closes the quote, `\'` is a literal one).
+fn concat_entry(src: &Source) -> String {
+  let mut e = format!("file '{}'\n", src.path.replace('\'', r"'\''"));
+  if let Some(s) = src.trim_start {
+    e += &format!("inpoint {s}\n");
+  }
+  if let Some(t) = src.trim_end {
+    e += &format!("outpoint {t}\n");
+  }
+  e
+}
+
+/// `m.sources`, in order, into `out`. PDFs: qpdf's page selection. Audio:
+/// decoded and joined (concat filter, no gap). Video: when every clip has the
+/// same codecs and size, "copy" picked and the container takes them, the
+/// concat demuxer copies them (list at `list`); otherwise every clip is fitted
+/// into the first one's frame and fps and encoded, a clip without sound gets
+/// silence. Per-clip Trim applies; speed / fps / quality / target size apply
+/// to the whole.
+pub fn merge_args(m: &MergeJob, out: &str, list: &str) -> Result<MergePlan, String> {
+  let s = |x: &str| x.to_string();
+  let srcs = &m.sources;
+  if srcs.len() < 2 {
+    return Err("merge needs at least 2 files".into());
+  }
+  let total = |speed: f64| srcs.iter().map(|x| output_duration(x, 1.0)).sum::<f64>() / speed;
+  let inputs = |a: &mut Vec<String>| {
+    for x in srcs {
+      trim_args(x, a);
+      a.extend([s("-i"), x.path.clone()]);
+    }
+  };
+  let n = srcs.len();
+  let mut a = vec![s("-y")];
+  match &m.kind {
+    Kind::Pdf(_) => {
+      let mut a = vec![s("--empty"), s("--pages")];
+      a.extend(srcs.iter().map(|x| x.path.clone()));
+      a.extend([s("--"), s(out)]);
+      return Ok(MergePlan { args: a, list: None, seconds: 0.0 });
+    }
+    Kind::Image(_) => return Err("images can't be merged".into()),
+    Kind::Audio(au) => {
+      inputs(&mut a);
+      let ins: String = (0..n).map(|i| format!("[{i}:a]")).collect();
+      let tempo = if au.speed != 1.0 { format!(",atempo={}", au.speed) } else { String::new() };
+      a.extend([s("-filter_complex"), format!("{ins}concat=n={n}:v=0:a=1{tempo}[a]"), s("-map"), s("[a]")]);
+      a.extend(audio_codec_args(au, false));
+      a.push(s(out));
+      Ok(MergePlan { args: a, list: None, seconds: total(au.speed) })
+    }
+    Kind::Video(v) if is_special_video_out(&v.format) => Err(format!("{} can't be a merge output", v.format)),
+    Kind::Video(v) => {
+      let first = &srcs[0];
+      let alike = srcs.iter().all(|x| (&x.video_codec, &x.audio_codec, x.width, x.height) == (&first.video_codec, &first.audio_codec, first.width, first.height));
+      if alike && video_encoder(v, &first.video_codec) == "copy" && holds_audio(&v.format, &first.audio_codec) {
+        let list_text: String = srcs.iter().map(concat_entry).collect();
+        a.extend([s("-f"), s("concat"), s("-safe"), s("0"), s("-i"), s(list), s("-c"), s("copy"), s(out)]);
+        return Ok(MergePlan { args: a, list: Some(list_text), seconds: total(1.0) });
+      }
+      let even = |x: u32, d: u32| if x >= 2 { x - x % 2 } else { d };
+      let (w, h) = (even(first.width, 1280), even(first.height, 720));
+      let fps = v.fps.or((first.fps > 0.0).then_some(first.fps)).unwrap_or(30.0);
+      inputs(&mut a);
+      let mut fc = String::new();
+      let mut cat = String::new();
+      let mut extra = n;
+      for (i, x) in srcs.iter().enumerate() {
+        fc += &format!("[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={fps},format=yuv420p[v{i}];");
+        let audio = if x.audio_codec.is_empty() {
+          a.extend([s("-f"), s("lavfi"), s("-t"), output_duration(x, 1.0).to_string(), s("-i"), s("anullsrc=r=48000:cl=stereo")]);
+          extra += 1;
+          format!("[{}:a]", extra - 1)
+        } else {
+          format!("[{i}:a]")
+        };
+        cat += &format!("[v{i}]{audio}");
+      }
+      fc += &format!("{cat}concat=n={n}:v=1:a=1[cv][ca]");
+      let (vo, ao) = if v.speed != 1.0 {
+        fc += &format!(";[cv]setpts={}*PTS[v];[ca]atempo={}[a]", 1.0 / v.speed, v.speed);
+        ("[v]", "[a]")
+      } else {
+        ("[cv]", "[ca]")
+      };
+      let enc = match effective_codec(v) {
+        "copy" => container_codecs(&v.format).map_or("libx264", |c| c[0]),
+        c => c,
+      };
+      a.extend([s("-filter_complex"), fc, s("-map"), s(vo), s("-map"), s(ao), s("-c:v"), s(enc)]);
+      if target_mb(v).is_none() {
+        a.extend([s("-c:a"), s(audio_encoder(&v.format))]);
+      }
+      let (size, secs) = srcs.iter().fold((0.0, 0.0), |(z, d), x| (z + x.size as f64, d + x.duration));
+      let src_kbps = (secs > 0.0).then(|| size * 8.0 / (secs * 1024.0));
+      let seconds = total(v.speed);
+      rate_args(v, seconds, src_kbps, first.fps, &mut a);
+      a.push(s(out));
+      Ok(MergePlan { args: a, list: None, seconds })
+    }
+  }
+}
+
+/// For the log line: args joined, quoting the ones with spaces; the two
+/// passwords after qpdf's `--encrypt` show as `***`.
 pub fn display_command(program: &str, args: &[String]) -> String {
+  let secret = args.iter().position(|x| x == "--encrypt").map_or(0..0, |i| i + 1..i + 3);
   std::iter::once(program)
-    .chain(args.iter().map(String::as_str))
+    .chain(args.iter().enumerate().map(|(i, x)| if secret.contains(&i) { "***" } else { x.as_str() }))
     .map(|x| if x.contains(' ') || x.is_empty() { format!("\"{x}\"") } else { x.to_string() })
     .collect::<Vec<_>>()
     .join(" ")
@@ -336,17 +668,22 @@ pub fn parse_progress(line: &str, duration: f64, speed: f64) -> Option<f64> {
   Some((secs / (duration / if speed > 0.0 { speed } else { 1.0 }) * 100.0).min(100.0))
 }
 
-/// `<dir>/<stem>_converted<ext>`, adding `_converted` until `exists` says
-/// the name is free. Never overwrites.
-pub fn unique_out_path(dir: &Path, stem: &str, ext: &str, exists: impl Fn(&Path) -> bool) -> PathBuf {
-  let mut base = format!("{stem}_converted");
+/// `<dir>/<stem><suffix><ext>` (suffix `_converted`, `_merged`, `_pages`),
+/// adding the suffix again until `exists` says the name is free. Never overwrites.
+pub fn unique_out_path(dir: &Path, stem: &str, suffix: &str, ext: &str, exists: impl Fn(&Path) -> bool) -> PathBuf {
+  let mut base = format!("{stem}{suffix}");
   loop {
     let p = dir.join(format!("{base}{ext}"));
     if !exists(&p) {
       return p;
     }
-    base.push_str("_converted");
+    base.push_str(suffix);
   }
+}
+
+/// `taken` for a folder output (PDF split): reserves it by creating it.
+pub fn taken_dir(p: &Path) -> bool {
+  std::fs::create_dir(p).is_err_and(|e| e.kind() == std::io::ErrorKind::AlreadyExists || p.exists())
 }
 
 /// `exists` for `unique_out_path` that also reserves: creates `p` empty
@@ -386,11 +723,15 @@ pub fn estimate(job: &Job) -> Estimate {
       match v.target_size_mb {
         // Lands under the cap, so show a hair under it.
         Some(mb) if v.target_size_mode => mb * 0.95,
+        // A frame: about 1.5 bytes a pixel as PNG.
+        _ if v.format == ".png" => (src.width as f64 * src.height as f64 * 1.5 / MIB).max(0.01),
+        _ if matches!(v.format.as_str(), ".m4a" | ".mp3") => (192_000.0 * src.duration * ratio / 8.0 / MIB / v.speed).max(0.01),
+        _ if video_encoder(v, &src.video_codec) == "copy" => current * ratio,
         _ => {
           let target_fps = v.fps.unwrap_or(src.fps);
           let fps_factor = if target_fps > 0.0 && src.fps > 0.0 { target_fps / src.fps } else { 1.0 };
           let q = v.quality / 100.0;
-          let e = if v.format == ".gif" {
+          let e = if v.format == ".gif" || v.format == ".apng" {
             current * ratio * q * q * fps_factor * 2.5 / v.speed
           } else {
             let codec = match effective_codec(v) {
@@ -408,10 +749,12 @@ pub fn estimate(job: &Job) -> Estimate {
     Kind::Audio(a) => {
       let kbps = match a.format.as_str() {
         ".flac" => 900.0,
-        ".wav" => 1411.0,
-        _ => a.bitrate.trim_end_matches('k').parse().unwrap_or(0.0),
+        ".m4a" if a.alac => 900.0,
+        ".wav" | ".aiff" => 1411.0,
+        ".opus" => kbps(&a.bitrate).min(256.0),
+        _ => kbps(&a.bitrate),
       };
-      let same_lossless = (a.format == ".flac" && lower.ends_with(".flac")) || (a.format == ".wav" && lower.ends_with(".wav"));
+      let same_lossless = [".flac", ".wav", ".aiff"].iter().any(|f| a.format == *f && lower.ends_with(f));
       if src.duration > 0.0 && !same_lossless {
         kbps * 1000.0 * src.duration * ratio / 8.0 / MIB / a.speed
       } else {
