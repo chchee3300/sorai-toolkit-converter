@@ -121,6 +121,9 @@ function App({ pendingLaunch, editPreset, onEditDone }) {
   // "Merge into one file": App state, not settings, so never in a preset.
   // Only counts while it's offered (>= 2 files, mergeable type / output).
   const [mergeChecked, setMergeChecked] = useState(false)
+  // A new queue / another type starts unchecked.
+  const queueEmpty = files.length === 0
+  useEffect(() => setMergeChecked(false), [fileType, queueEmpty])
   const merge = mergeChecked && mergeOffered(files, fileType, settings)
 
   // Move up / down (= merge order). By path, so a running batch is unaffected.

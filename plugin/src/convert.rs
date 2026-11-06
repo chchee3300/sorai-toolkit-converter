@@ -27,6 +27,10 @@ pub struct Source {
   /// Codec names as `ffmpeg -i` prints them (`h264`, `aac`); empty = none / unknown.
   pub video_codec: String,
   pub audio_codec: String,
+  /// First audio stream's sample rate (Hz) and channel layout (`stereo`,
+  /// `5.1(side)`); 0 / empty = none / unknown.
+  pub audio_rate: u32,
+  pub audio_channels: String,
 }
 
 /// Source-pixel crop rect (CropModal).
@@ -277,7 +281,8 @@ fn audio_encoder(format: &str) -> &'static str {
 }
 
 /// Video encoder for a source whose video is `codec`: "copy" the container
-/// can't hold falls back to the container's default encoder.
+/// can't hold falls back to the container's default encoder (`codec` ""
+/// never fits: always an encoder).
 fn video_encoder<'a>(v: &'a VideoSettings, codec: &str) -> &'a str {
   match effective_codec(v) {
     "copy" if !holds_video(&v.format, codec) => container_codecs(&v.format).map_or("libx264", |c| c[0]),
@@ -291,9 +296,11 @@ pub fn is_special_video_out(format: &str) -> bool {
   matches!(format, ".gif" | ".apng" | ".png" | ".m4a" | ".mp3")
 }
 
-/// -c:v/-b:v... for an encoded video: target size over `out_secs`, else
-/// `quality` % of the source's kbps (scaled by the fps change), else CRF.
-fn rate_args(v: &VideoSettings, out_secs: f64, src_kbps: Option<f64>, src_fps: f64, a: &mut Vec<String>) {
+/// -b:v... for video encoded with `enc`: target size over `out_secs`, else
+/// `quality` % of the source's kbps (scaled by the fps change), else CRF
+/// (lavc's own wmv2 / mpeg2video ignore -crf: -q:v 2 best ..= 31 worst).
+fn rate_args(v: &VideoSettings, enc: &str, out_secs: f64, src_kbps: Option<f64>, src_fps: f64, a: &mut Vec<String>) {
+  let lavc = matches!(enc, "wmv2" | "mpeg2video");
   match target_mb(v) {
     Some(mb) if out_secs > 0.0 => {
       let (vk, buf, ak) = target_size_bitrates(mb, out_secs);
@@ -313,9 +320,13 @@ fn rate_args(v: &VideoSettings, out_secs: f64, src_kbps: Option<f64>, src_fps: f
         let k = ((orig_kbps * (v.quality / 100.0) * fps_factor).floor() as i64).max(10);
         a.extend(["-b:v".into(), format!("{k}k")]);
         // lavc's own wmv2/mpeg2video refuse -bufsize without -maxrate.
-        if !matches!(effective_codec(v), "wmv2" | "mpeg2video") {
+        if !lavc {
           a.extend(["-bufsize".into(), format!("{}k", k * 2)]);
         }
+      }
+      None if lavc => {
+        let q = (31 - ((v.quality / 100.0) * 29.0).round() as i64).clamp(2, 31);
+        a.extend(["-q:v".into(), q.to_string()]);
       }
       None => {
         let crf = 51 - ((v.quality / 100.0) * 51.0).round() as i64;
@@ -486,7 +497,7 @@ pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
               a.extend([s("-af"), af.join(",")]);
             }
             let src_kbps = (src.duration > 0.0).then(|| src.size as f64 * 8.0 / (src.duration * 1024.0));
-            rate_args(v, output_duration(src, v.speed), src_kbps, src.fps, &mut a);
+            rate_args(v, enc, output_duration(src, v.speed), src_kbps, src.fps, &mut a);
           }
         },
       }
@@ -553,6 +564,9 @@ pub fn merge_program(kind: &Kind) -> &'static str {
   if matches!(kind, Kind::Pdf(_)) { "qpdf" } else { "ffmpeg" }
 }
 
+/// A silent merge clip's sound: a few samples (see `merge_args`).
+const SILENCE: &str = "anullsrc=r=48000:cl=stereo:d=0.001";
+
 /// One line of an ffmpeg concat list (`'` closes the quote, `\'` is a literal one).
 fn concat_entry(src: &Source) -> String {
   let mut e = format!("file '{}'\n", src.path.replace('\'', r"'\''"));
@@ -607,7 +621,10 @@ pub fn merge_args(m: &MergeJob, out: &str, list: &str) -> Result<MergePlan, Stri
     Kind::Video(v) if is_special_video_out(&v.format) => Err(format!("{} can't be a merge output", v.format)),
     Kind::Video(v) => {
       let first = &srcs[0];
-      let alike = srcs.iter().all(|x| (&x.video_codec, &x.audio_codec, x.width, x.height) == (&first.video_codec, &first.audio_codec, first.width, first.height));
+      // Unknown (0 / empty) never counts as alike: such clips are encoded.
+      let spec = |x: &Source| (x.video_codec.clone(), x.width, x.height, x.fps.to_bits(), x.audio_codec.clone(), x.audio_rate, x.audio_channels.clone());
+      let known = first.width > 0 && first.fps > 0.0 && (first.audio_codec.is_empty() || (first.audio_rate > 0 && !first.audio_channels.is_empty()));
+      let alike = known && srcs.iter().all(|x| spec(x) == spec(first));
       if alike && video_encoder(v, &first.video_codec) == "copy" && holds_audio(&v.format, &first.audio_codec) {
         let list_text: String = srcs.iter().map(concat_entry).collect();
         a.extend([s("-f"), s("concat"), s("-safe"), s("0"), s("-i"), s(list), s("-c"), s("copy"), s(out)]);
@@ -619,37 +636,45 @@ pub fn merge_args(m: &MergeJob, out: &str, list: &str) -> Result<MergePlan, Stri
       inputs(&mut a);
       let mut fc = String::new();
       let mut cat = String::new();
-      let mut extra = n;
       for (i, x) in srcs.iter().enumerate() {
         fc += &format!("[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={fps},format=yuv420p[v{i}];");
         let audio = if x.audio_codec.is_empty() {
-          a.extend([s("-f"), s("lavfi"), s("-t"), output_duration(x, 1.0).to_string(), s("-i"), s("anullsrc=r=48000:cl=stereo")]);
-          extra += 1;
-          format!("[{}:a]", extra - 1)
+          fc += &format!("{SILENCE}[s{i}];");
+          format!("[s{i}]")
         } else {
           format!("[{i}:a]")
         };
         cat += &format!("[v{i}]{audio}");
       }
       fc += &format!("{cat}concat=n={n}:v=1:a=1[cv][ca]");
-      let (vo, ao) = if v.speed != 1.0 {
+      let (vo, mut ao) = if v.speed != 1.0 {
         fc += &format!(";[cv]setpts={}*PTS[v];[ca]atempo={}[a]", 1.0 / v.speed, v.speed);
         ("[v]", "[a]")
       } else {
         ("[cv]", "[ca]")
       };
-      let enc = match effective_codec(v) {
-        "copy" => container_codecs(&v.format).map_or("libx264", |c| c[0]),
-        c => c,
-      };
-      a.extend([s("-filter_complex"), fc, s("-map"), s(vo), s("-map"), s(ao), s("-c:v"), s(enc)]);
+      // A silent clip gets a few samples: concat pads each segment's audio up
+      // to its video except the last one's, so the end is padded too and the
+      // output stops with the video. Works when a clip's length is unknown
+      // (verified with the bundled ffmpeg: silent first / middle / last).
+      let silent = srcs.iter().any(|x| x.audio_codec.is_empty());
+      if silent {
+        fc += &format!(";{ao}apad[ap]");
+        ao = "[ap]";
+      }
+      let enc = video_encoder(v, "");
+      a.extend([s("-filter_complex"), fc, s("-map"), s(vo), s("-map"), s(ao)]);
+      if silent {
+        a.push(s("-shortest"));
+      }
+      a.extend([s("-c:v"), s(enc)]);
       if target_mb(v).is_none() {
         a.extend([s("-c:a"), s(audio_encoder(&v.format))]);
       }
       let (size, secs) = srcs.iter().fold((0.0, 0.0), |(z, d), x| (z + x.size as f64, d + x.duration));
       let src_kbps = (secs > 0.0).then(|| size * 8.0 / (secs * 1024.0));
       let seconds = total(v.speed);
-      rate_args(v, seconds, src_kbps, first.fps, &mut a);
+      rate_args(v, enc, seconds, src_kbps, first.fps, &mut a);
       a.push(s(out));
       Ok(MergePlan { args: a, list: None, seconds })
     }
@@ -683,20 +708,27 @@ pub fn parse_progress(line: &str, duration: f64, speed: f64) -> Option<f64> {
 
 /// `<dir>/<stem><suffix><ext>` (suffix `_converted`, `_merged`, `_pages`),
 /// adding the suffix again until `exists` says the name is free. Never overwrites.
-pub fn unique_out_path(dir: &Path, stem: &str, suffix: &str, ext: &str, exists: impl Fn(&Path) -> bool) -> PathBuf {
+/// `exists` erring stops the search with its error.
+pub fn unique_out_path(dir: &Path, stem: &str, suffix: &str, ext: &str, exists: impl Fn(&Path) -> Result<bool, String>) -> Result<PathBuf, String> {
   let mut base = format!("{stem}{suffix}");
   loop {
     let p = dir.join(format!("{base}{ext}"));
-    if !exists(&p) {
-      return p;
+    if !exists(&p)? {
+      return Ok(p);
     }
     base.push_str(suffix);
   }
 }
 
-/// `taken` for a folder output (PDF split): reserves it by creating it.
-pub fn taken_dir(p: &Path) -> bool {
-  std::fs::create_dir(p).is_err_and(|e| e.kind() == std::io::ErrorKind::AlreadyExists || p.exists())
+/// `taken` for a folder output (PDF split): reserves it by creating it. Any
+/// other failure (access denied, no parent folder) is the job's error: qpdf
+/// can't split into a folder that isn't there.
+pub fn taken_dir(p: &Path) -> Result<bool, String> {
+  match std::fs::create_dir(p) {
+    Ok(()) => Ok(false),
+    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists || p.exists() => Ok(true),
+    Err(e) => Err(format!("{}: {e}", p.display())),
+  }
 }
 
 /// `exists` for `unique_out_path` that also reserves: creates `p` empty
@@ -704,8 +736,8 @@ pub fn taken_dir(p: &Path) -> bool {
 /// the same name before this one writes. Taken = something is there (a
 /// folder on Windows fails with access denied); any other error leaves the
 /// name to the job, which then fails on it.
-pub fn taken(p: &Path) -> bool {
-  std::fs::File::create_new(p).is_err_and(|e| e.kind() == std::io::ErrorKind::AlreadyExists || p.exists())
+pub fn taken(p: &Path) -> Result<bool, String> {
+  Ok(std::fs::File::create_new(p).is_err_and(|e| e.kind() == std::io::ErrorKind::AlreadyExists || p.exists()))
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -1023,9 +1055,9 @@ mod tests {
   #[test]
   fn unique_out_path_appends_converted_until_free() {
     let taken = [PathBuf::from("d").join("a_converted.mp4"), PathBuf::from("d").join("a_converted_converted.mp4")];
-    let p = unique_out_path(Path::new("d"), "a", "_converted", ".mp4", |p| taken.iter().any(|t| t == p));
+    let p = unique_out_path(Path::new("d"), "a", "_converted", ".mp4", |p| Ok(taken.iter().any(|t| t == p))).unwrap();
     assert_eq!(p, PathBuf::from("d").join("a_converted_converted_converted.mp4"));
-    assert_eq!(unique_out_path(Path::new("d"), "影片 一", "_converted", ".gif", |_| false), PathBuf::from("d").join("影片 一_converted.gif"));
+    assert_eq!(unique_out_path(Path::new("d"), "影片 一", "_converted", ".gif", |_| Ok(false)).unwrap(), PathBuf::from("d").join("影片 一_converted.gif"));
   }
 
   #[test]
@@ -1033,12 +1065,12 @@ mod tests {
     let dir = std::env::temp_dir().join(format!("sorai-reserve-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let a = unique_out_path(&dir, "文件", "_converted", ".pdf", taken);
-    let b = unique_out_path(&dir, "文件", "_converted", ".pdf", taken);
+    let a = unique_out_path(&dir, "文件", "_converted", ".pdf", taken).unwrap();
+    let b = unique_out_path(&dir, "文件", "_converted", ".pdf", taken).unwrap();
     assert_eq!((a.file_name().unwrap(), b.file_name().unwrap()), ("文件_converted.pdf".as_ref(), "文件_converted_converted.pdf".as_ref()));
     assert_eq!(std::fs::metadata(&a).unwrap().len(), 0); // reserved: an empty file
     // A folder it can't create in still gets a name (the job then fails on it).
-    assert_eq!(unique_out_path(&dir.join("missing"), "x", "_converted", ".pdf", taken), dir.join("missing").join("x_converted.pdf"));
+    assert_eq!(unique_out_path(&dir.join("missing"), "x", "_converted", ".pdf", taken), Ok(dir.join("missing").join("x_converted.pdf")));
   }
 
   fn mov(vc: &str, ac: &str) -> Source {
@@ -1084,6 +1116,20 @@ mod tests {
     assert_eq!(joined(src("in.mp4"), video(|v| v.format = ".wmv".into())), "-y -i in.mp4 -c:v wmv2 -b:v 819k o.x");
     assert_eq!(joined(src("in.mp4"), video(|v| v.format = ".mpg".into())), "-y -i in.mp4 -c:v mpeg2video -b:v 819k o.x");
     assert_eq!(joined(src("in.mp4"), video(|v| v.format = ".mov".into())), "-y -i in.mp4 -c:v libx264 -b:v 819k -bufsize 1638k o.x");
+    // "Keep original codec" that falls back to wmv2 / mpeg2video: same rule.
+    let copy = |format: &str| video(|v| { v.format = format.into(); v.codec = "copy".into(); });
+    assert_eq!(joined(mov("prores", "aac"), copy(".mpg")), "-y -i in.mov -c:v mpeg2video -b:v 819k o.x");
+  }
+
+  // They ignore -crf: unknown source bitrate maps quality onto -q:v 2 (best) ..= 31 (worst).
+  #[test]
+  fn wmv_and_mpg_without_a_source_bitrate_use_qscale() {
+    let q = |format: &str, quality: f64| joined(Source { duration: 0.0, ..src("in.mp4") }, video(|v| { v.format = format.into(); v.quality = quality; }));
+    assert!(q(".wmv", 100.0).ends_with("-c:v wmv2 -q:v 2 o.x"), "{}", q(".wmv", 100.0));
+    assert!(q(".mpg", 0.0).ends_with("-c:v mpeg2video -q:v 31 o.x"));
+    assert!(q(".wmv", 50.0).ends_with("-c:v wmv2 -q:v 16 o.x"));
+    assert!(q(".wmv", 200.0).ends_with("-q:v 2 o.x"), "upscale clamps");
+    assert!(q(".mp4", 50.0).ends_with("-c:v libx264 -crf 25 o.x"));
   }
 
   #[test]
@@ -1187,12 +1233,16 @@ mod tests {
     let dir = std::env::temp_dir().join(format!("sorai-taken-dir-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let a = unique_out_path(&dir, "文件", "_pages", "", taken_dir);
-    let b = unique_out_path(&dir, "文件", "_pages", "", taken_dir);
+    let a = unique_out_path(&dir, "文件", "_pages", "", taken_dir).unwrap();
+    let b = unique_out_path(&dir, "文件", "_pages", "", taken_dir).unwrap();
     let got = (a.file_name().unwrap().to_owned(), b.file_name().unwrap().to_owned(), a.is_dir(), b.is_dir());
     std::fs::remove_dir_all(&dir).unwrap();
     assert_eq!(got, ("文件_pages".into(), "文件_pages_pages".into(), true, true));
-    assert_eq!(unique_out_path(Path::new("d"), "a", "_merged", ".mp4", |_| false), Path::new("d").join("a_merged.mp4"));
+    assert_eq!(unique_out_path(Path::new("d"), "a", "_merged", ".mp4", |_| Ok(false)), Ok(Path::new("d").join("a_merged.mp4")));
+    // Any other failure (no parent folder here; access denied alike) is the error, not a free name.
+    let missing = dir.join("missing");
+    assert!(unique_out_path(&missing, "x", "_pages", "", taken_dir).unwrap_err().contains("missing"));
+    assert!(!missing.exists());
   }
 
   #[test]
@@ -1247,14 +1297,34 @@ mod tests {
     assert_eq!(m.seconds, 6.5);
   }
 
+  fn clip(path: &str) -> Source {
+    Source { path: path.into(), audio_rate: 48000, audio_channels: "stereo".into(), ..mov("h264", "aac") }
+  }
+
   #[test]
   fn merge_alike_clips_copies_through_the_concat_list() {
-    let a = Source { path: r"C:\it's\a.mp4".into(), trim_start: Some(1.0), trim_end: Some(4.0), ..mov("h264", "aac") };
-    let b = Source { path: "b.mp4".into(), ..mov("h264", "aac") };
-    let m = merge(vec![a, b], video(|v| v.codec = "copy".into()), "o.mp4").unwrap();
+    let a = Source { path: r"C:\it's\a.mp4".into(), trim_start: Some(1.0), trim_end: Some(4.0), ..clip("") };
+    let m = merge(vec![a, clip("b.mp4")], video(|v| v.codec = "copy".into()), "o.mp4").unwrap();
     assert_eq!(m.args.join(" "), "-y -f concat -safe 0 -i list.txt -c copy o.mp4");
     assert_eq!(m.list.as_deref(), Some("file 'C:\\it'\\''s\\a.mp4'\ninpoint 1\noutpoint 4\nfile 'b.mp4'\n"));
     assert_eq!(m.seconds, 13.0);
+  }
+
+  // Alike = same codecs, size, fps and (with sound) sample rate and channels,
+  // all known; anything else is encoded.
+  #[test]
+  fn merge_copies_only_clips_alike_in_fps_and_sound_format() {
+    let copied = |b: Source| merge(vec![clip("a.mp4"), b], video(|v| v.codec = "copy".into()), "o.mp4").unwrap().list.is_some();
+    assert!(copied(clip("b.mp4")));
+    assert!(!copied(Source { fps: 25.0, ..clip("b.mp4") }), "fps");
+    assert!(!copied(Source { audio_rate: 44100, ..clip("b.mp4") }), "sample rate");
+    assert!(!copied(Source { audio_channels: "mono".into(), ..clip("b.mp4") }), "channels");
+    let unknown = |s: Source| merge(vec![s.clone(), s], video(|v| v.codec = "copy".into()), "o.mp4").unwrap().list.is_some();
+    assert!(!unknown(Source { audio_rate: 0, ..clip("a.mp4") }), "unknown sample rate");
+    assert!(!unknown(Source { audio_channels: String::new(), ..clip("a.mp4") }), "unknown channels");
+    assert!(!unknown(Source { fps: 0.0, ..clip("a.mp4") }), "unknown fps");
+    // No sound at all: nothing to compare.
+    assert!(unknown(mov("h264", "")));
   }
 
   #[test]
@@ -1265,12 +1335,19 @@ mod tests {
     assert_eq!(
       m.args.join(" "),
       format!(
-        "-y -i in.mov -i b.mp4 -f lavfi -t 10 -i anullsrc=r=48000:cl=stereo -filter_complex {}{}[v0][0:a][v1][2:a]concat=n=2:v=1:a=1[cv][ca] -map [cv] -map [ca] -c:v libx264 -c:a aac -b:v 819k -bufsize 1638k o.mp4",
+        "-y -i in.mov -i b.mp4 -filter_complex {}{}{SILENCE}[s1];[v0][0:a][v1][s1]concat=n=2:v=1:a=1[cv][ca];[ca]apad[ap] -map [cv] -map [ap] -shortest -c:v libx264 -c:a aac -b:v 819k -bufsize 1638k o.mp4",
         fit(0),
         fit(1)
       )
     );
     assert_eq!((m.list, m.seconds), (None, 20.0));
+    // A silent clip of unknown length: the silence still follows its video
+    // (concat pads it), never an endless or empty -t 0 input.
+    let silent = Source { duration: 0.0, ..mov("h264", "") };
+    let a = merge(vec![silent.clone(), mov("h264", "aac"), silent], video(|v| v.speed = 2.0), "o.mp4").unwrap().args.join(" ");
+    assert!(!a.contains("-t ") && !a.contains("lavfi"), "{a}");
+    assert!(a.contains(&format!("{SILENCE}[s0];")) && a.contains(&format!("{SILENCE}[s2];")), "{a}");
+    assert!(a.contains("[v0][s0][v1][1:a][v2][s2]concat=n=3:v=1:a=1[cv][ca];[cv]setpts=0.5*PTS[v];[ca]atempo=2[a];[a]apad[ap] -map [v] -map [ap] -shortest "), "{a}");
     // Same specs but not "copy": encoded too. Speed + target size over the whole output.
     let m = merge(vec![mov("h264", "aac"), mov("h264", "aac")], video(|v| { v.speed = 2.0; v.target_size_mode = true; v.target_size_mb = Some(5.0); }), "o.mp4").unwrap();
     let a = m.args.join(" ");

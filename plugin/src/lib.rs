@@ -75,13 +75,17 @@ pub struct MediaInfo {
   pub codec: String,
   /// First audio stream's codec (`aac`, `mp3`...). Empty when there's none.
   pub audio_codec: String,
+  /// Its sample rate (Hz) and channel layout (`stereo`, `5.1(side)`); 0 / empty = unknown.
+  pub audio_rate: u32,
+  pub audio_channels: String,
 }
 
 static DURATION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"Duration:\s+(\d+):(\d+):(\d+\.\d+)").unwrap());
 static FPS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d+(?:\.\d+)?)\s+fps").unwrap());
 static DIMS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r",\s+(\d+)x(\d+)(?:[,\s]|$)").unwrap());
 static CODEC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"Video:\s+(\w+)").unwrap());
-static AUDIO_CODEC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"Audio:\s+(\w+)").unwrap());
+// Codec, then (same line) ", <rate> Hz, <layout>".
+static AUDIO: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"Audio:\s+(\w+)(?:[^\n]*?,\s+(\d+)\s+Hz(?:,\s+([^,\n]+))?)?").unwrap());
 
 /// Parses ffmpeg's `-i` banner (stderr). Same patterns the old JS
 /// getMediaInfo used.
@@ -101,8 +105,10 @@ pub fn parse_media_info(stderr: &str) -> MediaInfo {
   if let Some(c) = CODEC.captures(stderr) {
     info.codec = c[1].to_string();
   }
-  if let Some(c) = AUDIO_CODEC.captures(stderr) {
+  if let Some(c) = AUDIO.captures(stderr) {
     info.audio_codec = c[1].to_string();
+    info.audio_rate = c.get(2).map_or(0, |m| m.as_str().parse().unwrap_or(0));
+    info.audio_channels = c.get(3).map_or("", |m| m.as_str().trim()).to_string();
   }
   info
 }
@@ -223,9 +229,9 @@ async fn start_convert<R: Runtime>(
   let dir = resolve_out_dir(&out_dir, src)?;
   // PDF split writes a new `<name>_pages` folder, reserved by creating it.
   let out = if job.out_is_dir() {
-    convert::unique_out_path(&dir, &stem, "_pages", "", convert::taken_dir)
+    convert::unique_out_path(&dir, &stem, "_pages", "", convert::taken_dir)?
   } else {
-    convert::unique_out_path(&dir, &stem, "_converted", job.out_ext(), convert::taken)
+    convert::unique_out_path(&dir, &stem, "_converted", job.out_ext(), convert::taken)?
   };
   let out_path = out.to_string_lossy().into_owned();
   let started = start_job(&app, &job, out.clone(), on_event).await;
@@ -280,7 +286,7 @@ async fn start_merge<R: Runtime>(
 ) -> Result<Started, String> {
   let first = Path::new(&job.sources.first().ok_or("merge needs at least 2 files")?.path);
   let stem = first.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-  let out = convert::unique_out_path(&resolve_out_dir(&out_dir, first)?, &stem, "_merged", job.out_ext(), convert::taken);
+  let out = convert::unique_out_path(&resolve_out_dir(&out_dir, first)?, &stem, "_merged", job.out_ext(), convert::taken)?;
   let out_path = out.to_string_lossy().into_owned();
   let started = start_merge_job(&app, &job, out.clone(), on_event);
   if started.is_err() {
@@ -450,7 +456,7 @@ mod tests {
 
   #[test]
   fn audio_only_has_duration_but_no_video_fields() {
-    assert_eq!(parse_media_info(MP3), MediaInfo { duration: 2.0, audio_codec: "mp3".into(), ..Default::default() });
+    assert_eq!(parse_media_info(MP3), MediaInfo { duration: 2.0, audio_codec: "mp3".into(), audio_rate: 44100, audio_channels: "mono".into(), ..Default::default() });
   }
 
   #[test]
@@ -461,8 +467,17 @@ mod tests {
 ";
     let i = parse_media_info(mov);
     assert_eq!((i.codec.as_str(), i.audio_codec.as_str()), ("hevc", "aac"));
-    assert_eq!(serde_json::to_value(&i).unwrap()["audioCodec"], "aac");
-    assert_eq!(parse_media_info(MP4).audio_codec, ""); // no audio stream
+    assert_eq!((i.audio_rate, i.audio_channels.as_str()), (48000, "stereo"));
+    let json = serde_json::to_value(&i).unwrap();
+    assert_eq!((&json["audioCodec"], &json["audioRate"], &json["audioChannels"]), (&"aac".into(), &48000.into(), &"stereo".into()));
+    let mp4 = parse_media_info(MP4); // no audio stream
+    assert_eq!((mp4.audio_codec.as_str(), mp4.audio_rate, mp4.audio_channels.as_str()), ("", 0, ""));
+    // Only the first audio stream; a layout with a suffix; PCM's codec tag.
+    let pcm = "  Stream #0:1: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 44100 Hz, 5.1(side), s16, 4233 kb/s
+  Stream #0:2: Audio: aac, 22050 Hz, mono
+";
+    let i = parse_media_info(pcm);
+    assert_eq!((i.audio_codec.as_str(), i.audio_rate, i.audio_channels.as_str()), ("pcm_s16le", 44100, "5.1(side)"));
   }
 
   #[test]

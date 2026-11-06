@@ -561,6 +561,11 @@ function GhostscriptStatus() {
   )
 }
 
+// What a preset keeps of settings[fileType]: never the PDF password (it
+// would sit in presets.json in plain text, for any operation). An encrypt
+// preset therefore runs into the usual "no password" error.
+const presetSettings = ({ password, ...s }) => s
+
 // "Save as right-click preset": the current type, output format and
 // settings[fileType] (Trim/Crop are per-file, so never part of it) go to the
 // hub through window.SoraiPresets (looked up at call time, like
@@ -573,7 +578,7 @@ function SavePresetRow({ fileType, settings }) {
   if (!fileType || !window.SoraiPresets) return null
   const preset = () => {
     const s = settings[fileType]
-    return { fileType, format: fileType === 'pdf' ? '.pdf' : s.format, settings: s }
+    return { fileType, format: fileType === 'pdf' ? '.pdf' : s.format, settings: presetSettings(s) }
   }
   const open = async () => {
     setMessage('')
@@ -634,7 +639,7 @@ export function PresetEditor({ preset, onDone }) {
     const s = settings[fileType]
     setBusy(true)
     try {
-      await window.SoraiPresets.save({ id: preset.id, name: preset.name, fileType, format: fileType === 'pdf' ? '.pdf' : s.format, settings: s })
+      await window.SoraiPresets.save({ id: preset.id, name: preset.name, fileType, format: fileType === 'pdf' ? '.pdf' : s.format, settings: presetSettings(s) })
       onDone(true)
     } catch (e) {
       setError(String(e))
