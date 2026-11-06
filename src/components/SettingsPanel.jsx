@@ -410,10 +410,50 @@ function PdfSettings({ visible, pdf, setPdf }) {
         <div className="field span-2">
           <label className="field-label" htmlFor="pdf-optimize">{t('settings.pdf.optimizeLabel')}</label>
           <GlassSelect id="pdf-optimize" value={pdf.optimize} onChange={(e) => set({ optimize: e.target.value })}>
-            <option value="linearize">{t('settings.pdf.linearize')}</option>
             <option value="compress">{t('settings.pdf.compress')}</option>
+            <option value="linearize">{t('settings.pdf.linearize')}</option>
+            <option value="extract">{t('settings.pdf.extract')}</option>
+            <option value="split">{t('settings.pdf.split')}</option>
+            <option value="rotate">{t('settings.pdf.rotate')}</option>
+            <option value="encrypt">{t('settings.pdf.encrypt')}</option>
           </GlassSelect>
         </div>
+        {pdf.optimize === 'rotate' && (
+          <div className="field">
+            <label className="field-label" htmlFor="pdf-angle">{t('settings.pdf.angleLabel')}</label>
+            <GlassSelect id="pdf-angle" value={String(pdf.angle ?? 90)} onChange={(e) => set({ angle: Number(e.target.value) })}>
+              <option value="90">90°</option>
+              <option value="180">180°</option>
+              <option value="270">270°</option>
+            </GlassSelect>
+          </div>
+        )}
+        {(pdf.optimize === 'extract' || pdf.optimize === 'rotate') && (
+          <div className={pdf.optimize === 'rotate' ? 'field' : 'field span-2'}>
+            <label className="field-label" htmlFor="pdf-pages">{t('settings.pdf.pagesLabel')}</label>
+            <input
+              type="text"
+              className="input"
+              id="pdf-pages"
+              value={pdf.pages ?? ''}
+              placeholder={t(pdf.optimize === 'rotate' ? 'settings.pdf.pagesAll' : 'settings.pdf.pagesHint')}
+              onChange={(e) => set({ pages: e.target.value })}
+            />
+          </div>
+        )}
+        {pdf.optimize === 'encrypt' && (
+          <div className="field span-2">
+            <label className="field-label" htmlFor="pdf-password">{t('settings.pdf.passwordLabel')}</label>
+            <input
+              type="password"
+              className="input"
+              id="pdf-password"
+              autoComplete="new-password"
+              value={pdf.password ?? ''}
+              onChange={(e) => set({ password: e.target.value })}
+            />
+          </div>
+        )}
         {pdf.optimize === 'compress' && (
           <div className="field span-2">
             <label className="field-label" htmlFor="pdf-level">{t('settings.pdf.levelLabel')}</label>
