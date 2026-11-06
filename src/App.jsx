@@ -8,6 +8,7 @@ import ProgressLog from './components/ProgressLog.jsx'
 import MixedTypeModal from './components/MixedTypeModal.jsx'
 import TrimModal from './components/TrimModal.jsx'
 import CropModal from './components/CropModal.jsx'
+import PdfPreviewModal from './components/PdfPreviewModal.jsx'
 import EnginePrompt from './components/EnginePrompt.jsx'
 import { useFileManager } from './hooks/useFileManager.js'
 import { useSettings } from './hooks/useSettings.js'
@@ -177,6 +178,7 @@ function App({ pendingLaunch, editPreset, onEditDone }) {
   // Mirrors trimIndex/trimFile/handleSaveTrim above — crop is per-file state
   // stored the same way trim is, not a shared useSettings field.
   const [cropIndex, setCropIndex] = useState(-1)
+  const [pdfIndex, setPdfIndex] = useState(-1)
   const cropFile = cropIndex >= 0 ? files[cropIndex] : null
 
   const handleSaveCrop = (crop) => {
@@ -216,7 +218,7 @@ function App({ pendingLaunch, editPreset, onEditDone }) {
                   </button>
                 </div>
               </div>
-              <FileList files={files} fileType={fileType} settings={settings} onRemove={removeFile} onMove={moveFile} onOpenTrim={setTrimIndex} onOpenCrop={setCropIndex} />
+              <FileList files={files} fileType={fileType} settings={settings} onRemove={removeFile} onMove={moveFile} onOpenTrim={setTrimIndex} onOpenCrop={setCropIndex} onOpenPdf={setPdfIndex} />
             </div>
             <ProgressLog visible={progressVisible} percent={progressPercent} text={progressText} log={terminalLog} />
           </section>
@@ -257,6 +259,7 @@ function App({ pendingLaunch, editPreset, onEditDone }) {
         onClose={() => setCropIndex(-1)}
         onSave={handleSaveCrop}
       />
+      <PdfPreviewModal file={fileType === 'pdf' ? files[pdfIndex] ?? null : null} onClose={() => setPdfIndex(-1)} />
       <MixedTypeModal
         open={!!pendingMismatch}
         existingType={pendingMismatch?.existingType}

@@ -66,7 +66,7 @@ function formatImageResolution(fileObj, fileType, settings) {
   return `${w} x ${h}`
 }
 
-export default function FileList({ files, fileType, settings, onRemove, onMove, onOpenTrim, onOpenCrop }) {
+export default function FileList({ files, fileType, settings, onRemove, onMove, onOpenTrim, onOpenCrop, onOpenPdf }) {
   const { t } = useTranslation()
   const estimates = useEstimates(files, fileType, settings)
   return (
@@ -183,6 +183,14 @@ export default function FileList({ files, fileType, settings, onRemove, onMove, 
                     <line x1="20" y1="4" x2="8.12" y2="15.88"></line>
                     <line x1="14.47" y1="14.48" x2="20" y2="20"></line>
                     <line x1="8.12" y1="8.12" x2="12" y2="12"></line>
+                  </svg>
+                </button>
+              )}
+              {fileType === 'pdf' && (
+                <button id={`btn-pdf-preview-${index}`} className="btn-trim" title={t('fileList.previewPdf')} aria-label={t('fileList.previewPdf')} onClick={() => onOpenPdf && onOpenPdf(index)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
                   </svg>
                 </button>
               )}

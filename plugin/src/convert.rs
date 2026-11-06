@@ -87,6 +87,9 @@ pub struct PdfSettings {
   /// qpdf page range ("1-3,5", "z" = last): extract (required), rotate (empty = all).
   #[serde(default)]
   pub pages: String,
+  /// extract: every page ("All pages" in the UI), `pages` ignored.
+  #[serde(default, rename = "allPages")]
+  pub all_pages: bool,
   /// rotate: 90 | 180 | 270, clockwise.
   #[serde(default = "default_angle")]
   pub angle: i32,
@@ -411,7 +414,7 @@ pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
       let (i, o) = (src.path.clone(), s(out));
       return match p.optimize.as_str() {
         "linearize" => Ok(vec![s("--linearize"), i, o]),
-        "extract" => Ok(vec![i, s("--pages"), s("."), page_range(&p.pages)?, s("--"), o]),
+        "extract" => Ok(vec![i, s("--pages"), s("."), if p.all_pages { s("1-z") } else { page_range(&p.pages)? }, s("--"), o]),
         "rotate" => {
           if ![90, 180, 270].contains(&p.angle) {
             return Err(format!("invalid angle {}", p.angle));
@@ -824,7 +827,12 @@ pub fn estimate(job: &Job) -> Estimate {
         base * (i.quality / 100.0) * (i.scale / 100.0).powi(2) * area
       }
     }
-    Kind::Pdf(p) => current * if p.optimize == "compress" { 0.7 } else { 1.02 },
+    Kind::Pdf(p) => current * match p.optimize.as_str() {
+      "compress" => 0.7,
+      "linearize" => 1.02,
+      // Page tools: about the same (extract / split are smaller, but by how much depends on the pages).
+      _ => 1.0,
+    },
   };
   Estimate { est_mb: est, warn: est > current, target_fps_label }
 }
@@ -1011,7 +1019,7 @@ mod tests {
   }
 
   fn pdf(optimize: &str) -> Kind {
-    Kind::Pdf(PdfSettings { optimize: optimize.into(), level: default_pdf_level(), pages: String::new(), angle: 90, password: String::new() })
+    Kind::Pdf(PdfSettings { optimize: optimize.into(), level: default_pdf_level(), pages: String::new(), all_pages: false, angle: 90, password: String::new() })
   }
 
   #[test]
@@ -1186,6 +1194,9 @@ mod tests {
     let extract = |pages: &str| pdf_args(pdf_op(|p| { p.optimize = "extract".into(); p.pages = pages.into(); }));
     assert_eq!(extract(" 1-3, 5 ").unwrap(), ["a.pdf", "--pages", ".", "1-3,5", "--", "o.pdf"]);
     assert!(extract("").is_err());
+    // "All pages": the range is ignored, even an invalid leftover one.
+    let all = pdf_args(pdf_op(|p| { p.optimize = "extract".into(); p.all_pages = true; p.pages = "x;".into(); })).unwrap();
+    assert_eq!(all, ["a.pdf", "--pages", ".", "1-z", "--", "o.pdf"]);
     let rotate = |angle: i32, pages: &str| pdf_args(pdf_op(|p| { p.optimize = "rotate".into(); p.angle = angle; p.pages = pages.into(); }));
     assert_eq!(rotate(90, "").unwrap(), ["a.pdf", "o.pdf", "--rotate=+90"]);
     assert_eq!(rotate(270, "1, 3-z").unwrap(), ["a.pdf", "o.pdf", "--rotate=+270:1,3-z"]);
@@ -1223,7 +1234,9 @@ mod tests {
     let Kind::Audio(a) = kind("audio", r#"{"format":".m4a","bitrate":"192k","speed":1}"#) else { panic!() };
     assert!(!a.alac);
     let Kind::Pdf(p) = kind("pdf", r#"{"optimize":"linearize"}"#) else { panic!() };
-    assert_eq!((p.pages.as_str(), p.angle, p.password.as_str(), p.level.as_str()), ("", 90, "", "ebook"));
+    assert_eq!((p.pages.as_str(), p.angle, p.password.as_str(), p.level.as_str(), p.all_pages), ("", 90, "", "ebook", false));
+    let Kind::Pdf(p) = kind("pdf", r#"{"optimize":"extract","allPages":true}"#) else { panic!() };
+    assert!(p.all_pages);
     let j: Job = serde_json::from_str(r#"{"source":{"path":"a","videoCodec":"h264","audioCodec":"aac"},"fileType":"pdf","settings":{"optimize":"split"}}"#).unwrap();
     assert_eq!((j.source.video_codec.as_str(), j.source.audio_codec.as_str()), ("h264", "aac"));
   }
@@ -1248,6 +1261,11 @@ mod tests {
   #[test]
   fn new_output_estimates() {
     let e = |source: Source, kind: Kind| est(source, kind).est_mb;
+    // Page tools don't grow the file: no "will get bigger" warning.
+    for op in ["extract", "split", "rotate", "encrypt"] {
+      let x = est(src("a.pdf"), pdf(op));
+      assert!(!x.warn && x.est_mb == 1.0, "{op}");
+    }
     assert_eq!(e(mov("h264", "aac"), video(|v| { v.codec = "copy".into(); v.quality = 10.0; })), 1.0); // = source
     assert_eq!(e(mov("h264", "aac"), video(|v| { v.format = ".png".into() })), 320.0 * 240.0 * 1.5 / MIB);
     assert_eq!(e(src("in.mp4"), video(|v| { v.format = ".mp3".into() })), 192_000.0 * 10.0 / 8.0 / MIB);

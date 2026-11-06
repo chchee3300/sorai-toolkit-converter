@@ -494,7 +494,27 @@ function PdfSettings({ visible, pdf, setPdf }) {
             </GlassSelect>
           </div>
         )}
-        {(pdf.optimize === 'extract' || pdf.optimize === 'rotate') && (
+        {pdf.optimize === 'extract' && (
+          <div className="field span-2">
+            <label className="field-label">{t('settings.pdf.pagesLabel')}</label>
+            <div className="target-size-chips" role="radiogroup">
+              {[true, false].map((all) => (
+                <button
+                  key={String(all)}
+                  type="button"
+                  role="radio"
+                  aria-checked={!!pdf.allPages === all}
+                  id={all ? 'pdf-pages-all' : 'pdf-pages-some'}
+                  className={`chip ${!!pdf.allPages === all ? 'chip--active' : ''}`}
+                  onClick={() => set({ allPages: all })}
+                >
+                  {t(all ? 'settings.pdf.extractAll' : 'settings.pdf.extractSome')}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {((pdf.optimize === 'extract' && !pdf.allPages) || pdf.optimize === 'rotate') && (
           <div className={pdf.optimize === 'rotate' ? 'field' : 'field span-2'}>
             <label className="field-label" htmlFor="pdf-pages">{t('settings.pdf.pagesLabel')}</label>
             <input
