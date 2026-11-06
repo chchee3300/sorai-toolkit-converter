@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react'
 
 // Matches resources/index.html's <option> lists exactly (index.html:108-219).
-export const VIDEO_FORMATS = ['.mp4', '.mkv', '.webm', '.avi', '.gif']
+export const VIDEO_FORMATS = ['.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.ts', '.wmv', '.mpg', '.gif', '.apng']
 export const IMAGE_FORMATS = ['.jpg', '.png', '.webp', '.avif', '.ico', '.pdf']
-export const AUDIO_FORMATS = ['.mp3', '.wav', '.aac', '.m4a', '.flac', '.ogg']
+export const AUDIO_FORMATS = ['.mp3', '.wav', '.aac', '.m4a', '.flac', '.ogg', '.opus', '.aiff', '.wma', '.ac3']
 
 // Preset "compress to under N MB" targets -- decimal MB (1,000,000 bytes),
 // not MiB, deliberately stricter for extra safety margin against
@@ -23,6 +23,7 @@ const DEFAULT_VIDEO = {
   targetSizeMB: null,
 }
 const DEFAULT_IMAGE = { format: '.jpg', quality: 85, scale: 100 }
+// alac (M4A only) stays unset until ticked: Rust's serde defaults it to false.
 const DEFAULT_AUDIO = { format: '.mp3', bitrate: '320k', speed: 1.0 }
 const DEFAULT_PDF = { optimize: 'linearize', level: 'ebook' } // level: compress only; screen | ebook | printer
 

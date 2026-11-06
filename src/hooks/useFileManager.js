@@ -5,9 +5,10 @@ import { probeSource, setPreviewFiles } from '../plugin.js'
 
 // Ported unchanged from resources/js/main.js's getFileType (main.js:6-18
 // pre-extraction).
-const VIDEO_EXTS = ['mp4', 'mkv', 'avi', 'mov', 'webm']
+// .ts is an input here (drag/browse) but not in the hub's right-click INPUT_EXTS (TypeScript).
+const VIDEO_EXTS = ['mp4', 'mkv', 'avi', 'mov', 'webm', 'm4v', 'flv', 'ts', 'm2ts', 'mts', '3gp', 'wmv', 'mpg', 'mpeg', 'ogv']
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif', 'ico']
-const AUDIO_EXTS = ['mp3', 'wav', 'aac', 'm4a', 'flac', 'ogg']
+const AUDIO_EXTS = ['mp3', 'wav', 'aac', 'm4a', 'flac', 'ogg', 'opus', 'aiff', 'aif', 'wma', 'ac3', 'ape', 'dsf', 'dff', 'dts']
 const PDF_EXTS = ['pdf']
 
 function getFileType(filename) {

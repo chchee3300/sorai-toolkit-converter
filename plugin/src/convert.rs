@@ -304,7 +304,11 @@ fn rate_args(v: &VideoSettings, out_secs: f64, src_kbps: Option<f64>, src_fps: f
           _ => 1.0,
         };
         let k = ((orig_kbps * (v.quality / 100.0) * fps_factor).floor() as i64).max(10);
-        a.extend(["-b:v".into(), format!("{k}k"), "-bufsize".into(), format!("{}k", k * 2)]);
+        a.extend(["-b:v".into(), format!("{k}k")]);
+        // lavc's own wmv2/mpeg2video refuse -bufsize without -maxrate.
+        if !matches!(effective_codec(v), "wmv2" | "mpeg2video") {
+          a.extend(["-bufsize".into(), format!("{}k", k * 2)]);
+        }
       }
       None => {
         let crf = 51 - ((v.quality / 100.0) * 51.0).round() as i64;
@@ -1064,6 +1068,15 @@ mod tests {
     );
     assert!(holds_video(".mkv", "anything") && !holds_video(".mkv", ""));
     assert!(holds_audio(".webm", "") && !holds_audio(".webm", "aac") && holds_audio(".mkv", "flac"));
+  }
+
+  // lavc's own wmv2/mpeg2video refuse -bufsize without -maxrate ("Either both
+  // buffer size and max rate or neither must be specified").
+  #[test]
+  fn wmv_and_mpg_get_no_lone_bufsize() {
+    assert_eq!(joined(src("in.mp4"), video(|v| v.format = ".wmv".into())), "-y -i in.mp4 -c:v wmv2 -b:v 819k o.x");
+    assert_eq!(joined(src("in.mp4"), video(|v| v.format = ".mpg".into())), "-y -i in.mp4 -c:v mpeg2video -b:v 819k o.x");
+    assert_eq!(joined(src("in.mp4"), video(|v| v.format = ".mov".into())), "-y -i in.mp4 -c:v libx264 -b:v 819k -bufsize 1638k o.x");
   }
 
   #[test]

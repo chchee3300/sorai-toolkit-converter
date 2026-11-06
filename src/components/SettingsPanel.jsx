@@ -47,18 +47,39 @@ function OutputPathRow({ outputPath, onBrowse }) {
   )
 }
 
-// The codec really encoded -- mirror of plugin/src/convert.rs effective_codec:
-// target-size forces H.264, and WebM takes only VP9/AV1 (VP9 by default).
-const WEBM_CODECS = ['libvpx-vp9', 'libsvtav1']
+// The codec really encoded -- mirror of plugin/src/convert.rs effective_codec
+// and container_codecs: target-size forces H.264, then a container-limited
+// format swaps any codec it can't hold for its first (default) one.
+const CODEC_LABELS = {
+  libx264: 'H.264 (avc1)',
+  libx265: 'H.265 (hevc)',
+  'libvpx-vp9': 'VP9 (vp09)',
+  libsvtav1: 'AV1 (av01)',
+  wmv2: 'WMV2',
+  mpeg2video: 'MPEG-2',
+}
+const DEFAULT_CODECS = ['libx264', 'libx265', 'libvpx-vp9', 'libsvtav1']
+const CONTAINER_CODECS = {
+  '.webm': ['libvpx-vp9', 'libsvtav1'],
+  '.mov': ['libx264', 'libx265'],
+  '.m4v': ['libx264', 'libx265'],
+  '.ts': ['libx264', 'libx265'],
+  '.wmv': ['wmv2'],
+  '.mpg': ['mpeg2video'],
+}
 function effectiveCodec(v) {
   const codec = v.targetSizeMode && v.targetSizeMB != null ? 'libx264' : v.codec
-  return v.format === '.webm' && !WEBM_CODECS.includes(codec) ? 'libvpx-vp9' : codec
+  const ok = CONTAINER_CODECS[v.format]
+  return ok && !ok.includes(codec) ? ok[0] : codec
 }
+// GIF/APNG share one filter chain and have no codec choice.
+const ANIMATED = ['.gif', '.apng']
 
 function VideoSettings({ visible, video, setVideo, lastFile }) {
   const { t } = useTranslation()
   const set = (patch) => setVideo((v) => ({ ...v, ...patch }))
   const qualityMax = video.upscale ? 200 : 100
+  const codecs = CONTAINER_CODECS[video.format] ?? DEFAULT_CODECS
 
   // Same "last file in the batch" reference convention ImageSettings uses
   // for its resolution preview — the fps slider's bounds are derived from
@@ -83,23 +104,26 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
             <option value=".mkv">MKV</option>
             <option value=".webm">WEBM</option>
             <option value=".avi">AVI</option>
-            {/* GIF has no bitrate concept the target-size math can drive --
+            <option value=".mov">MOV</option>
+            <option value=".m4v">M4V</option>
+            <option value=".ts">TS</option>
+            <option value=".wmv">WMV</option>
+            <option value=".mpg">MPG</option>
+            {/* GIF/APNG have no bitrate concept the target-size math can drive --
                 excluded from the picker entirely while targetSizeMode is
                 on, same idiom as forcing codec below. */}
             {!video.targetSizeMode && <option value=".gif">{t('settings.video.formatGif')}</option>}
+            {!video.targetSizeMode && <option value=".apng">{t('settings.video.formatApng')}</option>}
           </GlassSelect>
         </div>
-        <div className="field" id="video-codec-group" style={{ display: video.format === '.gif' ? 'none' : 'block' }}>
+        <div className="field" id="video-codec-group" style={{ display: ANIMATED.includes(video.format) ? 'none' : 'block' }}>
           <label className="field-label" htmlFor="video-codec">{t('settings.codec')}</label>
           {/* LiquidSelect builds its overlay options once, so a new option set
               remounts it -- keyed on a plain div: LiquidSelect re-parents the
               <select> into its own wrapper, so React can't remove the select itself. */}
-          <div key={video.format === '.webm' ? 'webm' : 'all'}>
+          <div key={codecs.join()}>
           <GlassSelect id="video-codec" value={effectiveCodec(video)} disabled={video.targetSizeMode} onChange={(e) => set({ codec: e.target.value })}>
-            {video.format !== '.webm' && <option value="libx264">H.264 (avc1)</option>}
-            {video.format !== '.webm' && <option value="libx265">H.265 (hevc)</option>}
-            <option value="libvpx-vp9">VP9 (vp09)</option>
-            <option value="libsvtav1">AV1 (av01)</option>
+            {codecs.map((c) => <option key={c} value={c}>{CODEC_LABELS[c]}</option>)}
           </GlassSelect>
           </div>
           {video.targetSizeMode && <p className="settings-hint">{t('settings.video.targetSizeCodecLocked')}</p>}
@@ -121,7 +145,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
                 onClick={() => set({
                   targetSizeMode: true,
                   targetSizeMB: mb,
-                  format: video.format === '.gif' ? '.mp4' : video.format,
+                  format: ANIMATED.includes(video.format) ? '.mp4' : video.format,
                 })}
               >
                 {mb} MB
@@ -347,14 +371,23 @@ function ImageSettings({ visible, image, setImage, lastFile }) {
 function AudioSettings({ visible, audio, setAudio }) {
   const { t } = useTranslation()
   const set = (patch) => setAudio((v) => ({ ...v, ...patch }))
-  const bitrateDisabled = audio.format === '.flac' || audio.format === '.wav'
+  const alac = audio.format === '.m4a' && audio.alac
+  const bitrateDisabled = alac || ['.flac', '.wav', '.aiff'].includes(audio.format)
 
   return (
     <div id="audio-settings" className={visible ? 'settings-block' : 'settings-block hidden'}>
       <p className="settings-subtitle">{t('settings.audio.subtitle')}</p>
       <div className="settings-grid">
         <div className="field">
-          <label className="field-label" htmlFor="audio-format">{t('settings.format')}</label>
+          <div className="field-label-row">
+            <label className="field-label" htmlFor="audio-format">{t('settings.format')}</label>
+            {audio.format === '.m4a' && (
+              <label className="toggle-check">
+                <input type="checkbox" id="audio-alac" checked={!!audio.alac} onChange={(e) => set({ alac: e.target.checked })} />
+                {t('settings.audio.alac')}
+              </label>
+            )}
+          </div>
           <GlassSelect id="audio-format" value={audio.format} onChange={(e) => set({ format: e.target.value })}>
             <option value=".mp3">MP3</option>
             <option value=".wav">WAV</option>
@@ -362,6 +395,10 @@ function AudioSettings({ visible, audio, setAudio }) {
             <option value=".m4a">M4A</option>
             <option value=".flac">FLAC</option>
             <option value=".ogg">OGG</option>
+            <option value=".opus">Opus</option>
+            <option value=".aiff">AIFF</option>
+            <option value=".wma">WMA</option>
+            <option value=".ac3">AC3</option>
           </GlassSelect>
         </div>
         <div className="field">
