@@ -74,12 +74,18 @@ function effectiveCodec(v) {
 }
 // GIF/APNG share one filter chain and have no codec choice.
 const ANIMATED = ['.gif', '.apng']
+// Special outputs (plugin is_special_video_out): no codec, no target size.
+const SPECIAL = [...ANIMATED, '.png', '.m4a', '.mp3']
+const AUDIO_ONLY = ['.m4a', '.mp3']
 
 function VideoSettings({ visible, video, setVideo, lastFile }) {
   const { t } = useTranslation()
   const set = (patch) => setVideo((v) => ({ ...v, ...patch }))
   const qualityMax = video.upscale ? 200 : 100
   const codecs = CONTAINER_CODECS[video.format] ?? DEFAULT_CODECS
+  // PNG (one frame) shows no fields; audio-only keeps just speed.
+  const frame = video.format === '.png'
+  const audioOnly = AUDIO_ONLY.includes(video.format)
 
   // Same "last file in the batch" reference convention ImageSettings uses
   // for its resolution preview — the fps slider's bounds are derived from
@@ -109,14 +115,18 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
             <option value=".ts">TS</option>
             <option value=".wmv">WMV</option>
             <option value=".mpg">MPG</option>
-            {/* GIF/APNG have no bitrate concept the target-size math can drive --
+            {/* Special outputs have no video bitrate the target-size math can drive --
                 excluded from the picker entirely while targetSizeMode is
                 on, same idiom as forcing codec below. */}
             {!video.targetSizeMode && <option value=".gif">{t('settings.video.formatGif')}</option>}
             {!video.targetSizeMode && <option value=".apng">{t('settings.video.formatApng')}</option>}
+            {!video.targetSizeMode && <option value=".png">{t('settings.video.formatPng')}</option>}
+            {!video.targetSizeMode && <option value=".m4a">{t('settings.video.formatM4a')}</option>}
+            {!video.targetSizeMode && <option value=".mp3">{t('settings.video.formatMp3')}</option>}
           </GlassSelect>
+          {frame && <p className="settings-hint" id="video-frame-hint">{t('settings.video.frameHint')}</p>}
         </div>
-        <div className="field" id="video-codec-group" style={{ display: ANIMATED.includes(video.format) ? 'none' : 'block' }}>
+        <div className="field" id="video-codec-group" style={{ display: SPECIAL.includes(video.format) ? 'none' : 'block' }}>
           <label className="field-label" htmlFor="video-codec">{t('settings.codec')}</label>
           {/* LiquidSelect builds its overlay options once, so a new option set
               remounts it -- keyed on a plain div: LiquidSelect re-parents the
@@ -134,6 +144,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
             "Under 50MB" only needs to stay under the cap, not hit it
             exactly, so this is presented as discrete presets rather than
             a slider. */}
+        {!frame && !audioOnly && (
         <div className="field span-2">
           <label className="field-label">{t('settings.video.targetSize')}</label>
           <div className="target-size-chips">
@@ -158,7 +169,8 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
             )}
           </div>
         </div>
-        {!video.targetSizeMode && (
+        )}
+        {!video.targetSizeMode && !frame && !audioOnly && (
         <div className="field span-2">
           <div className="field-label-row">
             <label className="field-label" htmlFor="video-quality">
@@ -189,6 +201,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
           />
         </div>
         )}
+        {!frame && !audioOnly && (
         <div className="field">
           <div className="field-label-row">
             <label className="field-label" htmlFor="video-fps">
@@ -219,6 +232,8 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
             onChange={(e) => set({ fps: parseFloat(e.target.value) })}
           />
         </div>
+        )}
+        {!frame && (
         <div className="field">
           <label className="field-label" htmlFor="video-speed">
             {t('settings.speed')} — <span className="val-chip tabular-nums" id="video-speed-val">{Number(video.speed).toFixed(2)}</span>×
@@ -235,6 +250,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
             onChange={(e) => set({ speed: parseFloat(e.target.value) })}
           />
         </div>
+        )}
       </div>
     </div>
   )

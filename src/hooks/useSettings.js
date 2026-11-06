@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 
 // Matches resources/index.html's <option> lists exactly (index.html:108-219).
-export const VIDEO_FORMATS = ['.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.ts', '.wmv', '.mpg', '.gif', '.apng']
+export const VIDEO_FORMATS = ['.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.ts', '.wmv', '.mpg', '.gif', '.apng', '.png', '.m4a', '.mp3']
 export const IMAGE_FORMATS = ['.jpg', '.png', '.webp', '.avif', '.ico', '.pdf']
 export const AUDIO_FORMATS = ['.mp3', '.wav', '.aac', '.m4a', '.flac', '.ogg', '.opus', '.aiff', '.wma', '.ac3']
 
