@@ -80,6 +80,14 @@ const ANIMATED = ['.gif', '.apng']
 const SPECIAL = [...ANIMATED, '.png', '.m4a', '.mp3']
 const AUDIO_ONLY = ['.m4a', '.mp3']
 
+// "Merge into one file" is offered for >= 2 videos / audio files / PDFs,
+// not for a special video output (GIF, APNG, PNG, audio only).
+export function mergeOffered(files, fileType, settings) {
+  if (files.length < 2) return false
+  if (fileType === 'video') return !SPECIAL.includes(settings.video.format)
+  return fileType === 'audio' || fileType === 'pdf'
+}
+
 function VideoSettings({ visible, video, setVideo, lastFile }) {
   const { t } = useTranslation()
   const set = (patch) => setVideo((v) => ({ ...v, ...patch }))
@@ -663,6 +671,8 @@ export default function SettingsPanel({
   cancelling,
   onExecute,
   onCancel,
+  merge,
+  onMergeChange,
 }) {
   const { t } = useTranslation()
   const { video, setVideo, image, setImage, audio, setAudio, pdf, setPdf } = settings
@@ -675,7 +685,14 @@ export default function SettingsPanel({
       <VideoSettings visible={fileType === 'video'} video={video} setVideo={setVideo} lastFile={files[files.length - 1]} />
       <ImageSettings visible={fileType === 'image'} image={image} setImage={setImage} lastFile={files[files.length - 1]} />
       <AudioSettings visible={fileType === 'audio'} audio={audio} setAudio={setAudio} />
-      <PdfSettings visible={fileType === 'pdf'} pdf={pdf} setPdf={setPdf} />
+      {/* Merging is the PDF operation itself: the operation block hides. */}
+      <PdfSettings visible={fileType === 'pdf' && !merge} pdf={pdf} setPdf={setPdf} />
+      {onMergeChange && (
+        <label className="toggle-check">
+          <input type="checkbox" id="merge-files" checked={merge} disabled={executing} onChange={(e) => onMergeChange(e.target.checked)} />
+          {t('settings.mergeFiles')}
+        </label>
+      )}
       <SavePresetRow fileType={fileType} settings={settings} />
 
       <div className="panel-divider"></div>

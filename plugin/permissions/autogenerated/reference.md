@@ -7,6 +7,7 @@ Allows every command this plugin exposes.
 - `allow-ping`
 - `allow-probe-source`
 - `allow-start-convert`
+- `allow-start-merge`
 - `allow-cancel-job`
 - `allow-estimate-sizes`
 - `allow-set-preview-files`
@@ -361,6 +362,32 @@ Enables the start_convert command without any pre-configured scope.
 <td>
 
 Denies the start_convert command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:allow-start-merge`
+
+</td>
+<td>
+
+Enables the start_merge command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:deny-start-merge`
+
+</td>
+<td>
+
+Denies the start_merge command without any pre-configured scope.
 
 </td>
 </tr>

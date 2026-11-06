@@ -24,6 +24,10 @@ pub const NAME: &str = "sorai-converter";
 /// (hub: `$TEMP/sorai-toolkit/thumbnails/*`), or `<img>` can't load them.
 pub const THUMBNAIL_SUBDIR: &str = "sorai-toolkit/thumbnails";
 
+/// Merge's ffmpeg concat lists go to `<system temp>/<CONCAT_SUBDIR>`, pruned
+/// like the thumbnails (24 h) at setup.
+pub const CONCAT_SUBDIR: &str = "sorai-toolkit/concat";
+
 /// URI scheme Trim/Crop load queued sources from (JS:
 /// `convertFileSrc(path, PREVIEW_SCHEME)`). Serves exactly the files in
 /// `PreviewFiles` -- unlike the asset protocol's scope, entries can be removed.
@@ -262,6 +266,42 @@ async fn start_job<R: Runtime>(app: &AppHandle<R>, job: &convert::Job, out: Path
   runner::start(app, convert::program(job), args, out, move |line| convert::parse_progress(line, duration, speed), on_event)
 }
 
+static LIST_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// "Merge into one file": `job.sources`, in order, into one
+/// `<first name>_merged<ext>` in `outDir` (else the first file's folder),
+/// reserved like `start_convert`'s. One job, same events.
+#[tauri::command]
+async fn start_merge<R: Runtime>(
+  app: AppHandle<R>,
+  job: convert::MergeJob,
+  out_dir: String,
+  on_event: tauri::ipc::Channel<runner::JobEvent>,
+) -> Result<Started, String> {
+  let first = Path::new(&job.sources.first().ok_or("merge needs at least 2 files")?.path);
+  let stem = first.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+  let out = convert::unique_out_path(&resolve_out_dir(&out_dir, first)?, &stem, "_merged", job.out_ext(), convert::taken);
+  let out_path = out.to_string_lossy().into_owned();
+  let started = start_merge_job(&app, &job, out.clone(), on_event);
+  if started.is_err() {
+    runner::remove_out(&out);
+  }
+  Ok(Started { job_id: started?, out_path })
+}
+
+fn start_merge_job<R: Runtime>(app: &AppHandle<R>, job: &convert::MergeJob, out: PathBuf, on_event: tauri::ipc::Channel<runner::JobEvent>) -> Result<u64, String> {
+  let dir = app.path().temp_dir().map_err(|e| e.to_string())?.join(CONCAT_SUBDIR);
+  let list = dir.join(format!("concat-{}-{}.txt", std::process::id(), LIST_SEQ.fetch_add(1, Ordering::Relaxed)));
+  let plan = convert::merge_args(job, &out.to_string_lossy(), &list.to_string_lossy())?;
+  if let Some(text) = &plan.list {
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(&list, text).map_err(|e| format!("{}: {e}", list.display()))?;
+  }
+  let seconds = plan.seconds;
+  // `seconds` is already the output length (speed applied).
+  runner::start(app, convert::merge_program(&job.kind), plan.args, out, move |line| convert::parse_progress(line, seconds, 1.0), on_event)
+}
+
 /// Optional engines for the hub's settings and the PDF status line.
 #[tauri::command]
 fn engine_status<R: Runtime>(app: AppHandle<R>) -> Result<Vec<engines::Status>, String> {
@@ -325,7 +365,7 @@ fn estimate_sizes(jobs: Vec<convert::Job>) -> Vec<convert::Estimate> {
 /// Registered by the hub: `.plugin(tauri_plugin_sorai_converter::init())`.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new(NAME)
-    .invoke_handler(tauri::generate_handler![ping, probe_source, start_convert, cancel_job, estimate_sizes, set_preview_files, engine_status, engine_set_path, engine_install, engine_cancel, engine_remove, engine_prompt, engine_set_prompted])
+    .invoke_handler(tauri::generate_handler![ping, probe_source, start_convert, start_merge, cancel_job, estimate_sizes, set_preview_files, engine_status, engine_set_path, engine_install, engine_cancel, engine_remove, engine_prompt, engine_set_prompted])
     .register_asynchronous_uri_scheme_protocol(PREVIEW_SCHEME, |ctx, request, responder| {
       let allowed = ctx.app_handle().state::<PreviewFiles>().0.lock().unwrap().clone();
       std::thread::spawn(move || {
@@ -344,7 +384,10 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
       app.manage(runner::Jobs::default());
       app.manage(PreviewFiles::default());
       if let Ok(tmp) = app.path().temp_dir() {
-        std::thread::spawn(move || prune_old_files(&tmp.join(THUMBNAIL_SUBDIR), THUMBNAIL_MAX_AGE));
+        std::thread::spawn(move || {
+          prune_old_files(&tmp.join(THUMBNAIL_SUBDIR), THUMBNAIL_MAX_AGE);
+          prune_old_files(&tmp.join(CONCAT_SUBDIR), THUMBNAIL_MAX_AGE);
+        });
       }
       Ok(())
     })

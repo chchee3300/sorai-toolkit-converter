@@ -13,7 +13,14 @@ export const probeSource = (path, fileType) => invoke('plugin:sorai-converter|pr
 // Resolves { jobId, outPath, done } once the job is running; `done` resolves
 // with the finished payload { status: success|error|cancelled, message, outSize }.
 // Events come on the job's own Channel, so none can be missed or misrouted.
-export async function startConvert(job, outDir, { onLog, onProgress } = {}) {
+export const startConvert = (job, outDir, handlers) => startJob('start_convert', job, outDir, handlers)
+
+// "Merge into one file": job = { sources: <file-list records, in order>,
+// fileType, settings } -> one job writing <first name>_merged<ext>, same
+// { jobId, outPath, done } and events as startConvert.
+export const startMerge = (job, outDir, handlers) => startJob('start_merge', job, outDir, handlers)
+
+async function startJob(cmd, job, outDir, { onLog, onProgress } = {}) {
   let finish
   const done = new Promise((resolve) => (finish = resolve))
   const onEvent = new Channel()
@@ -22,7 +29,7 @@ export async function startConvert(job, outDir, { onLog, onProgress } = {}) {
     else if (m.event === 'progress') onProgress?.(m.percent)
     else if (m.event === 'finished') finish(m)
   }
-  const { jobId, outPath } = await invoke('plugin:sorai-converter|start_convert', { job, outDir, onEvent })
+  const { jobId, outPath } = await invoke(`plugin:sorai-converter|${cmd}`, { job, outDir, onEvent })
   return { jobId, outPath, done }
 }
 

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { tNow } from '../i18n/dict.js'
-import { cancelJob, startConvert } from '../plugin.js'
+import { cancelJob, startConvert, startMerge } from '../plugin.js'
 
 // Batch queue state machine. Each file is one plugin job (plugin/src/
 // runner.rs): Rust builds the ffmpeg args, picks a collision-free output
@@ -9,7 +9,10 @@ import { cancelJob, startConvert } from '../plugin.js'
 // "Cancelling..."). This hook only sequences files and mirrors events into
 // the progress bar / log. PDF (qpdf) and image->PDF (img2pdf) are plugin
 // jobs too; a missing system qpdf/img2pdf (macOS/Linux) is a per-file error.
-export function useExecute({ files, setFiles, fileType, settings, outputPath, setOutputPath, setStatus }) {
+// `merge` (App state, true only while merging is offered): the whole queue,
+// in order, is one start_merge job -- output named in the status bar and
+// log, an error marked on the first row.
+export function useExecute({ files, setFiles, fileType, settings, outputPath, setOutputPath, setStatus, merge }) {
   const [executing, setExecuting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [progressVisible, setProgressVisible] = useState(false)
@@ -53,21 +56,27 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
     let completed = 0
     const appendLog = (line) => setTerminalLog((prev) => prev + line + '\n')
 
-    for (let i = 0; i < files.length; i++) {
+    // One task per file, or one merge task whose result belongs to the first row.
+    const convertJob = (fileObj) => ({ source: fileObj, fileType, settings: settings[fileType] })
+    const tasks = merge
+      ? [{ fileObj: files[0], start: (h) => startMerge({ sources: files, fileType, settings: settings[fileType] }, resolvedOutputPath, h) }]
+      : files.map((fileObj) => ({ fileObj, start: (h) => startConvert(convertJob(fileObj), resolvedOutputPath, h) }))
+    let mergedName = null
+
+    for (let i = 0; i < tasks.length; i++) {
       if (cancelRequestedRef.current) break
 
-      const fileObj = files[i]
+      const { fileObj, start } = tasks[i]
       const filename = fileObj.path.split(/[\\/]/).pop()
-      const params = { name: filename, index: i + 1, total: files.length }
+      const params = { name: filename, index: i + 1, total: tasks.length }
 
       setProgressText(tNow('progress.processingFile', params))
-      setProgressPercent((i / files.length) * 100)
+      setProgressPercent((i / tasks.length) * 100)
 
       let result
+      let outPath = ''
       try {
-        const job = await startConvert(
-          { source: fileObj, fileType, settings: settings[fileType] },
-          resolvedOutputPath,
+        const job = await start(
           {
             onLog: appendLog,
             onProgress: (percent) => {
@@ -77,6 +86,7 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
           },
         )
         jobIdRef.current = job.jobId
+        outPath = job.outPath
         // cancel() may have fired while the job was starting.
         if (cancelRequestedRef.current) cancelJob(job.jobId).catch(() => {})
         result = await job.done
@@ -89,7 +99,10 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
         completed++
         setProgressPercent(100)
         setProgressText(tNow('progress.processingFileDone', params))
-        if (result.outSize != null) {
+        if (merge) {
+          mergedName = outPath.split(/[\\/]/).pop()
+          appendLog(`= ${outPath}`)
+        } else if (result.outSize != null) {
           const convertedSizeMB = (result.outSize / (1024 * 1024)).toFixed(2)
           // By path (unique in the queue), not index: the list may change mid-run.
           // notSmaller: the output is a copy of the source (PDF compress).
@@ -109,12 +122,14 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
     setCancelling(false)
 
     if (wasCancelled) {
-      setProgressText(tNow('progress.cancelledCount', { completed, total: files.length }))
-      setStatus('status.cancelledCount', 'ready', { completed, total: files.length })
+      setProgressText(tNow('progress.cancelledCount', { completed, total: tasks.length }))
+      setStatus('status.cancelledCount', 'ready', { completed, total: tasks.length })
     } else {
       setProgressPercent(100)
-      setProgressText(tNow('progress.completedCount', { completed, total: files.length }))
-      setStatus('status.doneCount', 'ready', { completed, total: files.length })
+      setProgressText(tNow('progress.completedCount', { completed, total: tasks.length }))
+      // A failed merge keeps its "Error: <first file>" status.
+      if (mergedName) setStatus('status.merged', 'ready', { name: mergedName })
+      else if (!merge) setStatus('status.doneCount', 'ready', { completed, total: tasks.length })
     }
     setExecuting(false)
     setTimeout(() => {
@@ -122,7 +137,7 @@ export function useExecute({ files, setFiles, fileType, settings, outputPath, se
       setProgressText(tNow('progress.idle'))
       setProgressPercent(0)
     }, 5000)
-  }, [files, setFiles, fileType, settings, outputPath, setOutputPath, setStatus])
+  }, [files, setFiles, fileType, settings, outputPath, setOutputPath, setStatus, merge])
 
   return { execute, executing, cancel, cancelling, progressVisible, progressPercent, progressText, terminalLog }
 }

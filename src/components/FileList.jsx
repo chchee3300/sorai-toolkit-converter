@@ -66,7 +66,7 @@ function formatImageResolution(fileObj, fileType, settings) {
   return `${w} x ${h}`
 }
 
-export default function FileList({ files, fileType, settings, onRemove, onOpenTrim, onOpenCrop }) {
+export default function FileList({ files, fileType, settings, onRemove, onMove, onOpenTrim, onOpenCrop }) {
   const { t } = useTranslation()
   const estimates = useEstimates(files, fileType, settings)
   return (
@@ -160,6 +160,21 @@ export default function FileList({ files, fileType, settings, onRemove, onOpenTr
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              {/* Queue order = merge order. No up on the first row, no down on the last. */}
+              {index > 0 && (
+                <button id={`btn-move-up-${index}`} className="btn-trim" title={t('fileList.moveUp')} aria-label={t('fileList.moveUp')} onClick={() => onMove(fileObj.path, -1)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="6 15 12 9 18 15"></polyline>
+                  </svg>
+                </button>
+              )}
+              {index < files.length - 1 && (
+                <button id={`btn-move-down-${index}`} className="btn-trim" title={t('fileList.moveDown')} aria-label={t('fileList.moveDown')} onClick={() => onMove(fileObj.path, 1)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+              )}
               {showTrimBtn && (
                 <button className="btn-trim" title={t('fileList.trimMedia')} aria-label={t('fileList.trimMedia')} onClick={() => onOpenTrim && onOpenTrim(index)}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

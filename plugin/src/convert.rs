@@ -137,6 +137,13 @@ impl Kind {
   }
 }
 
+impl MergeJob {
+  /// Output extension: always one file (a PDF merge ignores the operation, split included).
+  pub fn out_ext(&self) -> &str {
+    if matches!(self.kind, Kind::Pdf(_)) { ".pdf" } else { self.kind.out_ext() }
+  }
+}
+
 impl Job {
   /// Output extension, dot included ("" for a folder, see `out_is_dir`).
   pub fn out_ext(&self) -> &str {
@@ -1203,6 +1210,13 @@ mod tests {
 
   fn merge(sources: Vec<Source>, kind: Kind, out: &str) -> Result<MergePlan, String> {
     merge_args(&MergeJob { sources, kind }, out, "list.txt")
+  }
+
+  #[test]
+  fn merge_output_is_always_one_file() {
+    let job = |kind| MergeJob { sources: vec![], kind };
+    assert_eq!(job(pdf("split")).out_ext(), ".pdf");
+    assert_eq!(job(audio(".m4a", "128k", 1.0)).out_ext(), ".m4a");
   }
 
   #[test]

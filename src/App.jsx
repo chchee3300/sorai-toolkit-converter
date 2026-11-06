@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import StatusBar from './components/StatusBar.jsx'
 import DropZone from './components/DropZone.jsx'
 import FileList from './components/FileList.jsx'
-import SettingsPanel, { PresetEditor } from './components/SettingsPanel.jsx'
+import SettingsPanel, { PresetEditor, mergeOffered } from './components/SettingsPanel.jsx'
 import ToolIntro from './components/ToolIntro.jsx'
 import ProgressLog from './components/ProgressLog.jsx'
 import MixedTypeModal from './components/MixedTypeModal.jsx'
@@ -118,6 +118,23 @@ function App({ pendingLaunch, editPreset, onEditDone }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingLaunch])
 
+  // "Merge into one file": App state, not settings, so never in a preset.
+  // Only counts while it's offered (>= 2 files, mergeable type / output).
+  const [mergeChecked, setMergeChecked] = useState(false)
+  const merge = mergeChecked && mergeOffered(files, fileType, settings)
+
+  // Move up / down (= merge order). By path, so a running batch is unaffected.
+  const moveFile = useCallback((path, step) => {
+    setFiles((prev) => {
+      const i = prev.findIndex((f) => f.path === path)
+      const j = i + step
+      if (i < 0 || j < 0 || j >= prev.length) return prev
+      const next = [...prev]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+  }, [setFiles])
+
   const {
     execute,
     executing,
@@ -127,7 +144,7 @@ function App({ pendingLaunch, editPreset, onEditDone }) {
     progressPercent,
     progressText,
     terminalLog,
-  } = useExecute({ files, setFiles, fileType, settings, outputPath, setOutputPath, setStatus })
+  } = useExecute({ files, setFiles, fileType, settings, outputPath, setOutputPath, setStatus, merge })
 
   const hasFiles = files.length > 0
 
@@ -196,7 +213,7 @@ function App({ pendingLaunch, editPreset, onEditDone }) {
                   </button>
                 </div>
               </div>
-              <FileList files={files} fileType={fileType} settings={settings} onRemove={removeFile} onOpenTrim={setTrimIndex} onOpenCrop={setCropIndex} />
+              <FileList files={files} fileType={fileType} settings={settings} onRemove={removeFile} onMove={moveFile} onOpenTrim={setTrimIndex} onOpenCrop={setCropIndex} />
             </div>
             <ProgressLog visible={progressVisible} percent={progressPercent} text={progressText} log={terminalLog} />
           </section>
@@ -212,6 +229,8 @@ function App({ pendingLaunch, editPreset, onEditDone }) {
               cancelling={cancelling}
               onExecute={execute}
               onCancel={cancel}
+              merge={merge}
+              onMergeChange={mergeOffered(files, fileType, settings) ? setMergeChecked : null}
             />
           ) : (
             <ToolIntro />
