@@ -49,7 +49,9 @@ function OutputPathRow({ outputPath, onBrowse }) {
 
 // The codec really encoded -- mirror of plugin/src/convert.rs effective_codec
 // and container_codecs: target-size forces H.264, then a container-limited
-// format swaps any codec it can't hold for its first (default) one.
+// format swaps any codec it can't hold for its first (default) one. "copy"
+// (keep original) is offered everywhere and kept as is; Rust falls back to the
+// container default per source when the stream doesn't fit (video_encoder).
 const CODEC_LABELS = {
   libx264: 'H.264 (avc1)',
   libx265: 'H.265 (hevc)',
@@ -70,7 +72,7 @@ const CONTAINER_CODECS = {
 function effectiveCodec(v) {
   const codec = v.targetSizeMode && v.targetSizeMB != null ? 'libx264' : v.codec
   const ok = CONTAINER_CODECS[v.format]
-  return ok && !ok.includes(codec) ? ok[0] : codec
+  return ok && codec !== 'copy' && !ok.includes(codec) ? ok[0] : codec
 }
 // GIF/APNG share one filter chain and have no codec choice.
 const ANIMATED = ['.gif', '.apng']
@@ -79,7 +81,9 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
   const { t } = useTranslation()
   const set = (patch) => setVideo((v) => ({ ...v, ...patch }))
   const qualityMax = video.upscale ? 200 : 100
-  const codecs = CONTAINER_CODECS[video.format] ?? DEFAULT_CODECS
+  const codecs = [...(CONTAINER_CODECS[video.format] ?? DEFAULT_CODECS), 'copy']
+  // Rewrap: quality / fps / speed don't apply (convert.rs build_args).
+  const copy = effectiveCodec(video) === 'copy'
 
   // Same "last file in the batch" reference convention ImageSettings uses
   // for its resolution preview — the fps slider's bounds are derived from
@@ -123,7 +127,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
               <select> into its own wrapper, so React can't remove the select itself. */}
           <div key={codecs.join()}>
           <GlassSelect id="video-codec" value={effectiveCodec(video)} disabled={video.targetSizeMode} onChange={(e) => set({ codec: e.target.value })}>
-            {codecs.map((c) => <option key={c} value={c}>{CODEC_LABELS[c]}</option>)}
+            {codecs.map((c) => <option key={c} value={c}>{c === 'copy' ? t('settings.video.codecCopy') : CODEC_LABELS[c]}</option>)}
           </GlassSelect>
           </div>
           {video.targetSizeMode && <p className="settings-hint">{t('settings.video.targetSizeCodecLocked')}</p>}
@@ -158,7 +162,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
             )}
           </div>
         </div>
-        {!video.targetSizeMode && (
+        {!video.targetSizeMode && !copy && (
         <div className="field span-2">
           <div className="field-label-row">
             <label className="field-label" htmlFor="video-quality">
@@ -189,6 +193,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
           />
         </div>
         )}
+        {!copy && (<>
         <div className="field">
           <div className="field-label-row">
             <label className="field-label" htmlFor="video-fps">
@@ -235,6 +240,7 @@ function VideoSettings({ visible, video, setVideo, lastFile }) {
             onChange={(e) => set({ speed: parseFloat(e.target.value) })}
           />
         </div>
+        </>)}
       </div>
     </div>
   )
