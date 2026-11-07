@@ -280,16 +280,12 @@ async fn newest(tool: &Tool) -> Result<Asset, String> {
   pick_asset(tool, &release)
 }
 
-/// Every tool's newest release (one request each; errors stay per tool).
-pub async fn latest() -> Vec<Latest> {
-  let mut out = vec![];
-  for tool in &TOOLS {
-    out.push(match newest(tool).await {
-      Ok(a) => Latest { id: tool.id, version: Some(a.version), size: Some(a.size), error: None },
-      Err(e) => Latest { id: tool.id, version: None, size: None, error: Some(e) },
-    });
+/// One tool's newest release (one request; a failed lookup is `error`).
+pub async fn latest(tool: &Tool) -> Latest {
+  match newest(tool).await {
+    Ok(a) => Latest { id: tool.id, version: Some(a.version), size: Some(a.size), error: None },
+    Err(e) => Latest { id: tool.id, version: None, size: None, error: Some(e) },
   }
-  out
 }
 
 // --- Install / update (Windows)

@@ -328,11 +328,11 @@ async fn engine_set_path<R: Runtime>(app: AppHandle<R>, engine: String, path: Op
   blocking(move || engines::set_path(&app, &engine, path.as_deref())).await
 }
 
-/// Each bundled tool's newest release ("Check for updates"); a failed
-/// lookup is that tool's `error`.
+/// One bundled tool's newest release (its page's "Check for updates"); a failed
+/// lookup is `error`.
 #[tauri::command]
-async fn engine_latest() -> Vec<tools::Latest> {
-  tools::latest().await
+async fn engine_latest(engine: String) -> Result<tools::Latest, String> {
+  Ok(tools::latest(tools::find(&engine).ok_or_else(|| format!("unknown tool: {engine}"))?).await)
 }
 
 /// Downloads and installs the engine (Windows); progress 0-100 on

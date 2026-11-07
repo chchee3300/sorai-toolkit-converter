@@ -557,7 +557,7 @@ function PdfSettings({ visible, pdf, setPdf }) {
 }
 
 // Under the compression level: Ghostscript is used, or a pointer to the
-// hub's "Conversion engines" settings (window.SoraiSettings, optional like
+// hub's "Third-party software" settings (Ghostscript's page) (window.SoraiSettings, optional like
 // SoraiPresets) / the brew/apt command. Re-checks when engines change.
 function GhostscriptStatus() {
   const { t } = useTranslation()
@@ -575,7 +575,7 @@ function GhostscriptStatus() {
       {t('settings.pdf.gsMissing')}
       {gs.installCommand && <> <code>{gs.installCommand}</code></>}
       {window.SoraiSettings && (
-        <> <button type="button" className="btn btn-ghost btn-xs" id="pdf-engine-settings" onClick={() => window.SoraiSettings.open('engines')}>{t('settings.pdf.gsSettings')}</button></>
+        <> <button type="button" className="btn btn-ghost btn-xs" id="pdf-engine-settings" onClick={() => window.SoraiSettings.open('engines', 'ghostscript')}>{t('settings.pdf.gsSettings')}</button></>
       )}
     </p>
   )

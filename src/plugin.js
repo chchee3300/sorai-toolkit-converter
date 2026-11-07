@@ -73,9 +73,9 @@ export async function engineInstall(engine, onProgress) {
 
 export const engineCancel = () => invoke('plugin:sorai-converter|engine_cancel')
 
-// The bundled tools' newest releases (plugin/src/tools.rs; one request per
-// tool): [{ id, version, size, error }]. engineInstall(id) installs it.
-export const engineLatest = () => invoke('plugin:sorai-converter|engine_latest')
+// A bundled tool's newest release (plugin/src/tools.rs; one request):
+// { id, version, size, error }. engineInstall(id) installs it.
+export const engineLatest = (engine) => invoke('plugin:sorai-converter|engine_latest', { engine })
 
 export async function engineRemove(engine) {
   const list = await invoke('plugin:sorai-converter|engine_remove', { engine })
