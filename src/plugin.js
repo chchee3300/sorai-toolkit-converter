@@ -44,10 +44,11 @@ export const estimateSizes = (jobs) => invoke('plugin:sorai-converter|estimate_s
 export const setPreviewFiles = (paths) => invoke('plugin:sorai-converter|set_preview_files', { paths })
 export const previewSrc = (path) => convertFileSrc(path, 'sorai-media')
 
-// --- Optional engines (plugin/src/engines.rs) ---
-// -> [{ id, name, state: user|installed|system|missing, path, userPath,
-// license, homepage, installCommand, installable, installed, downloadSize }]. Looked up
-// fresh on every call.
+// --- Optional engines (plugin/src/engines.rs) and bundled tools (tools.rs) ---
+// -> [{ id, kind: engine|tool, name, state, version, path, userPath,
+// license, homepage, installCommand, installable, installed, downloadSize }].
+// state: engine user|installed|system|missing; tool updated|bundled|system|missing.
+// Ghostscript first. Looked up fresh on every call (tool versions cached).
 export const engineStatus = () => invoke('plugin:sorai-converter|engine_status')
 
 // "Use my own program..." (path) or back to auto-detect (null). Resolves the
@@ -71,6 +72,10 @@ export async function engineInstall(engine, onProgress) {
 }
 
 export const engineCancel = () => invoke('plugin:sorai-converter|engine_cancel')
+
+// The bundled tools' newest releases (plugin/src/tools.rs; one request per
+// tool): [{ id, version, size, error }]. engineInstall(id) installs it.
+export const engineLatest = () => invoke('plugin:sorai-converter|engine_latest')
 
 export async function engineRemove(engine) {
   const list = await invoke('plugin:sorai-converter|engine_remove', { engine })

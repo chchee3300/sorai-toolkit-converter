@@ -1,4 +1,6 @@
-//! Optional engines (only Ghostscript so far).
+//! Optional engines (only Ghostscript so far). The bundled command-line
+//! tools (ffmpeg, yt-dlp, qpdf, img2pdf) are in tools.rs; `status`,
+//! `install` and `remove` cover both (the hub's "第三方軟體" settings).
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -124,14 +126,19 @@ pub fn check_pdf(bytes: Vec<u8>, pages: Option<usize>) -> Result<Vec<u8>, String
   }
 }
 
-/// One row of the hub's "Conversion engines" settings / the converter's
-/// PDF status line. `state`: user | installed | system | missing.
+/// One row of the hub's "第三方軟體" settings / the converter's PDF status
+/// line. `kind`: "engine" (Ghostscript: optional, user-pickable) or "tool"
+/// (tools.rs: bundled, updatable). `state`: user | installed | system |
+/// missing; tools: updated | bundled | system | missing.
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
   pub id: &'static str,
+  pub kind: &'static str,
   pub name: &'static str,
   pub state: &'static str,
+  /// What `path` reports (tools only).
+  pub version: Option<String>,
   /// What a job would run (None = missing).
   pub path: Option<String>,
   /// What the user picked, even when it no longer exists.
@@ -160,7 +167,7 @@ fn own_dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 
 /// PATH, plus Homebrew's bin dirs on macOS / Linux (a GUI app launched
 /// from Finder doesn't get the shell's PATH).
-fn system_dirs() -> Vec<PathBuf> {
+pub(crate) fn system_dirs() -> Vec<PathBuf> {
   let mut dirs: Vec<PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
   if !cfg!(windows) {
     dirs.extend(["/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin"].map(PathBuf::from));
@@ -185,10 +192,12 @@ pub fn status<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<Status>, String> {
     (false, "linux") => Some("sudo apt install ghostscript"),
     _ => None,
   };
-  Ok(vec![Status {
+  let mut list = vec![Status {
     id: "ghostscript",
+    kind: "engine",
     name: "Ghostscript",
     state: found.as_ref().map_or("missing", |(s, _)| s),
+    version: None,
     path: found.map(|(_, p)| p.to_string_lossy().into_owned()),
     user_path,
     license: "AGPL-3.0",
@@ -197,7 +206,9 @@ pub fn status<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<Status>, String> {
     installable: cfg!(windows),
     installed,
     download_size: cfg!(windows).then_some(GS_SIZE),
-  }])
+  }];
+  list.extend(crate::tools::TOOLS.iter().map(|t| crate::tools::status(app, t)));
+  Ok(list)
 }
 
 /// `engine_prompt`: show the converter's first-run prompt?
@@ -242,7 +253,7 @@ pub fn package() -> Package {
   Package { url: GS_URL.into(), sha256: GS_SHA256.into(), size: Some(GS_SIZE) }
 }
 
-fn sha256_file(file: &Path) -> Result<String, String> {
+pub(crate) fn sha256_file(file: &Path) -> Result<String, String> {
   use sha2::Digest;
   let mut f = std::fs::File::open(file).map_err(|e| format!("{}: {e}", file.display()))?;
   let mut h = sha2::Sha256::new();
@@ -314,16 +325,26 @@ pub fn finish_install(staging: &Path, sha256: &str, dest: &Path, cancel: &Atomic
   result
 }
 
-/// Streams `pkg.url` into `to`, reporting 0-100 and polling `cancel`
-/// between chunks.
-async fn download(pkg: &Package, to: &Path, cancel: &AtomicBool, progress: &(dyn Fn(f64) + Sync)) -> Result<(), String> {
-  use std::io::Write;
+/// HTTP client for downloads and release lookups. GitHub's API refuses
+/// requests without a User-Agent.
+pub(crate) fn client() -> Result<reqwest::Client, String> {
   // Same as tauri-plugin-updater: reqwest is built without a crypto provider.
   if rustls::crypto::CryptoProvider::get_default().is_none() {
     let _ = rustls::crypto::ring::default_provider().install_default();
   }
+  reqwest::Client::builder()
+    .user_agent("SORAI-Toolkit")
+    .read_timeout(Duration::from_secs(30))
+    .build()
+    .map_err(|e| e.to_string())
+}
+
+/// Streams `pkg.url` into `to`, reporting 0-100 and polling `cancel`
+/// between chunks.
+pub(crate) async fn download(pkg: &Package, to: &Path, cancel: &AtomicBool, progress: &(dyn Fn(f64) + Sync)) -> Result<(), String> {
+  use std::io::Write;
   let err = |e: reqwest::Error| format!("{}: {e}", pkg.url);
-  let client = reqwest::Client::builder().read_timeout(Duration::from_secs(30)).build().map_err(err)?;
+  let client = client()?;
   let mut res = tokio::select! {
     r = client.get(&pkg.url).send() => r.and_then(|r| r.error_for_status()).map_err(err)?,
     _ = until(cancel) => return Err("cancelled".into()),
@@ -363,12 +384,15 @@ static INSTALLING: std::sync::Mutex<Option<std::sync::Arc<AtomicBool>>> = std::s
 /// renames to the own-copy dir. Progress: download 0-95, then 100.
 /// ponytail: quitting mid-download leaves the staging dir; the next
 /// install starts by deleting it (it's never mistaken for an install).
+/// A tool (tools.rs) installs its newest release the same way, one install
+/// of anything at a time.
 pub async fn install<R: Runtime>(app: &AppHandle<R>, engine: &str, progress: impl Fn(f64) + Send + Sync) -> Result<Vec<Status>, String> {
-  if engine != "ghostscript" {
+  let tool = crate::tools::find(engine);
+  if engine != "ghostscript" && tool.is_none() {
     return Err(format!("unknown engine {engine:?}"));
   }
   if !cfg!(windows) {
-    return Err("Ghostscript downloads are Windows-only".into());
+    return Err("downloads are Windows-only".into());
   }
   let dest = own_dir(app).ok_or("no app data folder")?;
   let staging = dest.with_file_name(".ghostscript.partial");
@@ -379,6 +403,13 @@ pub async fn install<R: Runtime>(app: &AppHandle<R>, engine: &str, progress: imp
     }
     slot.insert(Default::default()).clone()
   };
+  if let Some(tool) = tool {
+    let result = crate::tools::install(app, tool, cancel, &progress).await;
+    *INSTALLING.lock().unwrap() = None;
+    result?;
+    progress(100.0);
+    return status(app);
+  }
   let result = async {
     let _ = std::fs::remove_dir_all(&staging);
     std::fs::create_dir_all(&staging).map_err(|e| format!("{}: {e}", staging.display()))?;
@@ -404,7 +435,12 @@ pub fn cancel_install() {
 }
 
 /// Deletes the app's own copy (a user-picked or PATH gs is never touched).
+/// For a tool: deletes the updated copy (back to the bundled one).
 pub fn remove<R: Runtime>(app: &AppHandle<R>, engine: &str) -> Result<Vec<Status>, String> {
+  if let Some(tool) = crate::tools::find(engine) {
+    crate::tools::remove(app, tool)?;
+    return status(app);
+  }
   if engine != "ghostscript" {
     return Err(format!("unknown engine {engine:?}"));
   }

@@ -44,7 +44,8 @@ export default function EnginePrompt() {
     enginePrompt()
       .then(async (due) => {
         if (!due || recordFailed) return
-        const list = await engineStatus()
+        // Optional engines only; the bundled tools (kind "tool") aren't offered here.
+        const list = (await engineStatus()).filter((e) => e.kind === 'engine')
         if (!live) return
         setEngines(list)
         setPicked(Object.fromEntries(list.map((e) => [e.id, e.installable])))

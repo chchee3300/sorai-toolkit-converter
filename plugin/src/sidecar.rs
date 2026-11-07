@@ -1,7 +1,9 @@
 //! Where the host's bundled sidecars live. The downloader plugin has its own
 //! copy of this file on purpose (each plugin owns its runner); keep them alike.
 //!
-//! Order: the app's resource dir, then next to the app exe, then PATH.
+//! Order: an update from Settings (`<app local data>/engines/<name>/`,
+//! written by the converter's tools.rs), the app's resource dir, then next
+//! to the app exe, then PATH.
 //! - Linux deb/rpm: the hub ships ffmpeg / yt-dlp as resources in
 //!   `/usr/lib/<app>/` so `/usr/bin/ffmpeg` stays the distro's. The exe sits in
 //!   `/usr/bin`, which is why the resource dir is checked first.
@@ -17,10 +19,11 @@ pub fn find(name: &str, dirs: impl IntoIterator<Item = Option<PathBuf>>) -> Opti
   dirs.into_iter().flatten().map(|d| d.join(&file)).find(|p| p.is_file())
 }
 
-/// The host's bundled `name`, or None when it ships none (use PATH).
+/// The host's bundled `name` (or its update), or None when it ships none (use PATH).
 pub fn bundled<R: Runtime>(app: &AppHandle<R>, name: &str) -> Option<PathBuf> {
   let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf));
-  find(name, [app.path().resource_dir().ok(), exe_dir])
+  let updated = app.path().app_local_data_dir().ok().map(|d| d.join("engines").join(name));
+  find(name, [updated, app.path().resource_dir().ok(), exe_dir])
 }
 
 /// Command for `name`: the bundled copy, else `name` from PATH.

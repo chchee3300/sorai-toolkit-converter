@@ -14,6 +14,7 @@ pub mod pdf_compress;
 pub mod preview;
 pub mod runner;
 pub mod sidecar;
+pub mod tools;
 
 /// Plugin name: JS calls commands as `plugin:sorai-converter|<command>`,
 /// the hub grants `sorai-converter:default`.
@@ -308,16 +309,30 @@ fn start_merge_job<R: Runtime>(app: &AppHandle<R>, job: &convert::MergeJob, out:
   runner::start(app, convert::merge_program(&job.kind), plan.args, out, move |line| convert::parse_progress(line, seconds, 1.0), on_event)
 }
 
-/// Optional engines for the hub's settings and the PDF status line.
+/// Runs a status-returning call off the main thread: it starts the tools'
+/// `--version` (tools::probe, cached afterwards).
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+  tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
+}
+
+/// Optional engines and the bundled tools, for the hub's settings and the
+/// PDF status line.
 #[tauri::command]
-fn engine_status<R: Runtime>(app: AppHandle<R>) -> Result<Vec<engines::Status>, String> {
-  engines::status(&app)
+async fn engine_status<R: Runtime>(app: AppHandle<R>) -> Result<Vec<engines::Status>, String> {
+  blocking(move || engines::status(&app)).await
 }
 
 /// "Use my own program..." (`path`), or back to auto-detect (null / "").
 #[tauri::command]
-fn engine_set_path<R: Runtime>(app: AppHandle<R>, engine: String, path: Option<String>) -> Result<Vec<engines::Status>, String> {
-  engines::set_path(&app, &engine, path.as_deref())
+async fn engine_set_path<R: Runtime>(app: AppHandle<R>, engine: String, path: Option<String>) -> Result<Vec<engines::Status>, String> {
+  blocking(move || engines::set_path(&app, &engine, path.as_deref())).await
+}
+
+/// Each bundled tool's newest release ("Check for updates"); a failed
+/// lookup is that tool's `error`.
+#[tauri::command]
+async fn engine_latest() -> Vec<tools::Latest> {
+  tools::latest().await
 }
 
 /// Downloads and installs the engine (Windows); progress 0-100 on
@@ -345,10 +360,10 @@ fn engine_set_prompted<R: Runtime>(app: AppHandle<R>, prompted: bool) -> Result<
   engines::mark_prompted(&app, prompted)
 }
 
-/// Deletes the app's own copy.
+/// Deletes the app's own copy (a tool: back to the bundled one).
 #[tauri::command]
-fn engine_remove<R: Runtime>(app: AppHandle<R>, engine: String) -> Result<Vec<engines::Status>, String> {
-  engines::remove(&app, &engine)
+async fn engine_remove<R: Runtime>(app: AppHandle<R>, engine: String) -> Result<Vec<engines::Status>, String> {
+  blocking(move || engines::remove(&app, &engine)).await
 }
 
 #[tauri::command]
@@ -371,7 +386,7 @@ fn estimate_sizes(jobs: Vec<convert::Job>) -> Vec<convert::Estimate> {
 /// Registered by the hub: `.plugin(tauri_plugin_sorai_converter::init())`.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new(NAME)
-    .invoke_handler(tauri::generate_handler![ping, probe_source, start_convert, start_merge, cancel_job, estimate_sizes, set_preview_files, engine_status, engine_set_path, engine_install, engine_cancel, engine_remove, engine_prompt, engine_set_prompted])
+    .invoke_handler(tauri::generate_handler![ping, probe_source, start_convert, start_merge, cancel_job, estimate_sizes, set_preview_files, engine_status, engine_set_path, engine_latest, engine_install, engine_cancel, engine_remove, engine_prompt, engine_set_prompted])
     .register_asynchronous_uri_scheme_protocol(PREVIEW_SCHEME, |ctx, request, responder| {
       let allowed = ctx.app_handle().state::<PreviewFiles>().0.lock().unwrap().clone();
       std::thread::spawn(move || {
@@ -395,6 +410,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
           prune_old_files(&tmp.join(CONCAT_SUBDIR), THUMBNAIL_MAX_AGE);
         });
       }
+      let handle = app.clone();
+      std::thread::spawn(move || tools::drop_stale(&handle));
       Ok(())
     })
     .build()

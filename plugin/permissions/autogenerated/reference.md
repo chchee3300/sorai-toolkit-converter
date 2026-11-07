@@ -13,6 +13,7 @@ Allows every command this plugin exposes.
 - `allow-set-preview-files`
 - `allow-engine-status`
 - `allow-engine-set-path`
+- `allow-engine-latest`
 - `allow-engine-install`
 - `allow-engine-cancel`
 - `allow-engine-remove`
@@ -102,6 +103,32 @@ Enables the engine_install command without any pre-configured scope.
 <td>
 
 Denies the engine_install command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:allow-engine-latest`
+
+</td>
+<td>
+
+Enables the engine_latest command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sorai-converter:deny-engine-latest`
+
+</td>
+<td>
+
+Denies the engine_latest command without any pre-configured scope.
 
 </td>
 </tr>

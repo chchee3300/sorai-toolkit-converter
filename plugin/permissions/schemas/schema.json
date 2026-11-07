@@ -331,6 +331,18 @@
           "markdownDescription": "Denies the engine_install command without any pre-configured scope."
         },
         {
+          "description": "Enables the engine_latest command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-engine-latest",
+          "markdownDescription": "Enables the engine_latest command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the engine_latest command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-engine-latest",
+          "markdownDescription": "Denies the engine_latest command without any pre-configured scope."
+        },
+        {
           "description": "Enables the engine_prompt command without any pre-configured scope.",
           "type": "string",
           "const": "allow-engine-prompt",
@@ -463,10 +475,10 @@
           "markdownDescription": "Denies the start_merge command without any pre-configured scope."
         },
         {
-          "description": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-start-merge`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`\n- `allow-engine-status`\n- `allow-engine-set-path`\n- `allow-engine-install`\n- `allow-engine-cancel`\n- `allow-engine-remove`\n- `allow-engine-prompt`\n- `allow-engine-set-prompted`",
+          "description": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-start-merge`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`\n- `allow-engine-status`\n- `allow-engine-set-path`\n- `allow-engine-latest`\n- `allow-engine-install`\n- `allow-engine-cancel`\n- `allow-engine-remove`\n- `allow-engine-prompt`\n- `allow-engine-set-prompted`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-start-merge`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`\n- `allow-engine-status`\n- `allow-engine-set-path`\n- `allow-engine-install`\n- `allow-engine-cancel`\n- `allow-engine-remove`\n- `allow-engine-prompt`\n- `allow-engine-set-prompted`"
+          "markdownDescription": "Allows every command this plugin exposes.\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-probe-source`\n- `allow-start-convert`\n- `allow-start-merge`\n- `allow-cancel-job`\n- `allow-estimate-sizes`\n- `allow-set-preview-files`\n- `allow-engine-status`\n- `allow-engine-set-path`\n- `allow-engine-latest`\n- `allow-engine-install`\n- `allow-engine-cancel`\n- `allow-engine-remove`\n- `allow-engine-prompt`\n- `allow-engine-set-prompted`"
         }
       ]
     }
