@@ -1,9 +1,11 @@
 //! The command-line tools the app ships (ffmpeg, yt-dlp, qpdf, img2pdf),
 //! updatable from the hub's Settings ("第三方軟體", beside Ghostscript in
-//! engines.rs). An update downloads the project's newest release (Windows
-//! builds only) into `app_local_data_dir()/engines/<id>/`, which both
-//! plugins' `sidecar::bundled` check before the bundled copy. Removing it
-//! goes back to the bundled one.
+//! engines.rs), and optional ones it doesn't ship (`optional`: Deno for
+//! yt-dlp, oxipng for PNG output, wordcraft-cli for documents), installed
+//! from the same place. A download is the project's newest release
+//! (Windows builds only) into `app_local_data_dir()/engines/<id>/`, which
+//! both plugins' `sidecar::bundled` check before the bundled copy. Removing
+//! it goes back to the bundled one (an optional tool: not installed).
 //!
 //! Integrity: GitHub's asset `digest` (SHA-256) is checked; img2pdf's Gitea
 //! host publishes none (TLS only). The download must also run
@@ -19,7 +21,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use crate::engines::{self, Package, Status};
 
 pub struct Tool {
-  /// Also the exe name and the `engines/<id>/` folder.
+  /// Also the exe name and the `engines/<id>/` folder (so `wordcraft-cli`).
   pub id: &'static str,
   pub name: &'static str,
   pub license: &'static str,
@@ -28,6 +30,8 @@ pub struct Tool {
   release: Release,
   /// macOS / Linux, when it isn't found.
   install_command: [&'static str; 2],
+  /// Not shipped with the app: only a download (or PATH) provides it.
+  pub optional: bool,
 }
 
 enum Release {
@@ -37,7 +41,7 @@ enum Release {
   Gitea(&'static str),
 }
 
-pub const TOOLS: [Tool; 4] = [
+pub const TOOLS: [Tool; 7] = [
   Tool {
     id: "ffmpeg",
     name: "FFmpeg",
@@ -47,6 +51,7 @@ pub const TOOLS: [Tool; 4] = [
     // The same nightly build the installer bundles (setup.mjs).
     release: Release::GitHub("BtbN/FFmpeg-Builds", "tags/latest"),
     install_command: ["brew install ffmpeg", "sudo apt install ffmpeg"],
+    optional: false,
   },
   Tool {
     id: "yt-dlp",
@@ -56,6 +61,7 @@ pub const TOOLS: [Tool; 4] = [
     version_args: &["--version"],
     release: Release::GitHub("yt-dlp/yt-dlp", "latest"),
     install_command: ["brew install yt-dlp", "sudo apt install yt-dlp"],
+    optional: false,
   },
   Tool {
     id: "qpdf",
@@ -65,6 +71,7 @@ pub const TOOLS: [Tool; 4] = [
     version_args: &["--version"],
     release: Release::GitHub("qpdf/qpdf", "latest"),
     install_command: ["brew install qpdf", "sudo apt install qpdf"],
+    optional: false,
   },
   Tool {
     id: "img2pdf",
@@ -74,6 +81,43 @@ pub const TOOLS: [Tool; 4] = [
     version_args: &["--version"],
     release: Release::Gitea("josch/img2pdf"),
     install_command: ["pip install img2pdf", "sudo apt install img2pdf"],
+    optional: false,
+  },
+  // yt-dlp solves YouTube's JavaScript challenges with it (without one,
+  // YouTube often offers only some formats); the downloader passes
+  // `--js-runtimes deno:<path>` when the app has its own copy.
+  Tool {
+    id: "deno",
+    name: "Deno",
+    license: "MIT",
+    homepage: "https://deno.com/",
+    version_args: &["--version"],
+    release: Release::GitHub("denoland/deno", "latest"),
+    install_command: ["brew install deno", "curl -fsSL https://deno.land/install.sh | sh"],
+    optional: true,
+  },
+  // Lossless PNG optimiser, run on every PNG the converter writes.
+  Tool {
+    id: "oxipng",
+    name: "oxipng",
+    license: "MIT",
+    homepage: "https://github.com/oxipng/oxipng",
+    version_args: &["--version"],
+    release: Release::GitHub("oxipng/oxipng", "latest"),
+    install_command: ["brew install oxipng", "sudo apt install oxipng"],
+    optional: true,
+  },
+  // Word documents (the converter's "document" type). Its release has no
+  // CLI-only Windows zip: the portable zip's wordcraft-cli.exe is taken.
+  Tool {
+    id: "wordcraft-cli",
+    name: "WordCraft",
+    license: "Apache-2.0",
+    homepage: "https://github.com/storytold/wordcraft",
+    version_args: &["--version"],
+    release: Release::GitHub("storytold/wordcraft", "latest"),
+    install_command: ["https://github.com/storytold/wordcraft/releases", "https://github.com/storytold/wordcraft/releases"],
+    optional: true,
   },
 ];
 
@@ -97,8 +141,10 @@ pub fn parse_version(id: &str, out: &str) -> Option<String> {
       }
     }
     "qpdf" => line.strip_prefix("qpdf version ")?.trim().to_string(),
-    // "img2pdf.exe 0.5.1" / "img2pdf 0.5.1"
-    "img2pdf" => line.split_whitespace().last()?.to_string(),
+    // "img2pdf.exe 0.5.1", "oxipng 10.2.1", "wordcraft-cli 0.16.0"
+    "img2pdf" | "oxipng" | "wordcraft-cli" => line.split_whitespace().last()?.to_string(),
+    // "deno 2.9.8 (stable, release, x86_64-pc-windows-msvc)"
+    "deno" => line.split_whitespace().nth(1)?.to_string(),
     _ => line.to_string(),
   };
   (!v.is_empty()).then_some(v)
@@ -181,6 +227,7 @@ pub fn status<R: Runtime>(app: &AppHandle<R>, tool: &Tool) -> Status {
     installable: cfg!(windows),
     installed: own.is_some(),
     download_size: None,
+    optional: tool.optional,
   }
 }
 
@@ -228,6 +275,9 @@ pub fn pick_asset(tool: &Tool, release: &Value) -> Result<Asset, String> {
   let want = match tool.id {
     "ffmpeg" => "ffmpeg-master-latest-win64-gpl.zip".to_string(),
     "qpdf" => format!("qpdf-{}-mingw64.zip", tag.trim_start_matches('v')),
+    "deno" => "deno-x86_64-pc-windows-msvc.zip".to_string(),
+    "oxipng" => format!("oxipng-{}-x86_64-pc-windows-msvc.zip", tag.trim_start_matches('v')),
+    "wordcraft-cli" => format!("wordcraft-{}-windows-x64-portable.zip", tag.trim_start_matches('v')),
     id => format!("{id}.exe"),
   };
   let asset = release["assets"]
@@ -292,16 +342,16 @@ pub async fn latest(tool: &Tool) -> Latest {
 
 /// The files to take from a release zip: ffmpeg only its `bin/ffmpeg.exe`
 /// (ffprobe / ffplay aren't used); qpdf every exe and dll in `bin/`
-/// (qpdf.exe needs its DLLs beside it).
+/// (qpdf.exe needs its DLLs beside it); the others just `<id>.exe`, in any
+/// folder (WordCraft's zip also has the 139 MB desktop app).
 pub fn wanted(tool: &Tool, zip_path: &str) -> Option<String> {
-  let (dir, name) = zip_path.rsplit_once('/')?;
-  if !(dir == "bin" || dir.ends_with("/bin")) || name.is_empty() {
-    return None;
-  }
+  let (dir, name) = zip_path.rsplit_once('/').unwrap_or(("", zip_path));
   let lower = name.to_ascii_lowercase();
+  let in_bin = dir == "bin" || dir.ends_with("/bin");
   let keep = match tool.id {
-    "ffmpeg" => lower == "ffmpeg.exe",
-    _ => lower.ends_with(".exe") || lower.ends_with(".dll"),
+    "ffmpeg" => in_bin && lower == "ffmpeg.exe",
+    "qpdf" => in_bin && (lower.ends_with(".exe") || lower.ends_with(".dll")),
+    id => lower == format!("{id}.exe"),
   };
   keep.then(|| name.to_string())
 }
@@ -403,6 +453,13 @@ mod tests {
     assert_eq!(parse_version("yt-dlp", "2026.08.19\n"), Some("2026.08.19".into()));
     assert_eq!(parse_version("qpdf", "qpdf version 12.3.2\nRun qpdf --copyright"), Some("12.3.2".into()));
     assert_eq!(parse_version("img2pdf", "img2pdf.exe 0.5.1\n"), Some("0.5.1".into()));
+    assert_eq!(parse_version("deno", "deno 2.9.8 (stable, release, x86_64-pc-windows-msvc)
+v8 14.2
+typescript 5.9"), Some("2.9.8".into()));
+    assert_eq!(parse_version("oxipng", "oxipng 10.2.1
+"), Some("10.2.1".into()));
+    assert_eq!(parse_version("wordcraft-cli", "wordcraft-cli 0.16.0
+"), Some("0.16.0".into()));
     assert_eq!(parse_version("qpdf", "something else"), None);
     assert_eq!(parse_version("yt-dlp", ""), None);
   }
@@ -435,6 +492,13 @@ mod tests {
     let img = pick_asset(tool("img2pdf"), &json!({ "tag_name": "0.6.0", "assets": [{ "name": "img2pdf.exe", "browser_download_url": "https://g/img2pdf.exe", "size": 5 }] })).unwrap();
     assert_eq!(img.sha256, None);
     assert!(pick_asset(tool("yt-dlp"), &gh("1", json!([a("yt-dlp_linux.zip")]))).unwrap_err().contains("yt-dlp.exe is not in release 1"));
+    // The optional tools (asset names as in their real releases).
+    let d = pick_asset(tool("deno"), &gh("v2.9.8", json!([a("deno-aarch64-pc-windows-msvc.zip"), a("deno-x86_64-pc-windows-msvc.zip.sha256sum"), a("deno-x86_64-pc-windows-msvc.zip")]))).unwrap();
+    assert_eq!((d.version.as_str(), d.url.as_str()), ("2.9.8", "https://x/deno-x86_64-pc-windows-msvc.zip"));
+    let o = pick_asset(tool("oxipng"), &gh("v10.2.1", json!([a("oxipng-10.2.1-i686-pc-windows-msvc.zip"), a("oxipng-10.2.1-x86_64-pc-windows-msvc.zip")]))).unwrap();
+    assert_eq!(o.url, "https://x/oxipng-10.2.1-x86_64-pc-windows-msvc.zip");
+    let w = pick_asset(tool("wordcraft-cli"), &gh("v0.16.0", json!([a("wordcraft-0.16.0-windows-x64.msi"), a("wordcraft-0.16.0-windows-arm64-portable.zip"), a("wordcraft-0.16.0-windows-x64-portable.zip")]))).unwrap();
+    assert_eq!((w.version.as_str(), w.url.as_str()), ("0.16.0", "https://x/wordcraft-0.16.0-windows-x64-portable.zip"));
   }
 
   #[test]
@@ -448,6 +512,13 @@ mod tests {
     assert_eq!(wanted(q, "qpdf-12.4.2-mingw64/bin/"), None);
     assert_eq!(wanted(q, "qpdf-12.4.2-mingw64/include/qpdf.h"), None);
     assert_eq!(wanted(q, "bin/qpdf.exe"), Some("qpdf.exe".into()));
+    // The others: just <id>.exe, wherever it is.
+    assert_eq!(wanted(tool("deno"), "deno.exe"), Some("deno.exe".into()));
+    assert_eq!(wanted(tool("oxipng"), "oxipng-10.2.1-x86_64-pc-windows-msvc/oxipng.exe"), Some("oxipng.exe".into()));
+    assert_eq!(wanted(tool("oxipng"), "oxipng-10.2.1-x86_64-pc-windows-msvc/README.md"), None);
+    let wc = tool("wordcraft-cli");
+    assert_eq!(wanted(wc, "wordcraft-0.16.0-windows-x64-portable/wordcraft-cli.exe"), Some("wordcraft-cli.exe".into()));
+    assert_eq!(wanted(wc, "wordcraft-0.16.0-windows-x64-portable/wordcraft.exe"), None, "not the desktop app");
   }
 
   fn staging(tag: &str) -> PathBuf {

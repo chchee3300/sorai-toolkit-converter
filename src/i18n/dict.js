@@ -30,6 +30,7 @@ export const dict = {
     'fileType.image': 'IMAGE',
     'fileType.audio': 'AUDIO',
     'fileType.pdf': 'PDF',
+    'fileType.document': 'DOCUMENT',
 
     // DropZone.jsx
     'dropZone.ariaLabel': 'Drop files here, or click to browse',
@@ -51,7 +52,7 @@ export const dict = {
 
     // ToolIntro.jsx
     'toolIntro.about': 'About this tool',
-    'toolIntro.lede': 'Drop files anywhere in this window to get started — video, image, audio, or PDF, one type per batch. Settings for the batch you load will appear here.',
+    'toolIntro.lede': 'Drop files anywhere in this window to get started — video, image, audio, PDF, or documents, one type per batch. Settings for the batch you load will appear here.',
     'toolIntro.video.title': 'Video',
     'toolIntro.video.desc': 'MP4, MKV, WebM, AVI, MOV, M4V, TS, WMV, MPG, or animated GIF/APNG — trim a range, retime with speed, adjust quality and FPS.',
     'toolIntro.image.title': 'Image',
@@ -60,6 +61,8 @@ export const dict = {
     'toolIntro.audio.desc': 'MP3, WAV, AAC, M4A (AAC or lossless ALAC), FLAC, OGG, Opus, AIFF, WMA, or AC3 — set bitrate and change playback speed.',
     'toolIntro.pdf.title': 'PDF',
     'toolIntro.pdf.desc': 'Compress, linearize, extract or rotate pages, split into single pages, or add a password.',
+    'toolIntro.document.title': 'Document',
+    'toolIntro.document.desc': 'Word (DOCX, DOC), ODT, or RTF to PDF, DOCX, ODT, RTF, HTML, Markdown, or TXT — needs WordCraft (a free download in Settings).',
 
     // SettingsPanel.jsx -- shared field labels across Video/Image/Audio/PDF
     'settings.outputFolder': 'Output folder',
@@ -134,6 +137,10 @@ export const dict = {
     'settings.pdf.gsEnabled': 'Ghostscript is enabled: the smaller result is kept.',
     'settings.pdf.gsMissing': 'Install Ghostscript to compress smaller.',
     'settings.pdf.gsSettings': 'Engine settings',
+    'settings.document.subtitle': 'Document conversion',
+    'settings.document.wcEnabled': ({ version }) => `Converted by WordCraft ${version} (alpha: check the result before sending it on).`,
+    'settings.document.wcMissing': 'Documents need WordCraft, a free download (about 118 MB).',
+    'settings.document.wcSettings': 'Install WordCraft',
     // Pinned -- test_conversion.js asserts on "Cancelling"/"Start Processing" literally.
     'settings.cancelling': 'Cancelling…',
     'settings.cancel': 'Cancel',
@@ -230,6 +237,7 @@ export const dict = {
     'fileType.image': '圖片',
     'fileType.audio': '音訊',
     'fileType.pdf': 'PDF',
+    'fileType.document': '文件',
 
     'dropZone.ariaLabel': '拖曳檔案到此處，或點擊瀏覽',
     'dropZone.title': '拖曳檔案到此處',
@@ -248,7 +256,7 @@ export const dict = {
     'fileList.moveDown': '下移',
 
     'toolIntro.about': '關於此工具',
-    'toolIntro.lede': '將檔案拖曳到視窗任何位置即可開始 — 影片、圖片、音訊或 PDF，每批次限同一類型。載入批次後，設定選項會顯示在這裡。',
+    'toolIntro.lede': '將檔案拖曳到視窗任何位置即可開始 — 影片、圖片、音訊、PDF 或文件，每批次限同一類型。載入批次後，設定選項會顯示在這裡。',
     'toolIntro.video.title': '影片',
     'toolIntro.video.desc': 'MP4、MKV、WebM、AVI、MOV、M4V、TS、WMV、MPG 或動態 GIF／APNG — 剪輯片段、調整速度、畫質與影格率。',
     'toolIntro.image.title': '圖片',
@@ -257,6 +265,8 @@ export const dict = {
     'toolIntro.audio.desc': 'MP3、WAV、AAC、M4A（AAC 或無損 ALAC）、FLAC、OGG、Opus、AIFF、WMA 或 AC3 — 設定位元速率並調整播放速度。',
     'toolIntro.pdf.title': 'PDF',
     'toolIntro.pdf.desc': '壓縮、線性化、擷取或旋轉頁面、分割成單頁，或加上密碼。',
+    'toolIntro.document.title': '文件',
+    'toolIntro.document.desc': 'Word（DOCX、DOC）、ODT 或 RTF 轉成 PDF、DOCX、ODT、RTF、HTML、Markdown 或 TXT — 需要 WordCraft（在設定裡免費下載）。',
 
     'settings.outputFolder': '輸出資料夾',
     'settings.outputPlaceholder': '與來源目錄相同',
@@ -330,6 +340,10 @@ export const dict = {
     'settings.pdf.gsEnabled': '已啟用 Ghostscript：取比較小的結果。',
     'settings.pdf.gsMissing': '安裝 Ghostscript 可以壓得更小。',
     'settings.pdf.gsSettings': '引擎設定',
+    'settings.document.subtitle': '文件轉換',
+    'settings.document.wcEnabled': ({ version }) => `由 WordCraft ${version} 轉換（測試版：寄出前請先檢查結果）。`,
+    'settings.document.wcMissing': '轉換文件需要 WordCraft，可免費下載（約 118 MB）。',
+    'settings.document.wcSettings': '安裝 WordCraft',
     'settings.cancelling': '正在取消…',
     'settings.cancel': '取消',
     'settings.startProcessing': '開始處理',

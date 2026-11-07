@@ -153,6 +153,10 @@ pub struct Status {
   pub installed: bool,
   /// Bytes `install` downloads (None where it can't).
   pub download_size: Option<u64>,
+  /// Not shipped with the app (Ghostscript, Deno, oxipng, WordCraft):
+  /// removing the own copy uninstalls it rather than going back to a
+  /// bundled one.
+  pub optional: bool,
 }
 
 fn config_file<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
@@ -206,6 +210,7 @@ pub fn status<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<Status>, String> {
     installable: cfg!(windows),
     installed,
     download_size: cfg!(windows).then_some(GS_SIZE),
+    optional: true,
   }];
   list.extend(crate::tools::TOOLS.iter().map(|t| crate::tools::status(app, t)));
   Ok(list)

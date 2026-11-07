@@ -10,6 +10,8 @@ const VIDEO_EXTS = ['mp4', 'mkv', 'avi', 'mov', 'webm', 'm4v', 'flv', 'ts', 'm2t
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif', 'ico']
 const AUDIO_EXTS = ['mp3', 'wav', 'aac', 'm4a', 'flac', 'ogg', 'opus', 'aiff', 'aif', 'wma', 'ac3', 'ape', 'dsf', 'dff', 'dts']
 const PDF_EXTS = ['pdf']
+// Word documents: converted by WordCraft (an optional download, hub Settings).
+const DOCUMENT_EXTS = ['docx', 'doc', 'odt', 'rtf']
 
 function getFileType(filename) {
   const ext = filename.split('.').pop().toLowerCase()
@@ -17,6 +19,7 @@ function getFileType(filename) {
   if (IMAGE_EXTS.includes(ext)) return 'image'
   if (AUDIO_EXTS.includes(ext)) return 'audio'
   if (PDF_EXTS.includes(ext)) return 'pdf'
+  if (DOCUMENT_EXTS.includes(ext)) return 'document'
   return null
 }
 

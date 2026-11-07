@@ -163,7 +163,7 @@ function App({ pendingLaunch, editPreset, onEditDone }) {
   useEffect(() => {
     setFiles((prev) => (prev.some((f) => f.converted || f.failed) ? prev.map((f) => (f.converted || f.failed ? { ...f, converted: false, convertedSizeMB: undefined, notSmaller: false, failed: null } : f)) : prev))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.video, settings.image, settings.audio, settings.pdf])
+  }, [settings.video, settings.image, settings.audio, settings.pdf, settings.document])
 
   // Ported from main.js's currentTrimIndex + openTrimModal/btn-save-trim
   // (main.js:539,595-598,854-867 pre-extraction).

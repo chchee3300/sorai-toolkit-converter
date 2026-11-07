@@ -20,6 +20,7 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{ipc::Channel, AppHandle, Manager, Runtime};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
+use tauri_plugin_shell::ShellExt;
 
 /// After a cancel, report `cancelled` this long later even if the process
 /// never signals exit -- the UI can't get stuck in "Cancelling...".
@@ -131,6 +132,7 @@ fn install_hint(program: &str) -> &'static str {
   match program {
     "qpdf" => ". qpdf not found: install it via 'brew install qpdf' (macOS) or 'sudo apt install qpdf' (Linux), then restart the app.",
     "img2pdf" => ". img2pdf not found: install it via 'pip install img2pdf' (macOS/Linux), then restart the app.",
+    "wordcraft-cli" => ". WordCraft isn't installed: install it in Settings > Third-party software.",
     _ => "",
   }
 }
@@ -186,6 +188,14 @@ pub fn start<R: Runtime>(
     for l in [out_lines.finish(), err_lines.finish()].into_iter().flatten() {
       handle(l, &mut last_line);
     }
+    // A PNG output: oxipng (Settings' "Third-party software") shrinks it
+    // losslessly, still inside the job (Cancel / app exit as usual).
+    let png = app.state::<Jobs>().0.lock().unwrap().get(&job_id).filter(|j| !j.cancelled.load(Ordering::Relaxed)).map(|j| j.out.clone()).filter(|o| is_png(o));
+    if let (Some(0), Some(out)) = (code, png) {
+      if let Some(line) = optimize_png(&app, &out).await {
+        let _ = channel.send(JobEvent::Log { line });
+      }
+    }
     let Some(job) = app.state::<Jobs>().0.lock().unwrap().remove(&job_id) else {
       return; // the cancel backstop (or app exit) already took it
     };
@@ -199,6 +209,31 @@ pub fn start<R: Runtime>(
     }
   });
   Ok(job_id)
+}
+
+fn is_png(out: &Path) -> bool {
+  out.extension().is_some_and(|e| e.eq_ignore_ascii_case("png"))
+}
+
+/// oxipng's command line: lossless, metadata that doesn't change the look
+/// dropped, in place (oxipng writes a temp file and replaces).
+pub fn oxipng_args(png: &Path) -> Vec<String> {
+  ["-o", "2", "--strip", "safe", "-q"].map(String::from).into_iter().chain([png.to_string_lossy().into_owned()]).collect()
+}
+
+/// Runs oxipng on `png` when it's installed (the app's copy, else a system
+/// one); the log line says what it did, None without oxipng. A failure only
+/// logs: the PNG ffmpeg wrote is kept.
+async fn optimize_png<R: Runtime>(app: &AppHandle<R>, png: &Path) -> Option<String> {
+  let exe = crate::sidecar::bundled(app, "oxipng").or_else(|| crate::sidecar::find("oxipng", crate::engines::system_dirs().into_iter().map(Some)))?;
+  let before = std::fs::metadata(png).map(|m| m.len()).unwrap_or(0);
+  let out = app.shell().command(&exe).args(oxipng_args(png)).output().await;
+  let after = std::fs::metadata(png).map(|m| m.len()).unwrap_or(0);
+  Some(match out {
+    Ok(o) if o.status.success() => format!("+ oxipng: {before} -> {after} bytes"),
+    Ok(o) => format!("+ oxipng failed, keeping ffmpeg's PNG: {}", String::from_utf8_lossy(&o.stderr).trim()),
+    Err(e) => format!("+ oxipng failed, keeping ffmpeg's PNG: {e}"),
+  })
 }
 
 /// Runs `work(cancelled, progress)` on a thread, as a job like `start`'s:
@@ -270,6 +305,14 @@ pub fn cancel<R: Runtime>(app: &AppHandle<R>, job_id: u64) {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn oxipng_runs_lossless_in_place_on_png_outputs() {
+    assert!(is_png(Path::new("C:/a/b_converted.PNG")));
+    assert!(!is_png(Path::new("C:/a/b_converted.jpg")));
+    assert!(!is_png(Path::new("C:/a/b_pages")));
+    assert_eq!(oxipng_args(Path::new("C:/a b/圖.png")), ["-o", "2", "--strip", "safe", "-q", "C:/a b/圖.png"]);
+  }
 
   #[test]
   fn splits_on_cr_and_lf_across_chunks() {

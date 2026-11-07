@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import GlassSelect from './GlassSelect.jsx'
 import { useTranslation } from '../hooks/useTranslation.js'
-import { TARGET_SIZE_PRESETS_MB, useSettings } from '../hooks/useSettings.js'
+import { DOCUMENT_FORMATS, TARGET_SIZE_PRESETS_MB, useSettings } from '../hooks/useSettings.js'
 import { engineStatus } from '../plugin.js'
 
 // rangeFillStyle used to be this repo's own src/lib/rangeFill.js -- moved
@@ -581,6 +581,48 @@ function GhostscriptStatus() {
   )
 }
 
+// Word documents through WordCraft: the output format, and whether
+// WordCraft is installed (a pointer to its page in the hub's "Third-party
+// software" when it isn't).
+function DocumentSettings({ visible, doc, setDocument }) {
+  const { t } = useTranslation()
+  return (
+    <div id="document-settings" className={visible ? 'settings-block' : 'settings-block hidden'}>
+      <p className="settings-subtitle">{t('settings.document.subtitle')}</p>
+      <div className="settings-grid">
+        <div className="field span-2">
+          <label className="field-label" htmlFor="document-format">{t('settings.format')}</label>
+          <GlassSelect id="document-format" value={doc.format} onChange={(e) => setDocument((v) => ({ ...v, format: e.target.value }))}>
+            {DOCUMENT_FORMATS.map((f) => <option key={f} value={f}>{f.slice(1).toUpperCase()}</option>)}
+          </GlassSelect>
+          {visible && <WordCraftStatus />}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function WordCraftStatus() {
+  const { t } = useTranslation()
+  const [wc, setWc] = useState(null)
+  useEffect(() => {
+    const check = () => engineStatus().then((l) => setWc(l.find((e) => e.id === 'wordcraft-cli')), () => setWc(null))
+    check()
+    window.addEventListener('sorai:engines-changed', check)
+    return () => window.removeEventListener('sorai:engines-changed', check)
+  }, [])
+  if (!wc) return null
+  if (wc.state !== 'missing') return <p className="settings-hint" id="document-engine-status" data-state={wc.state}>{t('settings.document.wcEnabled', { version: wc.version ?? '' })}</p>
+  return (
+    <p className="settings-hint preset-error" id="document-engine-status" data-state="missing">
+      {t('settings.document.wcMissing')}
+      {window.SoraiSettings && (
+        <> <button type="button" className="btn btn-ghost btn-xs" id="document-engine-settings" onClick={() => window.SoraiSettings.open('engines', 'wordcraft-cli')}>{t('settings.document.wcSettings')}</button></>
+      )}
+    </p>
+  )
+}
+
 // What a preset keeps of settings[fileType]: never the PDF password (it
 // would sit in presets.json in plain text, for any operation). An encrypt
 // preset therefore runs into the usual "no password" error.
@@ -595,7 +637,8 @@ function SavePresetRow({ fileType, settings }) {
   const { t } = useTranslation()
   const [name, setName] = useState(null) // null = closed
   const [message, setMessage] = useState('')
-  if (!fileType || !window.SoraiPresets) return null
+  // Right-click presets don't cover documents (the hub's menu has no document types).
+  if (!fileType || fileType === 'document' || !window.SoraiPresets) return null
   const preset = () => {
     const s = settings[fileType]
     return { fileType, format: fileType === 'pdf' ? '.pdf' : s.format, settings: presetSettings(s) }
@@ -700,7 +743,7 @@ export default function SettingsPanel({
   onMergeChange,
 }) {
   const { t } = useTranslation()
-  const { video, setVideo, image, setImage, audio, setAudio, pdf, setPdf } = settings
+  const { video, setVideo, image, setImage, audio, setAudio, pdf, setPdf, document: doc, setDocument } = settings
 
   return (
     <section className="panel" id="settings-section">
@@ -712,6 +755,7 @@ export default function SettingsPanel({
       <AudioSettings visible={fileType === 'audio'} audio={audio} setAudio={setAudio} />
       {/* Merging is the PDF operation itself: the operation block hides. */}
       <PdfSettings visible={fileType === 'pdf' && !merge} pdf={pdf} setPdf={setPdf} />
+      <DocumentSettings visible={fileType === 'document'} doc={doc} setDocument={setDocument} />
       {onMergeChange && (
         <label className="toggle-check">
           <input type="checkbox" id="merge-files" checked={merge} disabled={executing} onChange={(e) => onMergeChange(e.target.checked)} />

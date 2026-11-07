@@ -4,6 +4,8 @@ import { useCallback, useState } from 'react'
 export const VIDEO_FORMATS = ['.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.ts', '.wmv', '.mpg', '.gif', '.apng', '.png', '.m4a', '.mp3']
 export const IMAGE_FORMATS = ['.jpg', '.png', '.webp', '.avif', '.ico', '.pdf']
 export const AUDIO_FORMATS = ['.mp3', '.wav', '.aac', '.m4a', '.flac', '.ogg', '.opus', '.aiff', '.wma', '.ac3']
+// convert.rs DOCUMENT_FORMATS (what wordcraft-cli writes).
+export const DOCUMENT_FORMATS = ['.pdf', '.docx', '.odt', '.rtf', '.html', '.md', '.txt']
 
 // Preset "compress to under N MB" targets -- decimal MB (1,000,000 bytes),
 // not MiB, deliberately stricter for extra safety margin against
@@ -29,8 +31,11 @@ const DEFAULT_AUDIO = { format: '.mp3', bitrate: '320k', speed: 1.0 }
 // level: compress only (screen | ebook | printer); pages: extract/rotate; angle: rotate; password: encrypt.
 // Only the keys every operation shows: the others stay out of presets until used (the plugin's serde defaults fill them).
 const DEFAULT_PDF = { optimize: 'linearize', level: 'ebook' }
+const DEFAULT_DOCUMENT = { format: '.pdf' }
 
-// Owns the 4 per-category settings blocks. setFormatForType is the
+// Owns the 5 per-category settings blocks (a document's own extension
+// never becomes the default format: converting it to itself is pointless,
+// so PDF stays). setFormatForType is the
 // DropZone -> SettingsPanel coupling point (see useFileManager's
 // onFirstFileType) — ported from handleFiles' isFirstValidFile block
 // (main.js:266-283 pre-extraction), same validity check (only set if the
@@ -42,6 +47,7 @@ export function useSettings(initial = {}) {
   const [image, setImage] = useState(() => ({ ...DEFAULT_IMAGE, ...initial.image }))
   const [audio, setAudio] = useState(() => ({ ...DEFAULT_AUDIO, ...initial.audio }))
   const [pdf, setPdf] = useState(() => ({ ...DEFAULT_PDF, ...initial.pdf }))
+  const [doc, setDocument] = useState(() => ({ ...DEFAULT_DOCUMENT, ...initial.document }))
 
   const setFormatForType = useCallback((type, ext) => {
     if (type === 'video' && VIDEO_FORMATS.includes(ext)) {
@@ -53,5 +59,5 @@ export function useSettings(initial = {}) {
     }
   }, [])
 
-  return { video, setVideo, image, setImage, audio, setAudio, pdf, setPdf, setFormatForType }
+  return { video, setVideo, image, setImage, audio, setAudio, pdf, setPdf, document: doc, setDocument, setFormatForType }
 }

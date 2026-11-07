@@ -75,6 +75,17 @@ pub struct AudioSettings {
   pub alac: bool,
 }
 
+/// Word documents (docx / doc / odt / rtf in), run by WordCraft's CLI
+/// (an optional download, tools.rs): `format` is .pdf .docx .odt .rtf .html
+/// .md or .txt.
+#[derive(Deserialize, Debug, Clone)]
+pub struct DocumentSettings {
+  pub format: String,
+}
+
+/// Output formats `wordcraft-cli convert` writes (it picks by extension).
+pub const DOCUMENT_FORMATS: [&str; 7] = [".pdf", ".docx", ".odt", ".rtf", ".html", ".md", ".txt"];
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct PdfSettings {
   /// The operation: compress | linearize | extract | split | rotate | encrypt
@@ -114,6 +125,7 @@ pub enum Kind {
   Image(ImageSettings),
   Audio(AudioSettings),
   Pdf(PdfSettings),
+  Document(DocumentSettings),
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -140,6 +152,7 @@ impl Kind {
       Kind::Audio(a) => &a.format,
       Kind::Pdf(p) if p.optimize == "split" => "",
       Kind::Pdf(_) => ".pdf",
+      Kind::Document(d) => &d.format,
     }
   }
 }
@@ -396,10 +409,12 @@ pub fn page_range(s: &str) -> Result<String, String> {
 }
 
 /// Sidecar that runs `job`: qpdf for PDFs, img2pdf for image -> PDF
-/// (lossless embed: quality / scale / crop don't apply), ffmpeg otherwise.
+/// (lossless embed: quality / scale / crop don't apply), WordCraft for
+/// documents, ffmpeg otherwise.
 pub fn program(job: &Job) -> &'static str {
   match &job.kind {
     Kind::Pdf(_) => "qpdf",
+    Kind::Document(_) => "wordcraft-cli",
     Kind::Image(i) if i.format == ".pdf" => "img2pdf",
     _ => "ffmpeg",
   }
@@ -410,6 +425,12 @@ pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
   let src = &job.source;
   let s = |x: &str| x.to_string();
   match &job.kind {
+    Kind::Document(d) => {
+      if !DOCUMENT_FORMATS.contains(&d.format.as_str()) {
+        return Err(format!("can't write {} documents", d.format));
+      }
+      return Ok(vec![s("convert"), src.path.clone(), s(out)]);
+    }
     Kind::Pdf(p) => {
       let (i, o) = (src.path.clone(), s(out));
       return match p.optimize.as_str() {
@@ -541,7 +562,7 @@ pub fn build_args(job: &Job, out: &str) -> Result<Vec<String>, String> {
       }
       a.extend(audio_codec_args(au, true));
     }
-    Kind::Pdf(_) => unreachable!("handled above"),
+    Kind::Pdf(_) | Kind::Document(_) => unreachable!("handled above"),
   }
   a.push(out.into());
   Ok(a)
@@ -612,6 +633,7 @@ pub fn merge_args(m: &MergeJob, out: &str, list: &str) -> Result<MergePlan, Stri
       return Ok(MergePlan { args: a, list: None, seconds: 0.0 });
     }
     Kind::Image(_) => return Err("images can't be merged".into()),
+    Kind::Document(_) => return Err("documents can't be merged".into()),
     Kind::Audio(au) => {
       inputs(&mut a);
       let ins: String = (0..n).map(|i| format!("[{i}:a]")).collect();
@@ -833,6 +855,8 @@ pub fn estimate(job: &Job) -> Estimate {
       // Page tools: about the same (extract / split are smaller, but by how much depends on the pages).
       _ => 1.0,
     },
+    // Depends on the pictures and fonts inside: shown as the source's size.
+    Kind::Document(_) => current,
   };
   Estimate { est_mb: est, warn: est > current, target_fps_label }
 }
@@ -840,6 +864,24 @@ pub fn estimate(job: &Job) -> Estimate {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn documents_run_wordcraft_convert() {
+    let job: Job = serde_json::from_str(r#"{"source":{"path":"C:/文件/報告 1.docx","size":1048576},"fileType":"document","settings":{"format":".pdf"}}"#).unwrap();
+    assert_eq!(program(&job), "wordcraft-cli");
+    assert_eq!(job.out_ext(), ".pdf");
+    assert!(!job.out_is_dir());
+    assert_eq!(build_args(&job, "C:/文件/報告 1_converted.pdf").unwrap(), ["convert", "C:/文件/報告 1.docx", "C:/文件/報告 1_converted.pdf"]);
+    let e = estimate(&job);
+    assert!((e.est_mb - 1.0).abs() < 1e-9 && !e.warn);
+    for f in DOCUMENT_FORMATS {
+      let j: Job = serde_json::from_str(&format!(r#"{{"source":{{"path":"a.odt"}},"fileType":"document","settings":{{"format":"{f}"}}}}"#)).unwrap();
+      assert!(build_args(&j, "out").is_ok(), "{f}");
+    }
+    let bad: Job = serde_json::from_str(r#"{"source":{"path":"a.docx"},"fileType":"document","settings":{"format":".exe"}}"#).unwrap();
+    assert!(build_args(&bad, "out").is_err());
+    assert!(merge_args(&MergeJob { sources: vec![job.source.clone(), job.source.clone()], kind: job.kind.clone() }, "o", "l").is_err());
+  }
 
   fn src(path: &str) -> Source {
     // hub tests/fixtures/test_fixture_video.mp4-ish: 1 MiB, 10 s, 30 fps
