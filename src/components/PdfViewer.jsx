@@ -13,12 +13,14 @@ import { useTranslation } from '../hooks/useTranslation.js'
 // Shortcuts (while the preview is open): Ctrl+wheel zoom at the cursor,
 // Ctrl+= / Ctrl+- zoom, Ctrl+0 fit width, ←/→ and PageUp/PageDown previous /
 // next page, Home/End first / last page, ↑/↓ scroll (native), Esc closes
-// (PdfPreviewModal).
+// (PdfPreviewModal). The navbar hides when the mouse is idle (see showBar).
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4]
 const ZOOM_MIN = 0.25
 const ZOOM_MAX = 5
 const WHEEL_FACTOR = 1.1
+const BAR_IDLE = 2500 // ms without mouse movement before the navbar hides
+const HINT_MS = 3000 // how long the "click to show" hint stays
 // Keep in sync with .pdf-viewer-scroll's side padding (hub styles.css).
 const PAD_X = 12
 
@@ -183,11 +185,63 @@ export default function PdfViewer({ url }) {
     if (doc) scrollRef.current?.focus({ preventScroll: true })
   }, [doc])
 
+  // Floating navbar: hides after BAR_IDLE without mouse movement (not while
+  // hovered or while focus is in it); moving the mouse or clicking brings it
+  // back. The hide button hides it until the next left / right click (moving
+  // the mouse doesn't), with a short hint saying so.
+  const [bar, setBar] = useState('shown') // shown | idle | manual
+  const [hint, setHint] = useState(false)
+  const barRef = useRef(null)
+  const barState = useRef(bar)
+  barState.current = bar
+  const idleTimer = useRef(0)
+  const hintTimer = useRef(0)
+  const armIdle = useCallback(() => {
+    clearTimeout(idleTimer.current)
+    idleTimer.current = setTimeout(function check() {
+      const nav = barRef.current
+      if (nav && (nav.matches(':hover') || nav.contains(document.activeElement))) idleTimer.current = setTimeout(check, BAR_IDLE)
+      else setBar('idle')
+    }, BAR_IDLE)
+  }, [])
+  const showBar = useCallback(() => {
+    clearTimeout(hintTimer.current)
+    setHint(false)
+    setBar('shown')
+    armIdle()
+  }, [armIdle])
+  const hideBar = () => {
+    clearTimeout(idleTimer.current)
+    clearTimeout(hintTimer.current)
+    setBar('manual')
+    setHint(true)
+    hintTimer.current = setTimeout(() => setHint(false), HINT_MS)
+  }
+  useEffect(() => {
+    armIdle()
+    return () => {
+      clearTimeout(idleTimer.current)
+      clearTimeout(hintTimer.current)
+    }
+  }, [armIdle])
+
   // Tooltip: "Zoom in (Ctrl +)".
   const tip = (name) => `${t(`pdfPreview.${name}`)} (${t(`pdfPreview.key.${name}`)})`
   return (
-    <div className="pdf-viewer">
-      <div className="pdf-viewer-navbar" role="toolbar" aria-label={t('pdfPreview.toolbar')}>
+    <div
+      className="pdf-viewer"
+      onMouseMove={() => barState.current !== 'manual' && showBar()}
+      onMouseDown={(e) => (e.button === 0 || e.button === 2) && showBar()}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <div
+        ref={barRef}
+        className={`pdf-viewer-navbar${bar === 'shown' ? '' : ' is-hidden'}`}
+        data-bar={bar}
+        inert={bar !== 'shown'}
+        role="toolbar"
+        aria-label={t('pdfPreview.toolbar')}
+      >
         <button type="button" className="btn-icon" id="pdf-prev-page" disabled={current <= 1} onClick={() => goTo(current - 1)} title={tip('prevPage')} aria-label={t('pdfPreview.prevPage')}>
           {icon(<polyline points="15 18 9 12 15 6"></polyline>)}
         </button>
@@ -244,6 +298,13 @@ export default function PdfViewer({ url }) {
         </button>
         <div className="pdf-viewer-divider" aria-hidden="true"></div>
         <button type="button" className="btn btn-outline btn-xs" id="pdf-zoom-fit" disabled={scale == null} onClick={() => zoomTo(null)} title={tip('fitWidth')}>{t('pdfPreview.fitWidth')}</button>
+        <div className="pdf-viewer-divider" aria-hidden="true"></div>
+        <button type="button" className="btn-icon" id="pdf-toolbar-hide" onClick={hideBar} title={t('pdfPreview.hideToolbar')} aria-label={t('pdfPreview.hideToolbar')}>
+          {icon(<><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></>)}
+        </button>
+      </div>
+      <div className={`pdf-viewer-hint${hint ? ' is-visible' : ''}`} id="pdf-toolbar-hint" role="status">
+        {hint ? t('pdfPreview.toolbarHint') : ''}
       </div>
       <div ref={scrollRef} id="pdf-viewer-scroll" className="pdf-viewer-scroll" tabIndex={-1} onScroll={onScroll}>
         {error && <p className="settings-hint" id="pdf-viewer-error">{error}</p>}
