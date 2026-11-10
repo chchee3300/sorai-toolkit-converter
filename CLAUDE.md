@@ -1,6 +1,6 @@
 # Claude 自動化測試指引 (sorai-toolkit-converter)
 
-這是 SORAI Toolkit 的 **Converter 子 repo**，本身是一個 Tauri v2 plugin，被 `sorai-toolkit` hub 當成 npm git dependency 消費。同一個套件帶兩半：
+這是 downco（2.2.0 以前叫 SORAI Toolkit；GitHub repo `chchee3300/downco-co`，本機資料夾與 npm 套件名沒改）的 **Converter 子 repo**，本身是一個 Tauri v2 plugin，被 `sorai-toolkit` hub 當成 npm git dependency 消費。同一個套件帶兩半：
 - `plugin/`：Rust crate `tauri-plugin-sorai-converter`（plugin 名 `sorai-converter`，常數 `NAME`）。指令建構、輸出解析、子程序執行都在這裡。
 - `src/`：React UI。`vite.lib.config.mjs` 產生 `dist/index.js`，`src/index.js` 匯出 `{ ConverterApp }` 和 `src/plugin.js` 的 invoke 包裝。`prepare` script 在 `npm install` 時自動建置。
 

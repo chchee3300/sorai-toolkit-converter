@@ -1,6 +1,6 @@
 # sorai-toolkit-converter
 
-The **Converter tool** for [SORAI Toolkit](https://github.com/chchee3300/sorai-toolkit) — convert video, image, audio, and PDF files locally, no upload, no cloud processing. This repo is consumed by the [`sorai-toolkit`](https://github.com/chchee3300/sorai-toolkit) hub repo as an npm git dependency; it is **not** independently installable or shippable — the hub is the actual installable app.
+The **Converter tool** for [downco](https://github.com/chchee3300/downco) — convert video, image, audio, and PDF files locally, no upload, no cloud processing. This repo is consumed by the [`downco`](https://github.com/chchee3300/downco) hub repo as an npm git dependency; it is **not** independently installable or shippable — the hub is the actual installable app.
 
 ## Features
 
@@ -36,8 +36,8 @@ End-to-end conversions run from the hub: `npm run test:e2e -- converter` there.
 
 ## Versioning
 
-This repo has no independent release pipeline — no semantic-release, no CHANGELOG, no GitHub Releases. Versioning and packaging both live in the [`sorai-toolkit`](https://github.com/chchee3300/sorai-toolkit) hub repo, which consumes this repo via a git ref. Commit messages here don't need Conventional Commits prefixes.
+This repo has no independent release pipeline — no semantic-release, no CHANGELOG, no GitHub Releases. Versioning and packaging both live in the [`downco`](https://github.com/chchee3300/downco) hub repo, which consumes this repo via a git ref. Commit messages here don't need Conventional Commits prefixes.
 
 ## License
 
-[MIT](LICENSE) for this repo's own code. Bundled/invoked third-party tools (ffmpeg, qpdf, img2pdf) keep their own licenses — see the hub repo's [`THIRD-PARTY-LICENSES.md`](https://github.com/chchee3300/sorai-toolkit/blob/master/THIRD-PARTY-LICENSES.md) for details, since the hub is what actually bundles and ships them.
+[MIT](LICENSE) for this repo's own code. Bundled/invoked third-party tools (ffmpeg, qpdf, img2pdf) keep their own licenses — see the hub repo's [`THIRD-PARTY-LICENSES.md`](https://github.com/chchee3300/downco/blob/master/THIRD-PARTY-LICENSES.md) for details, since the hub is what actually bundles and ships them.
