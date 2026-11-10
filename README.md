@@ -1,6 +1,6 @@
 # downco-co
 
-The Converter in [downco](https://github.com/chchee3300/downco), a desktop app that downloads and converts media on your own computer. To use the Converter, [install downco](https://github.com/chchee3300/downco#install). This repository holds its source and isn't an app by itself.
+The Converter in [downco](https://github.com/chchee3300/downco), a Windows app that downloads and converts media on your own computer. To use the Converter, [install downco](https://github.com/chchee3300/downco#install). This repository holds its source and isn't an app by itself.
 
 ## What it converts
 
@@ -25,7 +25,7 @@ Other features:
 
 ffmpeg does the video, audio and image work. qpdf handles most PDF operations and img2pdf turns images into PDFs. PDF compression uses a built-in compressor written in Rust. If Ghostscript is installed, the Converter also runs it and keeps the smaller file. Document conversion needs [WordCraft](https://github.com/storytold/wordcraft), and [oxipng](https://github.com/shssoichiro/oxipng) shrinks PNG output when it's installed.
 
-downco bundles ffmpeg on every system, plus qpdf and img2pdf on Windows (macOS and Linux use the system packages). Ghostscript, WordCraft and oxipng are optional downloads in downco's Settings → Third-party software. That download code also lives in this repository (`plugin/src/engines.rs`, `plugin/src/tools.rs`).
+downco includes ffmpeg, qpdf and img2pdf. Ghostscript, WordCraft and oxipng are optional downloads in downco's Settings → Third-party software. That download code also lives in this repository (`plugin/src/engines.rs`, `plugin/src/tools.rs`).
 
 ## How it's built
 
