@@ -1,43 +1,53 @@
-# sorai-toolkit-converter
+# downco-co
 
-The **Converter tool** for [downco](https://github.com/chchee3300/downco) — convert video, image, audio, and PDF files locally, no upload, no cloud processing. This repo is consumed by the [`downco`](https://github.com/chchee3300/downco) hub repo as an npm git dependency; it is **not** independently installable or shippable — the hub is the actual installable app.
+The Converter in [downco](https://github.com/chchee3300/downco), a desktop app that downloads and converts media on your own computer. To use the Converter, [install downco](https://github.com/chchee3300/downco#install). This repository holds its source and isn't an app by itself.
 
-## Features
+## What it converts
 
-- **Video** — convert between MP4 / MKV / WebM / AVI / GIF, with codec selection, quality control, FPS adjustment, upscaling, trimming, and speed change.
-- **Image** — convert between JPG / PNG / WebP / AVIF / ICO / PDF, with quality and resolution scaling (PNG uses a two-pass `palettegen`/`paletteuse` pipeline for better color quality).
-- **Audio** — convert between MP3 / WAV / AAC / FLAC / OGG, with bitrate control, trimming, and speed change (`atempo`).
-- **PDF** — optimize with linearize or compress modes.
-- Live file-size estimation before you convert, batch conversion with a progress log, and automatic filename collision avoidance (`_converted`, `_converted_converted`, …) so re-running a conversion never overwrites the previous output.
-- Each file in the list gets a thumbnail preview (video: a mid-point frame; image: the image itself; audio: its embedded cover art, when present) plus its source resolution/duration and codec, so a batch is recognizable at a glance instead of just a row of filenames.
+| Input | Output |
+|---|---|
+| Video | MP4, MKV, WebM, AVI, MOV, M4V, TS, WMV, MPG, GIF, APNG, a single frame as PNG, or only the sound as M4A or MP3 |
+| Audio | MP3, WAV, AAC, M4A (AAC or ALAC), FLAC, OGG, Opus, AIFF, WMA, AC3 |
+| Image | JPG, PNG, WebP, AVIF, ICO, PDF |
+| PDF | Compress, linearize, extract pages, split into single pages, rotate, add a password |
+| Document (`.docx`, `.doc`, `.odt`, `.rtf`) | PDF, DOCX, ODT, RTF, HTML, Markdown, plain text |
 
-## How it works
+Other features:
 
-This repo is a [Tauri v2](https://tauri.app/) plugin in two halves, shipped together in one npm git dependency:
+- Trim and crop with a preview, change speed, choose the codec, quality and frame rate, or aim for a target file size.
+- "Keep original encoding" copies the streams without re-encoding when the new container can hold them.
+- Merge several videos, audio files or PDFs into one file, in the order of the queue.
+- Preview a PDF before converting it.
+- See an estimate of the output size before converting, and a thumbnail, resolution, length and codec for each file.
+- Never overwrite earlier output: the result is saved as `name_converted.ext`, then `name_converted_converted.ext`, and so on.
 
-- **Rust crate** (`plugin/`, `tauri-plugin-sorai-converter`) — builds the ffmpeg/qpdf/img2pdf arguments, parses progress and source info, estimates output sizes, avoids filename collisions, and runs/cancels the conversion processes.
-- **React UI** (`src/`, library build `vite.lib.config.mjs` → `dist/index.js`) — exports `{ ConverterApp }` plus the plugin's `invoke` wrappers (`src/plugin.js`). React and `@tauri-apps/api` are peer dependencies; no CSS is bundled (the hub loads the shared stylesheet). `dist/` is built by the `prepare` script whenever this repo is installed as a git dependency.
+## Engines
 
-The host app (the hub) registers the plugin, grants `sorai-converter:default`, and provides:
+ffmpeg does the video, audio and image work. qpdf handles most PDF operations and img2pdf turns images into PDFs. PDF compression uses a built-in compressor written in Rust. If Ghostscript is installed, the Converter also runs it and keeps the smaller file. Document conversion needs [WordCraft](https://github.com/storytold/wordcraft), and [oxipng](https://github.com/shssoichiro/oxipng) shrinks PNG output when it's installed.
 
-- sidecars named [`ffmpeg`](https://ffmpeg.org/), [`qpdf`](https://qpdf.readthedocs.io/) and [`img2pdf`](https://gitlab.mister-muffin.de/josch/img2pdf) in its resource dir or next to its exe (otherwise they're run from `PATH` — on macOS/Linux qpdf/img2pdf are system installs: `brew`/`apt`/`pip`), and `tauri-plugin-shell` registered;
-- `app.security.assetProtocol` enabled with `$TEMP/sorai-toolkit/thumbnails/*` in scope;
-- the UI runtime globals `window.LiquidSelect`, `window.EstellaLib.{i18n,rangeFill}` and `window.SoraiDialogs`.
+downco bundles ffmpeg on every system, plus qpdf and img2pdf on Windows (macOS and Linux use the system packages). Ghostscript, WordCraft and oxipng are optional downloads in downco's Settings → Third-party software. That download code also lives in this repository (`plugin/src/engines.rs`, `plugin/src/tools.rs`).
 
-There is no standalone app in this repo — the UI needs the hub's Tauri runtime. Develop it through the hub's `npm run tauri:dev`, which picks up a sibling checkout of this repo (`src/` hot-reloads, `plugin/` edits rebuild the app).
+## How it's built
 
-## Testing
+The repository is a [Tauri v2](https://tauri.app/) plugin in two parts, installed together as one npm package (`sorai-toolkit-converter`):
+
+- `plugin/` is the Rust crate `tauri-plugin-sorai-converter`. It builds the command lines, reads source information and progress, estimates sizes, runs and cancels jobs, compresses PDFs, and manages the optional engines.
+- `src/` is the React UI. Its library build (`vite.lib.config.mjs`) writes `dist/index.js`, which exports `ConverterApp` and the plugin's command wrappers. npm runs the build through the `prepare` script when downco installs the package. React and `@tauri-apps/api` are peer dependencies, and the stylesheet lives in downco's `resources/styles.css`.
+
+The UI only works inside downco's Tauri runtime. To work on it, check this repository out next to downco as `sorai-toolkit-converter` and run `npm run tauri:dev` in downco. Changes to `src/` reload in place, and changes to `plugin/` rebuild and restart the app.
+
+## Tests
 
 ```bash
-cd plugin && cargo test          # command building, parsing, estimates, sidecar lookup
+cd plugin && cargo test
 ```
 
-End-to-end conversions run from the hub: `npm run test:e2e -- converter` there.
+These cover command building, output parsing, estimates, PDF compression, the engine and tool downloads, and the preview file server. End-to-end tests with real conversions run in downco: `npm run test:e2e -- converter`.
 
-## Versioning
+## Versions
 
-This repo has no independent release pipeline — no semantic-release, no CHANGELOG, no GitHub Releases. Versioning and packaging both live in the [`downco`](https://github.com/chchee3300/downco) hub repo, which consumes this repo via a git ref. Commit messages here don't need Conventional Commits prefixes.
+This repository has no releases of its own. downco pins a commit of it in `package-lock.json` and ships it as part of each downco release, so commit messages here don't need Conventional Commits prefixes.
 
 ## License
 
-[MIT](LICENSE) for this repo's own code. Bundled/invoked third-party tools (ffmpeg, qpdf, img2pdf) keep their own licenses — see the hub repo's [`THIRD-PARTY-LICENSES.md`](https://github.com/chchee3300/downco/blob/master/THIRD-PARTY-LICENSES.md) for details, since the hub is what actually bundles and ships them.
+[MIT](LICENSE). The programs the Converter runs keep their own licenses: see downco's [`THIRD-PARTY-LICENSES.md`](https://github.com/chchee3300/downco/blob/master/THIRD-PARTY-LICENSES.md).
