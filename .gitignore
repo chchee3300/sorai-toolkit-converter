@@ -1,9 +1,6 @@
 # Node dependencies
 /node_modules
 
-# Claude Code local (machine-specific) settings
-.claude/settings.local.json
-
 # Library build output (vite.lib.config.mjs, rebuilt by "prepare")
 /dist
 
@@ -12,3 +9,14 @@
 # Tauri plugin crate build output
 /plugin/target
 /plugin/Cargo.lock
+
+# AI assistant files: instructions, skills, AI-written specs and style notes.
+# Kept locally, not published.
+/.claude/
+/.agents/
+/CLAUDE.md
+/AGENTS.md
+/GEMINI.md
+/gemini.md
+/design-system/
+/docs/
